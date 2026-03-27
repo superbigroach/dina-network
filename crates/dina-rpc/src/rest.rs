@@ -268,10 +268,28 @@ async fn faucet_handler(
         rate_map.insert(addr, Instant::now());
     }
 
-    // Credit the account directly (testnet only).
+    // Credit the account: write to both RPC accounts AND submit a special
+    // "faucet" transaction so the block producer's chain_state gets updated too.
     {
         let mut accounts = state.node.accounts.write().await;
         accounts.credit(&addr, FAUCET_AMOUNT);
+    }
+
+    // Also inject a faucet transfer into the tx_pool so chain_state picks it up.
+    // We use a Transfer from the zero address (coinbase) with no signature.
+    {
+        let faucet_tx = Transaction::Transfer {
+            from: Address([0u8; 32]),  // coinbase / faucet address
+            to: addr,
+            amount: FAUCET_AMOUNT,
+            memo: None,
+            device_witness: None,
+            nonce: 0,
+            fee: 0,
+            signature: dina_core::transaction::Sig64([0u8; 64]),
+        };
+        let mut pool = state.node.tx_pool.write().await;
+        pool.push(faucet_tx);
     }
 
     info!(%addr, amount = FAUCET_AMOUNT, "faucet dispensed");

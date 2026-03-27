@@ -91,18 +91,28 @@ impl ChainState {
         let sender = tx.sender();
         let fee = tx.fee();
 
-        // Deduct the fee from the sender
-        self.accounts.deduct_fee(&sender, fee)?;
+        // Faucet/coinbase transactions (from zero address) skip fee and nonce
+        let is_coinbase = sender == Address([0u8; 32]);
 
-        // Increment the sender's nonce
-        self.accounts.increment_nonce(&sender)?;
+        if !is_coinbase {
+            // Deduct the fee from the sender
+            self.accounts.deduct_fee(&sender, fee)?;
+
+            // Increment the sender's nonce
+            self.accounts.increment_nonce(&sender)?;
+        }
 
         // Execute the transaction-specific logic
         match tx {
             Transaction::Transfer {
                 from, to, amount, ..
             } => {
-                self.accounts.transfer(from, to, *amount)?;
+                if *from == Address([0u8; 32]) {
+                    // Coinbase/faucet: mint (credit without debit)
+                    self.accounts.credit(to, *amount);
+                } else {
+                    self.accounts.transfer(from, to, *amount)?;
+                }
             }
             Transaction::DeployContract { .. } => {
                 // Contract deployment is handled by the WASM runtime;
