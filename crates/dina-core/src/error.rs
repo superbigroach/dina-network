@@ -38,6 +38,18 @@ pub enum DinaError {
     #[error("serialization error: {0}")]
     SerializationError(String),
 
+    #[error("validator error: {0}")]
+    ValidatorError(String),
+
+    #[error("governance error: {0}")]
+    GovernanceError(String),
+
+    #[error("registry error: {0}")]
+    RegistryError(String),
+
+    #[error("account abstraction error: {0}")]
+    AccountAbstractionError(String),
+
     #[error("{0}")]
     Custom(String),
 }

@@ -133,4 +133,39 @@ impl RpcClient {
             .map(|s| s.to_string())
             .ok_or_else(|| anyhow::anyhow!("unexpected response format for chainId"))
     }
+
+    /// Get contract information by address.
+    pub async fn get_contract_info(&self, address: &str) -> Result<Value> {
+        self.call("dina_getContractInfo", json!([address])).await
+    }
+
+    /// List open payment channels.
+    pub async fn list_channels(&self) -> Result<Value> {
+        self.call("dina_listChannels", json!([])).await
+    }
+
+    /// Request testnet USDC from the faucet.
+    pub async fn request_faucet(&self, address: &str) -> Result<Value> {
+        self.call("dina_faucet", json!([address])).await
+    }
+
+    /// List active validators.
+    pub async fn list_validators(&self) -> Result<Value> {
+        self.call("dina_getValidators", json!([])).await
+    }
+
+    /// Get validator details by address.
+    pub async fn get_validator(&self, address: &str) -> Result<Value> {
+        self.call("dina_getValidator", json!([address])).await
+    }
+
+    /// Get recent blocks (for the explorer).
+    pub async fn get_recent_blocks(&self, limit: u64) -> Result<Value> {
+        self.call("dina_getRecentBlocks", json!([limit])).await
+    }
+
+    /// Search blocks and transactions (for the explorer).
+    pub async fn explorer_search(&self, query: &str) -> Result<Value> {
+        self.call("dina_search", json!([query])).await
+    }
 }

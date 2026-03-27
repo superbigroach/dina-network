@@ -1,15 +1,16 @@
 [package]
-name = "dina-storage"
+name = "dina-monitoring"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 dina-core = { path = "../dina-core" }
-redb = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-bincode = { workspace = true }
-thiserror = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
 tracing = { workspace = true }
-tempfile = { workspace = true }
-sha2 = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tower = { workspace = true }

@@ -13,9 +13,13 @@ use tracing::info;
 
 use dina_core::block::Block;
 use dina_core::device::{DeviceIdentity, DeviceType};
+use dina_core::fees::FeeSchedule;
 use dina_core::transaction::Transaction;
 use dina_core::types::{Address, Hash};
 use dina_core::account::AccountState;
+
+use crate::gas_estimator::{GasEstimate, GasEstimator, GasPriceInfo};
+use crate::tx_pool::TxPoolStatus;
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -121,6 +125,34 @@ pub trait DinaRpc {
     /// Get the chain ID.
     #[method(name = "dina_chainId")]
     async fn chain_id(&self) -> RpcResult<String>;
+
+    /// Estimate gas for a transaction.
+    ///
+    /// `tx_type` is one of: "transfer", "contract_call", "deploy", "device_registration", "batch".
+    /// `params` is a JSON object with type-specific fields:
+    ///   - transfer: `{ "amount": u64, "memo_size": usize }`
+    ///   - contract_call: `{ "method": string, "args_size": usize }`
+    ///   - deploy: `{ "wasm_size": usize }`
+    ///   - device_registration: `{}`
+    ///   - batch: `{ "tx_count": usize }`
+    #[method(name = "dina_estimateGas")]
+    async fn estimate_gas(
+        &self,
+        tx_type: String,
+        params: serde_json::Value,
+    ) -> RpcResult<GasEstimate>;
+
+    /// Get current gas price information.
+    #[method(name = "dina_gasPrice")]
+    async fn gas_price(&self) -> RpcResult<GasPriceInfo>;
+
+    /// Get the transaction pool status.
+    #[method(name = "dina_txPoolStatus")]
+    async fn tx_pool_status(&self) -> RpcResult<TxPoolStatus>;
+
+    /// Get pending transactions (up to `limit`).
+    #[method(name = "dina_pendingTransactions")]
+    async fn pending_transactions(&self, limit: usize) -> RpcResult<Vec<TransactionInfo>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +172,7 @@ pub struct NodeState {
     pub devices: Arc<RwLock<HashMap<String, DeviceIdentity>>>,
     pub peer_count: Arc<RwLock<u32>>,
     pub chain_id: String,
+    pub fee_schedule: FeeSchedule,
 }
 
 impl NodeState {
@@ -160,6 +193,7 @@ impl NodeState {
             devices: Arc::new(RwLock::new(HashMap::new())),
             peer_count: Arc::new(RwLock::new(0)),
             chain_id,
+            fee_schedule: FeeSchedule::default_testnet(),
         }
     }
 }
@@ -371,6 +405,95 @@ impl DinaRpcServer for DinaRpcServerImpl {
 
     async fn chain_id(&self) -> RpcResult<String> {
         Ok(self.state.chain_id.clone())
+    }
+
+    async fn estimate_gas(
+        &self,
+        tx_type: String,
+        params: serde_json::Value,
+    ) -> RpcResult<GasEstimate> {
+        let estimator = GasEstimator::new(self.state.fee_schedule.clone());
+
+        match tx_type.as_str() {
+            "transfer" => {
+                let amount = params["amount"].as_u64().unwrap_or(0);
+                let memo_size = params["memo_size"].as_u64().unwrap_or(0) as usize;
+                Ok(estimator.estimate_transfer(amount, memo_size))
+            }
+            "contract_call" => {
+                let method = params["method"].as_str().unwrap_or("unknown");
+                let args_size = params["args_size"].as_u64().unwrap_or(0) as usize;
+                Ok(estimator.estimate_contract_call(method, args_size))
+            }
+            "deploy" => {
+                let wasm_size = params["wasm_size"].as_u64().unwrap_or(0) as usize;
+                Ok(estimator.estimate_deploy(wasm_size))
+            }
+            "device_registration" => Ok(estimator.estimate_device_registration()),
+            "batch" => {
+                let tx_count = params["tx_count"].as_u64().unwrap_or(0) as usize;
+                Ok(estimator.estimate_batch(tx_count))
+            }
+            _ => Err(rpc_err(
+                ERR_INVALID_PARAMS,
+                format!(
+                    "unknown tx_type '{}'; expected one of: transfer, contract_call, deploy, device_registration, batch",
+                    tx_type
+                ),
+            )),
+        }
+    }
+
+    async fn gas_price(&self) -> RpcResult<GasPriceInfo> {
+        let estimator = GasEstimator::new(self.state.fee_schedule.clone());
+        Ok(estimator.gas_price_info())
+    }
+
+    async fn tx_pool_status(&self) -> RpcResult<TxPoolStatus> {
+        let pool = self.state.tx_pool.read().await;
+        let pending = pool.len();
+        let total_value: u64 = pool
+            .iter()
+            .map(|tx| match tx {
+                Transaction::Transfer { amount, .. } => *amount,
+                Transaction::CallContract { usdc_attached, .. } => *usdc_attached,
+                _ => 0,
+            })
+            .sum();
+
+        Ok(TxPoolStatus {
+            pending,
+            queued: 0, // Basic pool does not track queued transactions
+            total_value,
+        })
+    }
+
+    async fn pending_transactions(&self, limit: usize) -> RpcResult<Vec<TransactionInfo>> {
+        let pool = self.state.tx_pool.read().await;
+        let capped = limit.min(1000); // Cap to prevent abuse.
+
+        let infos: Vec<TransactionInfo> = pool
+            .iter()
+            .take(capped)
+            .map(|tx| {
+                let tx_type = match tx {
+                    Transaction::Transfer { .. } => "Transfer",
+                    Transaction::DeployContract { .. } => "DeployContract",
+                    Transaction::CallContract { .. } => "CallContract",
+                    Transaction::RegisterDevice { .. } => "RegisterDevice",
+                };
+                TransactionInfo {
+                    hash: tx.hash().to_string(),
+                    sender: tx.sender().to_string(),
+                    nonce: tx.nonce(),
+                    fee: tx.fee(),
+                    tx_type: tx_type.to_string(),
+                    block_number: None,
+                }
+            })
+            .collect();
+
+        Ok(infos)
     }
 }
 

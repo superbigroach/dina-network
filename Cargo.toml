@@ -49,6 +49,7 @@ members = [
     "crates/dina-faucet",
     "crates/dina-mcp",
     "crates/dina-bench",
+    "crates/dina-monitoring",
 ]
 
 [workspace.package]
