@@ -44,6 +44,7 @@ impl RegistryState {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn register_agent(
         &mut self,
         caller: Address,
@@ -131,7 +132,7 @@ impl RegistryState {
             .values()
             .filter(|a| {
                 a.active
-                    && a.location.map_or(false, |(alat, alon)| {
+                    && a.location.is_some_and(|(alat, alon)| {
                         let dlat = alat - lat;
                         let dlon = alon - lon;
                         dlat * dlat + dlon * dlon <= radius * radius

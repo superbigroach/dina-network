@@ -24,6 +24,12 @@ pub struct CrowdfundState {
     pub next_id: u64,
 }
 
+impl Default for CrowdfundState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CrowdfundState {
     pub fn new() -> Self {
         Self {

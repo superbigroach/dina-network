@@ -100,6 +100,7 @@ impl SupplyChainState {
         item.current_holder = new_holder;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_checkpoint(
         &mut self,
         caller: Address,
@@ -135,7 +136,7 @@ impl SupplyChainState {
     pub fn verify_authenticity(&self, item_id: u64, claimed_origin: &Address) -> bool {
         self.items
             .get(&item_id)
-            .map_or(false, |i| i.origin == *claimed_origin)
+            .is_some_and(|i| i.origin == *claimed_origin)
     }
 
     pub fn items_held_by(&self, holder: &Address) -> Vec<&Item> {

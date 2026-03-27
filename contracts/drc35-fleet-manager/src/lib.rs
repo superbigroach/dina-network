@@ -95,6 +95,7 @@ impl FleetManagerState {
         fleet.robots.remove(pos);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn assign_task(
         &mut self,
         caller: Address,

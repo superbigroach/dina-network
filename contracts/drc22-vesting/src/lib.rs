@@ -59,6 +59,7 @@ impl VestingState {
     }
 
     /// Create a new vesting schedule. Returns the vesting id.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_vesting(
         &mut self,
         caller: Address,

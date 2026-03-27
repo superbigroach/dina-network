@@ -15,6 +15,12 @@ pub struct IdentityState {
     pub name_owners: BTreeMap<String, Address>,
 }
 
+impl Default for IdentityState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IdentityState {
     pub fn new() -> Self {
         Self {
@@ -76,7 +82,7 @@ impl IdentityState {
             self.addresses.contains_key(&caller),
             "DRC30: caller has no registered name"
         );
-        let devices = self.device_links.entry(caller).or_insert_with(Vec::new);
+        let devices = self.device_links.entry(caller).or_default();
         assert!(
             !devices.contains(&device),
             "DRC30: device already linked"
