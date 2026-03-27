@@ -1,0 +1,21 @@
+[package]
+name = "dina-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "dina"
+path = "src/main.rs"
+
+[dependencies]
+dina-core = { path = "../crates/dina-core" }
+dina-privacy = { path = "../crates/dina-privacy" }
+clap = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+anyhow = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+reqwest = { version = "0.12", features = ["json"] }

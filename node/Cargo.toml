@@ -1,0 +1,30 @@
+[package]
+name = "dina-node"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "dina-node"
+path = "src/main.rs"
+
+[dependencies]
+dina-core = { path = "../crates/dina-core" }
+dina-consensus = { path = "../crates/dina-consensus" }
+dina-network = { path = "../crates/dina-network" }
+dina-storage = { path = "../crates/dina-storage" }
+dina-wasm = { path = "../crates/dina-wasm" }
+dina-rpc = { path = "../crates/dina-rpc" }
+dina-privacy = { path = "../crates/dina-privacy" }
+tokio = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+bincode = { workspace = true }

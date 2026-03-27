@@ -1,0 +1,14 @@
+[package]
+name = "dina-sdk"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dina-sdk-macros = { path = "../dina-sdk-macros" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+
+[features]
+default = []
+std = []
