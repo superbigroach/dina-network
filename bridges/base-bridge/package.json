@@ -1,0 +1,21 @@
+{
+  "name": "@dina-network/base-bridge",
+  "version": "1.0.0",
+  "description": "Base <-> Dina Network USDC bridge — Solidity contracts and Hardhat project",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "deploy:sepolia": "npx hardhat run scripts/deploy.ts --network baseSepolia",
+    "deploy:mainnet": "npx hardhat run scripts/deploy.ts --network baseMainnet",
+    "clean": "npx hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.0.1",
+    "hardhat": "^2.19.4",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.10.0",
+    "dotenv": "^16.3.1"
+  }
+}

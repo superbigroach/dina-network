@@ -129,7 +129,7 @@ impl DexState {
             pool_lookup: BTreeMap::new(),
             next_pool_id: 1,
             owner,
-            protocol_fee_bps: 5, // 0.05 %
+            protocol_fee_bps: 0, // 0% (fee-free) — owner can set later if needed
             protocol_fees: BTreeMap::new(),
         }
     }
@@ -155,7 +155,7 @@ impl DexState {
             reserve_b: 0,
             total_lp_tokens: 0,
             lp_balances: BTreeMap::new(),
-            fee_bps: 30, // 0.3 %
+            fee_bps: 0, // 0% (fee-free) — owner can set fees later if needed
             cumulative_volume: 0,
             paused: false,
         };
@@ -748,8 +748,8 @@ mod tests {
         if let DexEvent::Swap { output_amount, .. } = &evt {
             assert!(*output_amount > 0);
             // Pool is ordered (ETH, USDC) with reserves (100k, 50k).
-            // Swapping 1000 USDC in: reserve_in=50k, reserve_out=100k → ~1955 ETH out.
-            // Output must be less than the ideal 2000 (due to slippage + fee).
+            // Swapping 1000 USDC in: reserve_in=50k, reserve_out=100k → ~1960 ETH out.
+            // Output must be less than ideal 2000 (due to slippage; 0% fee-free).
             assert!(*output_amount < 2_000);
         } else {
             panic!("expected Swap");
@@ -825,7 +825,7 @@ mod tests {
         dex.swap_exact_in(1, "bob", "USDC", 1_000, 999_999);
     }
 
-    // 9. Fee calculation correctness
+    // 9. Fee calculation correctness — 0% (fee-free) by default
     #[test]
     fn test_fee_calculation() {
         let mut dex = setup();
@@ -833,8 +833,8 @@ mod tests {
         dex.add_liquidity(1, "alice", 1_000_000, 500_000, 0);
 
         let quote = dex.get_quote(1, "USDC", 10_000);
-        // Fee = 10_000 * 30 / 10_000 = 30
-        assert_eq!(quote.fee_amount, 30);
+        // Fee = 10_000 * 0 / 10_000 = 0 (fee-free)
+        assert_eq!(quote.fee_amount, 0);
         assert!(quote.output_amount > 0);
         assert!(quote.price_impact_bps > 0);
     }
@@ -860,25 +860,34 @@ mod tests {
         }
     }
 
-    // 11. Protocol fee accumulation
+    // 11. Protocol fee accumulation — 0% (fee-free) by default, but test with explicit fee
     #[test]
     fn test_protocol_fee_accumulation() {
         let mut dex = setup();
         dex.create_pool("USDC", "ETH");
         dex.add_liquidity(1, "alice", 1_000_000, 500_000, 0);
 
-        // Do several swaps
+        // With default 0% fees, no protocol fees accumulate
         dex.swap_exact_in(1, "bob", "USDC", 10_000, 0);
         dex.swap_exact_in(1, "bob", "USDC", 20_000, 0);
 
         let fees = dex.protocol_fees.get("USDC").copied().unwrap_or(0);
-        // protocol_fee_bps = 5 → 10000*5/10000 + 20000*5/10000 = 5 + 10 = 15
-        assert_eq!(fees, 15);
+        // protocol_fee_bps = 0 → no fees collected
+        assert_eq!(fees, 0);
+
+        // Now set fees explicitly (owner CAN enable fees later)
+        dex.set_fee("owner", 1, 30); // 0.3%
+        dex.protocol_fee_bps = 5; // 0.05%
+        dex.swap_exact_in(1, "bob", "USDC", 10_000, 0);
+
+        let fees_after = dex.protocol_fees.get("USDC").copied().unwrap_or(0);
+        // protocol_fee_bps = 5 → 10000*5/10000 = 5
+        assert_eq!(fees_after, 5);
 
         // Collect
         let evt = dex.collect_protocol_fees("owner", "USDC");
         if let DexEvent::FeeCollected { amount, .. } = &evt {
-            assert_eq!(*amount, 15);
+            assert_eq!(*amount, 5);
         }
         assert_eq!(dex.protocol_fees.get("USDC").copied().unwrap_or(0), 0);
     }

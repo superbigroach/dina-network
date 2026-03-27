@@ -1,0 +1,20 @@
+{
+  "name": "@dina-network/base-bridge-relayer",
+  "version": "1.0.0",
+  "description": "Relayer service for Base <-> Dina USDC bridge",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node index.ts"
+  },
+  "dependencies": {
+    "ethers": "^6.9.2",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.10.0"
+  }
+}
