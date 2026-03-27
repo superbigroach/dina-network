@@ -50,6 +50,11 @@ members = [
     "crates/dina-mcp",
     "crates/dina-bench",
     "crates/dina-monitoring",
+    "examples/hello-world",
+    "examples/escrow",
+    "examples/voting",
+    "examples/subscription",
+    "examples/marketplace",
 ]
 
 [workspace.package]

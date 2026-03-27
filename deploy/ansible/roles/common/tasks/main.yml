@@ -1,0 +1,165 @@
+# =============================================================================
+# Dina Network — Common Role
+#
+# Base setup applied to ALL hosts:
+#   - System updates and essential packages
+#   - Docker CE installation and configuration
+#   - Dina service user creation
+#   - Firewall (UFW) configuration
+#   - Node exporter for Prometheus monitoring
+# =============================================================================
+
+---
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install essential packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - python3-pip
+      - jq
+      - htop
+      - iotop
+      - unzip
+    state: present
+
+# ---- Docker CE installation ------------------------------------------------
+
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker apt repository
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Install Docker CE
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+
+- name: Ensure Docker is running and enabled
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+
+# Configure Docker daemon for production
+- name: Configure Docker daemon
+  copy:
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "50m",
+          "max-file": "5"
+        },
+        "storage-driver": "overlay2",
+        "live-restore": true
+      }
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart docker
+
+# Install Docker SDK for Python (needed by ansible docker_container module)
+- name: Install Docker SDK for Python
+  pip:
+    name: docker
+    state: present
+
+# ---- Dina service user -----------------------------------------------------
+
+- name: Create dina system user
+  user:
+    name: dina
+    system: true
+    shell: /bin/bash
+    home: /opt/dina
+    create_home: true
+    groups: docker
+    append: true
+
+- name: Create Dina directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: dina
+    group: dina
+    mode: "0755"
+  loop:
+    - /opt/dina
+    - /opt/dina/data
+    - /opt/dina/keys
+    - /opt/dina/logs
+
+# ---- Firewall (UFW) -------------------------------------------------------
+
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+
+- name: Allow SSH
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow P2P port (libp2p)
+  ufw:
+    rule: allow
+    port: "{{ dina_p2p_port | string }}"
+    proto: tcp
+
+- name: Allow REST/health port
+  ufw:
+    rule: allow
+    port: "{{ dina_rest_port | string }}"
+    proto: tcp
+
+- name: Allow Prometheus node exporter
+  ufw:
+    rule: allow
+    port: "9100"
+    proto: tcp
+
+- name: Enable UFW with default deny
+  ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+# ---- Node Exporter (Prometheus monitoring) ---------------------------------
+
+- name: Start node_exporter container for host metrics
+  docker_container:
+    name: node-exporter
+    image: prom/node-exporter:v1.7.0
+    state: started
+    restart_policy: unless-stopped
+    network_mode: host
+    pid_mode: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"

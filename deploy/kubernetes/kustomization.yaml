@@ -1,0 +1,51 @@
+# =============================================================================
+# Dina Network — Kustomization
+#
+# Deploy the entire stack:
+#   kubectl apply -k deploy/kubernetes/
+#
+# Or use overlays for environment-specific configuration:
+#   kubectl apply -k deploy/kubernetes/overlays/testnet/
+#   kubectl apply -k deploy/kubernetes/overlays/mainnet/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dina-network
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: dina
+
+resources:
+  # Namespace must be first
+  - namespace.yaml
+
+  # Configuration
+  - configmap.yaml
+  - secrets.yaml
+
+  # Stateful validators
+  - validator-statefulset.yaml
+
+  # Stateless services
+  - rpc-deployment.yaml
+  - explorer-deployment.yaml
+  - faucet-deployment.yaml
+
+  # Monitoring
+  - monitoring-deployment.yaml
+
+  # External access
+  - ingress.yaml
+
+# Image tags can be overridden per-environment without modifying manifests:
+#   kustomize edit set image gcr.io/PROJECT_ID/dina-node:v1.2.3
+images:
+  - name: gcr.io/PROJECT_ID/dina-node
+    newTag: latest
+  - name: gcr.io/PROJECT_ID/dina-explorer
+    newTag: latest
+  - name: gcr.io/PROJECT_ID/dina-faucet
+    newTag: latest

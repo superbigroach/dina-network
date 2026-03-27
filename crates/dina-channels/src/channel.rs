@@ -64,7 +64,10 @@ impl PaymentChannel {
     ) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
         let channel_id = derive_channel_id(&party_a, &party_b, now);
-        let total = deposit_a + deposit_b;
+        // Use saturating_add to prevent panic on overflow. In practice the
+        // on-chain validation layer should reject deposits that would overflow
+        // before reaching this point.
+        let total = deposit_a.saturating_add(deposit_b);
 
         debug!(
             channel_id = hex::encode(channel_id),
@@ -147,8 +150,9 @@ impl PaymentChannel {
             return Err(ChannelError::InvalidSignature);
         }
 
-        // Verify conservation of funds
-        let total = final_state.state.balance_a + final_state.state.balance_b;
+        // Verify conservation of funds (with overflow protection)
+        let total = final_state.state.balance_a.checked_add(final_state.state.balance_b)
+            .ok_or_else(|| ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
                 need: self.total_locked,
@@ -197,8 +201,9 @@ impl PaymentChannel {
             return Err(ChannelError::InvalidSignature);
         }
 
-        // Verify conservation of funds
-        let total = signed_state.state.balance_a + signed_state.state.balance_b;
+        // Verify conservation of funds (with overflow protection)
+        let total = signed_state.state.balance_a.checked_add(signed_state.state.balance_b)
+            .ok_or_else(|| ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
                 need: self.total_locked,
@@ -258,8 +263,9 @@ impl PaymentChannel {
             });
         }
 
-        // Verify conservation of funds
-        let total = signed_state.state.balance_a + signed_state.state.balance_b;
+        // Verify conservation of funds (with overflow protection)
+        let total = signed_state.state.balance_a.checked_add(signed_state.state.balance_b)
+            .ok_or_else(|| ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
                 need: self.total_locked,

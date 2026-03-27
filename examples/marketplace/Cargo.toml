@@ -1,0 +1,13 @@
+[package]
+name = "example-marketplace"
+version.workspace = true
+edition.workspace = true
+description = "Agent-to-agent service marketplace combining DRC-102 and DRC-103 patterns"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "lib"]

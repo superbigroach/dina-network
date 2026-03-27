@@ -1,0 +1,15 @@
+# =============================================================================
+# Dina Network — RPC Node Handlers
+# =============================================================================
+
+---
+- name: restart rpc
+  docker_container:
+    name: dina-rpc
+    state: started
+    restart: true
+
+- name: stop rpc
+  docker_container:
+    name: dina-rpc
+    state: stopped

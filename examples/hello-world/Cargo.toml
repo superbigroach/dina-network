@@ -1,0 +1,13 @@
+[package]
+name = "example-hello-world"
+version.workspace = true
+edition.workspace = true
+description = "Simplest possible Dina smart contract — stores and returns a greeting"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "lib"]

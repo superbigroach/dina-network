@@ -1,0 +1,12 @@
+# =============================================================================
+# Dina Network — Kubernetes Namespace
+#
+# All Dina resources live in this namespace for isolation and easy cleanup.
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dina-network
+  labels:
+    app.kubernetes.io/name: dina-network
+    app.kubernetes.io/part-of: dina

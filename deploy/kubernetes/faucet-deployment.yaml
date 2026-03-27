@@ -1,0 +1,118 @@
+# =============================================================================
+# Dina Network — Faucet Deployment (testnet only)
+#
+# Dispenses test tokens to developers. Should NOT be deployed to mainnet.
+# Rate-limited per IP address to prevent abuse.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dina-faucet
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-faucet
+    app.kubernetes.io/component: faucet
+    app.kubernetes.io/part-of: dina
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dina-faucet
+      app.kubernetes.io/component: faucet
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dina-faucet
+        app.kubernetes.io/component: faucet
+        app.kubernetes.io/part-of: dina
+    spec:
+      containers:
+        - name: dina-faucet
+          image: gcr.io/PROJECT_ID/dina-faucet:latest
+          imagePullPolicy: Always
+
+          env:
+            - name: DINA_RPC_URL
+              value: "http://dina-rpc.dina-network.svc.cluster.local:8545"
+            - name: DINA_CHAIN_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: dina-config
+                  key: CHAIN_ID
+            - name: FAUCET_PORT
+              value: "3001"
+            - name: FAUCET_AMOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: dina-config
+                  key: FAUCET_AMOUNT
+            - name: FAUCET_COOLDOWN_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: dina-config
+                  key: FAUCET_COOLDOWN_SECONDS
+            # Faucet signing key — loaded from Kubernetes secret
+            - name: FAUCET_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dina-faucet-key
+                  key: faucet-key
+
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 5
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dina-faucet
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-faucet
+    app.kubernetes.io/component: faucet
+    app.kubernetes.io/part-of: dina
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dina-faucet
+    app.kubernetes.io/component: faucet
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
+      protocol: TCP

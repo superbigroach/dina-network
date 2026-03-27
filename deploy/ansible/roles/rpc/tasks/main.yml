@@ -1,0 +1,85 @@
+# =============================================================================
+# Dina Network — RPC Node Role
+#
+# Deploys a non-validator RPC node that syncs the chain and exposes
+# JSON-RPC (port 8545) and REST (port 8080) endpoints for external access.
+#
+# Unlike validators, RPC nodes:
+#   - Do NOT sign blocks (no --validator flag, no key)
+#   - CAN be scaled horizontally behind a load balancer
+#   - Expose the RPC port publicly
+# =============================================================================
+
+---
+# ---- Open the RPC port in the firewall ------------------------------------
+
+- name: Allow JSON-RPC port through firewall
+  ufw:
+    rule: allow
+    port: "{{ dina_rpc_port | string }}"
+    proto: tcp
+
+# ---- Pull the latest node image -------------------------------------------
+
+- name: Pull dina-node Docker image
+  docker_image:
+    name: "{{ dina_node_image }}"
+    source: pull
+    force_source: true
+
+# ---- Stop existing container if running ------------------------------------
+
+- name: Stop existing RPC container (if any)
+  docker_container:
+    name: dina-rpc
+    state: absent
+  ignore_errors: true
+
+# ---- Start the RPC container ----------------------------------------------
+
+- name: Start dina-rpc container
+  docker_container:
+    name: dina-rpc
+    image: "{{ dina_node_image }}"
+    state: started
+    restart_policy: unless-stopped
+
+    network_mode: host
+
+    volumes:
+      - "{{ dina_data_dir }}:/data"
+
+    env:
+      RUST_LOG: "info,dina_rpc=debug"
+      DINA_CHAIN_ID: "{{ dina_chain_id }}"
+
+    command: >-
+      --data-dir=/data
+      --listen=/ip4/0.0.0.0/tcp/{{ dina_p2p_port }}
+      --rpc-port={{ dina_rpc_port }}
+      --rest-port={{ dina_rest_port }}
+      --chain-id={{ dina_chain_id }}
+      --bootstrap=/ip4/{{ hostvars['validator-0']['ansible_host'] }}/tcp/{{ dina_p2p_port }}
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:{{ dina_rest_port }}/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+# ---- Wait for the RPC node to become healthy --------------------------------
+
+- name: Wait for RPC health endpoint
+  uri:
+    url: "http://localhost:{{ dina_rest_port }}/health"
+    method: GET
+    status_code: 200
+  register: health_result
+  retries: 30
+  delay: 5
+  until: health_result.status == 200
+
+- name: Report RPC node status
+  debug:
+    msg: "RPC node is healthy at {{ ansible_host }}:{{ dina_rpc_port }}"

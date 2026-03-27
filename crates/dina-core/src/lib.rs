@@ -16,6 +16,8 @@ pub mod config;
 pub mod registry;
 pub mod aa;
 pub mod event;
+pub mod security;
+pub mod limits;
 
 pub use types::{Address, Hash};
 pub use error::DinaError;

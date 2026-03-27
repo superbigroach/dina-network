@@ -1,0 +1,194 @@
+# =============================================================================
+# Dina Network — RPC Node Deployment
+#
+# Stateless RPC nodes that sync the chain and expose JSON-RPC for external
+# consumers (wallets, dApps, SDKs). Scales horizontally via HPA.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dina-rpc
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-rpc
+    app.kubernetes.io/component: rpc
+    app.kubernetes.io/part-of: dina
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dina-rpc
+      app.kubernetes.io/component: rpc
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Always keep at least 2 replicas available
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dina-rpc
+        app.kubernetes.io/component: rpc
+        app.kubernetes.io/part-of: dina
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: dina-rpc
+          image: gcr.io/PROJECT_ID/dina-node:latest
+          imagePullPolicy: Always
+
+          command: ["dina-node"]
+          args:
+            - "--data-dir=/data"
+            - "--listen=/ip4/0.0.0.0/tcp/9944"
+            - "--rpc-port=8545"
+            - "--rest-port=8080"
+            - "--chain-id=$(CHAIN_ID)"
+            - "--bootstrap=$(BOOTSTRAP_ADDR)"
+            # No --validator flag: this is a full node, not a validator
+
+          envFrom:
+            - configMapRef:
+                name: dina-config
+
+          env:
+            - name: RUST_LOG
+              value: "info,dina_rpc=debug"
+
+          ports:
+            - name: rpc
+              containerPort: 8545
+              protocol: TCP
+            - name: rest
+              containerPort: 8080
+              protocol: TCP
+            - name: p2p
+              containerPort: 9944
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: rest
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: rest
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: rest
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          volumeMounts:
+            - name: rpc-data
+              mountPath: /data
+
+      volumes:
+        - name: rpc-data
+          emptyDir:
+            sizeLimit: 20Gi  # RPC nodes can re-sync; ephemeral storage is acceptable
+
+---
+# =============================================================================
+# RPC Service — LoadBalancer
+#
+# Exposes the JSON-RPC port externally. In production, replace with an Ingress
+# or use the ingress.yaml configuration for domain-based routing.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: dina-rpc
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-rpc
+    app.kubernetes.io/component: rpc
+    app.kubernetes.io/part-of: dina
+  annotations:
+    # Preserve client IPs for rate limiting
+    service.beta.kubernetes.io/external-traffic-policy: Local
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: dina-rpc
+    app.kubernetes.io/component: rpc
+  ports:
+    - name: rpc
+      port: 8545
+      targetPort: rpc
+      protocol: TCP
+    - name: rest
+      port: 8080
+      targetPort: rest
+      protocol: TCP
+
+---
+# =============================================================================
+# HorizontalPodAutoscaler — scales RPC pods 2-10 based on CPU
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dina-rpc-hpa
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-rpc
+    app.kubernetes.io/component: rpc
+    app.kubernetes.io/part-of: dina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dina-rpc
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

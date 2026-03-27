@@ -1,0 +1,90 @@
+# =============================================================================
+# Dina Network — Ingress
+#
+# Routes external traffic to internal services based on hostname:
+#   rpc.dina.network      -> dina-rpc service (port 8545)
+#   explorer.dina.network -> dina-explorer service (port 3000)
+#   faucet.dina.network   -> dina-faucet service (port 3001)
+#
+# Prerequisites:
+#   1. Install an Ingress controller (e.g., nginx-ingress or GKE Ingress)
+#   2. Install cert-manager for automatic TLS certificates
+#   3. Create DNS A/CNAME records pointing to the Ingress external IP
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dina-ingress
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-ingress
+    app.kubernetes.io/part-of: dina
+  annotations:
+    # TLS via cert-manager (Let's Encrypt)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+    # nginx-ingress specific settings
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # Rate limiting for the RPC endpoint
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # WebSocket support for RPC subscriptions
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+
+    # CORS headers for browser-based dApps
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - rpc.dina.network
+        - explorer.dina.network
+        - faucet.dina.network
+      secretName: dina-tls
+
+  rules:
+    # ---- RPC endpoint ------------------------------------------------------
+    - host: rpc.dina.network
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dina-rpc
+                port:
+                  number: 8545
+
+    # ---- Block explorer ----------------------------------------------------
+    - host: explorer.dina.network
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dina-explorer
+                port:
+                  number: 3000
+
+    # ---- Testnet faucet ----------------------------------------------------
+    - host: faucet.dina.network
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dina-faucet
+                port:
+                  number: 3001

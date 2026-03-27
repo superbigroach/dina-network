@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dina Explorer</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%2300d4aa'/><text x='50' y='68' font-size='56' font-weight='bold' text-anchor='middle' fill='%230a0e17'>D</text></svg>">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">D</div>
+        <span>Dina Explorer</span>
+      </div>
+
+      <div class="chain-stats">
+        <div class="stat-item">
+          <span class="stat-label">Block Height</span>
+          <span class="stat-value live" id="stat-height">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">TPS</span>
+          <span class="stat-value" id="stat-tps">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Peers</span>
+          <span class="stat-value" id="stat-peers">-</span>
+        </div>
+        <div class="stat-item">
+          <div class="refresh-indicator">
+            <div class="refresh-dot" id="refresh-dot"></div>
+            <span id="refresh-label">Live</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="nav-tab active" data-route="/blocks">Blocks</div>
+      <div class="nav-tab" data-route="/txs">Transactions</div>
+      <div class="nav-tab" data-route="/accounts">Accounts</div>
+      <div class="nav-tab" data-route="/devices">Devices</div>
+      <div class="nav-tab" data-route="/search">Search</div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main">
+    <div id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Connecting to Dina Network...</div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

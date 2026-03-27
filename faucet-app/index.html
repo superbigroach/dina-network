@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-faucet-api="/faucet" data-explorer-url="/explorer">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dina Network Testnet Faucet</title>
+  <meta name="description" content="Request free testnet USDC on Dina Network for development and testing.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Favicon (inline SVG) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2300d4aa'/><text x='50' y='68' font-size='55' font-weight='700' text-anchor='middle' fill='%230a0e14'>D</text></svg>">
+</head>
+<body>
+
+  <div class="app-container">
+
+    <!-- ================================================================== -->
+    <!-- Header                                                             -->
+    <!-- ================================================================== -->
+    <header class="header">
+      <div class="header__logo">
+        <div class="header__icon">D</div>
+        <h1 class="header__title">Dina <span>Faucet</span></h1>
+      </div>
+      <p class="header__subtitle">Request testnet USDC for development and testing</p>
+      <div class="header__network-badge">Testnet</div>
+    </header>
+
+    <!-- ================================================================== -->
+    <!-- Main Content                                                       -->
+    <!-- ================================================================== -->
+    <main>
+
+      <!-- Faucet Request Card -->
+      <div class="card faucet-form">
+        <h2 class="card__title">
+          <span class="card__title-icon">&#x1F4B0;</span>
+          Request Testnet USDC
+        </h2>
+
+        <div class="form-group">
+          <label class="form-label" for="address-input">Dina Address</label>
+          <input
+            type="text"
+            id="address-input"
+            class="form-input"
+            placeholder="Enter your 64-character hex address (e.g., 0x7a3b...)"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="66"
+          >
+          <p class="form-hint">Ed25519 public key -- 32 bytes / 64 hex characters, optional 0x prefix</p>
+          <p class="form-error" id="address-error"></p>
+        </div>
+
+        <button type="button" id="request-btn" class="btn btn--primary">
+          <span class="btn__spinner" id="btn-spinner"></span>
+          <span class="btn__text" id="btn-text">Request 100 USDC</span>
+        </button>
+
+        <!-- Cooldown Timer -->
+        <div class="cooldown" id="cooldown">
+          <div class="cooldown__label">Cooldown Active</div>
+          <div class="cooldown__timer" id="cooldown-timer">0s</div>
+          <div class="cooldown__hint">Please wait before requesting again</div>
+        </div>
+
+        <!-- Status Messages -->
+        <div class="status" id="status-box">
+          <div class="status__title" id="status-title"></div>
+          <div class="status__detail" id="status-detail"></div>
+          <a class="status__link" id="status-link" href="#" target="_blank" rel="noopener">
+            View on Explorer &#x2192;
+          </a>
+        </div>
+
+        <!-- Balance Display -->
+        <div class="balance-display" id="balance-display">
+          <div class="balance-display__label">Total Received</div>
+          <div>
+            <span class="balance-display__amount" id="balance-amount">0.00</span>
+            <span class="balance-display__currency">USDC</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transaction History Card -->
+      <div class="card history">
+        <h2 class="card__title">
+          <span class="card__title-icon">&#x1F4DC;</span>
+          Request History
+        </h2>
+        <p class="history__empty" id="history-empty">
+          No requests yet. Enter your address above and request testnet USDC.
+        </p>
+        <ul class="history__list" id="history-list"></ul>
+      </div>
+
+    </main>
+
+    <!-- ================================================================== -->
+    <!-- Sidebar                                                            -->
+    <!-- ================================================================== -->
+    <aside class="sidebar">
+
+      <!-- Chain Stats -->
+      <div class="card">
+        <h2 class="card__title">
+          <span class="card__title-icon">&#x1F4CA;</span>
+          Faucet Stats
+        </h2>
+        <div class="stat-grid">
+          <div class="stat-item stat-item--full">
+            <div class="stat-item__value" id="stat-dispensed">--</div>
+            <div class="stat-item__label">Total Dispensed</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value" id="stat-addresses">--</div>
+            <div class="stat-item__label">Unique Addresses</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value" id="stat-requests">--</div>
+            <div class="stat-item__label">Total Requests</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Faucet Configuration -->
+      <div class="card">
+        <h2 class="card__title">
+          <span class="card__title-icon">&#x2699;&#xFE0F;</span>
+          Configuration
+        </h2>
+        <ul class="network-info">
+          <li class="network-info__item">
+            <span class="network-info__key">Drip Amount</span>
+            <span class="network-info__value" id="stat-drip">100 USDC</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">Cooldown</span>
+            <span class="network-info__value" id="stat-cooldown">60s</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">Daily Limit</span>
+            <span class="network-info__value" id="stat-daily-limit">500 USDC</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">Gas Token</span>
+            <span class="network-info__value">USDC</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Network Info -->
+      <div class="card">
+        <h2 class="card__title">
+          <span class="card__title-icon">&#x1F310;</span>
+          Network
+        </h2>
+        <ul class="network-info">
+          <li class="network-info__item">
+            <span class="network-info__key">Chain ID</span>
+            <span class="network-info__value network-info__value--copyable" title="Click to copy">dina-testnet-1</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">RPC</span>
+            <span class="network-info__value network-info__value--copyable" title="Click to copy">localhost:8545</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">REST</span>
+            <span class="network-info__value network-info__value--copyable" title="Click to copy">localhost:8080</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">Consensus</span>
+            <span class="network-info__value">TurboBFT</span>
+          </li>
+          <li class="network-info__item">
+            <span class="network-info__key">Finality</span>
+            <span class="network-info__value">&lt;200ms</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Quick Links -->
+      <div class="card">
+        <h2 class="card__title">
+          <span class="card__title-icon">&#x1F517;</span>
+          Resources
+        </h2>
+        <ul class="quick-links">
+          <li class="quick-links__item">
+            <a class="quick-links__link" href="/explorer" target="_blank">
+              <span class="quick-links__icon">&#x1F50D;</span>
+              Block Explorer
+            </a>
+          </li>
+          <li class="quick-links__item">
+            <a class="quick-links__link" href="https://github.com/dinanetwork" target="_blank" rel="noopener">
+              <span class="quick-links__icon">&#x1F4BB;</span>
+              GitHub Repository
+            </a>
+          </li>
+          <li class="quick-links__item">
+            <a class="quick-links__link" href="/docs" target="_blank">
+              <span class="quick-links__icon">&#x1F4D6;</span>
+              Documentation
+            </a>
+          </li>
+          <li class="quick-links__item">
+            <a class="quick-links__link" href="#" onclick="return false;">
+              <span class="quick-links__icon">&#x1F4AC;</span>
+              Discord Community
+            </a>
+          </li>
+        </ul>
+      </div>
+
+    </aside>
+
+    <!-- ================================================================== -->
+    <!-- Footer                                                             -->
+    <!-- ================================================================== -->
+    <footer class="footer">
+      <p>
+        Dina Network Testnet Faucet &middot;
+        USDC-as-gas &middot;
+        Sub-200ms finality &middot;
+        <a href="https://github.com/dinanetwork" target="_blank" rel="noopener">Source Code</a>
+      </p>
+    </footer>
+
+  </div>
+
+  <!-- Application Script -->
+  <script src="app.js"></script>
+
+</body>
+</html>

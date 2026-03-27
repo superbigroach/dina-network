@@ -1,0 +1,281 @@
+# =============================================================================
+# Dina Network — Monitoring Stack
+#
+# Deploys a Prometheus instance configured to scrape all Dina components,
+# plus a Grafana dashboard for visualization.
+#
+# In production, consider using a managed service (GCP Managed Prometheus,
+# Datadog, etc.) instead of self-hosted Prometheus.
+# =============================================================================
+
+---
+# ---- Prometheus ConfigMap: scrape configuration ----------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: dina
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    # Alerting rules
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    scrape_configs:
+      # ---- Scrape validator nodes ------------------------------------------
+      - job_name: dina-validators
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [dina-network]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            regex: validator
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: instance
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}
+            action: replace
+        metrics_path: /metrics
+
+      # ---- Scrape RPC nodes -----------------------------------------------
+      - job_name: dina-rpc
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [dina-network]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            regex: rpc
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: instance
+        metrics_path: /metrics
+
+      # ---- Scrape explorer ------------------------------------------------
+      - job_name: dina-explorer
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [dina-network]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            regex: explorer
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: instance
+        metrics_path: /metrics
+
+      # ---- Scrape Prometheus itself ----------------------------------------
+      - job_name: prometheus
+        static_configs:
+          - targets: ['localhost:9090']
+
+  # ---- Alert rules ---------------------------------------------------------
+  alerts.yml: |
+    groups:
+      - name: dina-validator-alerts
+        rules:
+          # Validator pod is down for more than 2 minutes
+          - alert: ValidatorDown
+            expr: up{job="dina-validators"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Validator {{ $labels.instance }} is down"
+              description: "Validator {{ $labels.instance }} has been unreachable for over 2 minutes."
+
+          # Block production has stalled (no new blocks in 5 minutes)
+          - alert: BlockProductionStalled
+            expr: increase(dina_blocks_produced_total[5m]) == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Block production has stalled"
+              description: "No new blocks have been produced in the last 5 minutes."
+
+          # High memory usage on validator
+          - alert: ValidatorHighMemory
+            expr: container_memory_usage_bytes{container="dina-node"} / container_spec_memory_limit_bytes{container="dina-node"} > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Validator {{ $labels.instance }} memory > 90%"
+              description: "Consider increasing memory limits."
+
+      - name: dina-rpc-alerts
+        rules:
+          # RPC error rate above 5%
+          - alert: RPCHighErrorRate
+            expr: rate(dina_rpc_errors_total[5m]) / rate(dina_rpc_requests_total[5m]) > 0.05
+            for: 3m
+            labels:
+              severity: warning
+            annotations:
+              summary: "RPC error rate exceeds 5%"
+              description: "Current error rate: {{ $value | humanizePercentage }}"
+
+          # RPC latency above 2 seconds (p95)
+          - alert: RPCHighLatency
+            expr: histogram_quantile(0.95, rate(dina_rpc_request_duration_seconds_bucket[5m])) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "RPC p95 latency exceeds 2 seconds"
+              description: "Current p95: {{ $value | humanizeDuration }}"
+
+---
+# ---- Prometheus Deployment -------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: dina
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+      app.kubernetes.io/component: monitoring
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus
+        app.kubernetes.io/component: monitoring
+        app.kubernetes.io/part-of: dina
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.51.0
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=30d"
+            - "--web.enable-lifecycle"
+          ports:
+            - name: http
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: config
+              mountPath: /etc/prometheus/rules/alerts.yml
+              subPath: alerts.yml
+            - name: prometheus-data
+              mountPath: /prometheus
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: prometheus-data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+
+---
+# ---- Prometheus PVC --------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# ---- Prometheus Service ----------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+
+---
+# ---- Prometheus ServiceAccount + RBAC (needs pod list for SD) --------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: dina-network
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus
+  namespace: dina-network
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus
+  namespace: dina-network
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: dina-network
+roleRef:
+  kind: Role
+  name: prometheus
+  apiGroup: rbac.authorization.k8s.io

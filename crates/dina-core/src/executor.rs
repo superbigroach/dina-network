@@ -91,8 +91,8 @@ impl BlockExecutor {
 
         for tx in &block.transactions {
             let receipt = self.execute_transaction(tx);
-            total_fees += receipt.fee_paid;
-            total_gas += receipt.gas_used;
+            total_fees = total_fees.saturating_add(receipt.fee_paid);
+            total_gas = total_gas.saturating_add(receipt.gas_used);
             receipts.push(receipt);
         }
 
@@ -183,8 +183,14 @@ impl BlockExecutor {
             });
         }
 
-        // Check balance covers fee + transfer amount.
-        let total_needed = tx.fee() + self.tx_amount(tx);
+        // Check balance covers fee + transfer amount (with overflow protection).
+        let total_needed = tx.fee().checked_add(self.tx_amount(tx)).ok_or_else(|| {
+            DinaError::Custom(format!(
+                "fee + amount overflow: {} + {} exceeds u64::MAX",
+                tx.fee(),
+                self.tx_amount(tx)
+            ))
+        })?;
         if account.balance < total_needed {
             return Err(DinaError::InsufficientBalance {
                 have: account.balance,

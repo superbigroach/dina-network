@@ -1,0 +1,13 @@
+[package]
+name = "example-subscription"
+version.workspace = true
+edition.workspace = true
+description = "Recurring USDC subscription payment contract for Dina Network"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "lib"]

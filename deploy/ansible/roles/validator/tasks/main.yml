@@ -1,0 +1,110 @@
+# =============================================================================
+# Dina Network — Validator Role
+#
+# Deploys a Dina validator node:
+#   1. Copies the validator signing key
+#   2. Pulls the latest dina-node Docker image
+#   3. Starts the container with --validator flag
+#   4. Verifies the health endpoint responds
+#
+# Variables (from inventory):
+#   - dina_validator_index: 0, 1, or 2
+#   - dina_is_seed: true for validator-0, false for others
+# =============================================================================
+
+---
+# ---- Copy validator key from the control machine ---------------------------
+
+- name: Copy validator signing key
+  copy:
+    src: "keys/validator-{{ dina_validator_index }}/node_key"
+    dest: "{{ dina_keys_dir }}/node_key"
+    owner: dina
+    group: dina
+    mode: "0600"
+  no_log: true  # Do not log key material
+
+# ---- Pull the latest node image -------------------------------------------
+
+- name: Pull dina-node Docker image
+  docker_image:
+    name: "{{ dina_node_image }}"
+    source: pull
+    force_source: true
+
+# ---- Stop existing container if running ------------------------------------
+
+- name: Stop existing validator container (if any)
+  docker_container:
+    name: dina-validator
+    state: absent
+  ignore_errors: true
+
+# ---- Build the bootstrap argument -----------------------------------------
+# Validator-0 is the seed node and does not need a bootstrap address.
+# All other validators bootstrap from validator-0.
+
+- name: Set bootstrap address for non-seed validators
+  set_fact:
+    dina_bootstrap_args: >-
+      --bootstrap=/ip4/{{ hostvars['validator-0']['ansible_host'] }}/tcp/{{ dina_p2p_port }}
+  when: not dina_is_seed
+
+- name: Clear bootstrap for seed validator
+  set_fact:
+    dina_bootstrap_args: ""
+  when: dina_is_seed
+
+# ---- Start the validator container ----------------------------------------
+
+- name: Start dina-validator container
+  docker_container:
+    name: dina-validator
+    image: "{{ dina_node_image }}"
+    state: started
+    restart_policy: unless-stopped
+
+    # Host networking for direct P2P connectivity
+    network_mode: host
+
+    volumes:
+      - "{{ dina_data_dir }}:/data"
+      - "{{ dina_keys_dir }}:/keys:ro"
+
+    env:
+      RUST_LOG: "{{ dina_log_level }}"
+      DINA_CHAIN_ID: "{{ dina_chain_id }}"
+      DINA_VALIDATOR_INDEX: "{{ dina_validator_index | string }}"
+
+    command: >-
+      --data-dir=/data
+      --listen=/ip4/0.0.0.0/tcp/{{ dina_p2p_port }}
+      --rpc-port={{ dina_rpc_port }}
+      --rest-port={{ dina_rest_port }}
+      --validator
+      --validator-key=/keys/node_key
+      --chain-id={{ dina_chain_id }}
+      {{ dina_bootstrap_args }}
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:{{ dina_rest_port }}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ---- Wait for the validator to become healthy ------------------------------
+
+- name: Wait for validator health endpoint
+  uri:
+    url: "http://localhost:{{ dina_rest_port }}/health"
+    method: GET
+    status_code: 200
+  register: health_result
+  retries: 30
+  delay: 5
+  until: health_result.status == 200
+
+- name: Report validator status
+  debug:
+    msg: "Validator {{ dina_validator_index }} is healthy at {{ ansible_host }}:{{ dina_rest_port }}"

@@ -1,0 +1,15 @@
+# =============================================================================
+# Dina Network — Validator Handlers
+# =============================================================================
+
+---
+- name: restart validator
+  docker_container:
+    name: dina-validator
+    state: started
+    restart: true
+
+- name: stop validator
+  docker_container:
+    name: dina-validator
+    state: stopped

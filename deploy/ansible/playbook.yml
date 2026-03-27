@@ -1,0 +1,138 @@
+# =============================================================================
+# Dina Network — Main Ansible Playbook
+#
+# Deploys the complete Dina blockchain network:
+#   1. Common setup (Docker, firewall, monitoring agent) on all hosts
+#   2. Validator nodes with signing keys and chain data
+#   3. RPC nodes for public JSON-RPC access
+#   4. Explorer web UI
+#   5. Faucet (testnet only)
+#
+# Usage:
+#   # Deploy everything:
+#   ansible-playbook -i inventory.yml playbook.yml
+#
+#   # Deploy only validators:
+#   ansible-playbook -i inventory.yml playbook.yml --tags validator
+#
+#   # Deploy only RPC nodes:
+#   ansible-playbook -i inventory.yml playbook.yml --tags rpc
+#
+#   # Dry run (check mode):
+#   ansible-playbook -i inventory.yml playbook.yml --check --diff
+# =============================================================================
+
+---
+# ---- Phase 1: Common setup on all hosts ------------------------------------
+- name: Common setup (Docker, firewall, monitoring)
+  hosts: all
+  become: true
+  roles:
+    - common
+  tags:
+    - common
+    - setup
+
+# ---- Phase 2: Deploy validators -------------------------------------------
+- name: Deploy Dina validators
+  hosts: validators
+  become: true
+  serial: 1  # Roll out one validator at a time to maintain quorum
+  roles:
+    - validator
+  tags:
+    - validator
+
+# ---- Phase 3: Deploy RPC nodes --------------------------------------------
+- name: Deploy Dina RPC nodes
+  hosts: rpc_nodes
+  become: true
+  roles:
+    - rpc
+  tags:
+    - rpc
+
+# ---- Phase 4: Deploy explorer ---------------------------------------------
+- name: Deploy Dina block explorer
+  hosts: explorer_nodes
+  become: true
+  tasks:
+    - name: Create explorer data directory
+      file:
+        path: /opt/dina/explorer
+        state: directory
+        owner: dina
+        group: dina
+        mode: "0755"
+
+    - name: Pull explorer image
+      docker_image:
+        name: "{{ dina_explorer_image }}"
+        source: pull
+        force_source: true
+
+    - name: Start explorer container
+      docker_container:
+        name: dina-explorer
+        image: "{{ dina_explorer_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "3000:3000"
+        env:
+          DINA_RPC_URL: "http://{{ ansible_host }}:{{ dina_rpc_port }}"
+          DINA_REST_URL: "http://{{ ansible_host }}:{{ dina_rest_port }}"
+          DINA_CHAIN_ID: "{{ dina_chain_id }}"
+          DINA_EXPLORER_PORT: "3000"
+        healthcheck:
+          test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+  tags:
+    - explorer
+
+# ---- Phase 5: Deploy faucet (testnet only) ---------------------------------
+- name: Deploy Dina testnet faucet
+  hosts: faucet_nodes
+  become: true
+  tasks:
+    - name: Copy faucet private key
+      copy:
+        src: "keys/faucet.key"
+        dest: /opt/dina/keys/faucet.key
+        owner: dina
+        group: dina
+        mode: "0600"
+
+    - name: Pull faucet image
+      docker_image:
+        name: "{{ dina_faucet_image }}"
+        source: pull
+        force_source: true
+
+    - name: Start faucet container
+      docker_container:
+        name: dina-faucet
+        image: "{{ dina_faucet_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "3001:3001"
+        env:
+          DINA_RPC_URL: "http://{{ ansible_host }}:{{ dina_rpc_port }}"
+          DINA_CHAIN_ID: "{{ dina_chain_id }}"
+          FAUCET_PORT: "3001"
+          FAUCET_AMOUNT: "1000000"
+          FAUCET_COOLDOWN_SECONDS: "3600"
+        volumes:
+          - /opt/dina/keys/faucet.key:/keys/faucet.key:ro
+        healthcheck:
+          test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+  tags:
+    - faucet

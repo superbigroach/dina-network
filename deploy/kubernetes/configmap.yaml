@@ -1,0 +1,52 @@
+# =============================================================================
+# Dina Network — ConfigMap
+#
+# Shared configuration for all Dina services. Chain parameters, ports, and
+# bootstrap addresses are defined here and mounted into pods.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dina-config
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-network
+    app.kubernetes.io/part-of: dina
+data:
+  # Chain identification
+  CHAIN_ID: "dina-testnet-1"
+
+  # Network ports
+  P2P_PORT: "9944"
+  RPC_PORT: "8545"
+  REST_PORT: "8080"
+
+  # Logging
+  RUST_LOG: "info,dina_consensus=debug,dina_network=debug"
+
+  # Bootstrap address — validator-0 is the seed node.
+  # Other validators and RPC nodes connect to it first.
+  BOOTSTRAP_ADDR: "/dns4/dina-validator-0.dina-validator.dina-network.svc.cluster.local/tcp/9944"
+
+  # Explorer configuration
+  EXPLORER_PORT: "3000"
+
+  # Faucet configuration
+  FAUCET_PORT: "3001"
+  FAUCET_AMOUNT: "1000000"
+  FAUCET_COOLDOWN_SECONDS: "3600"
+
+  # Genesis configuration (embedded for convenience)
+  genesis.json: |
+    {
+      "chain_id": "dina-testnet-1",
+      "timestamp": 0,
+      "validators": [],
+      "initial_accounts": [
+        {
+          "address": "0000000000000000000000000000000000000000000000000000000000000001",
+          "balance": 1000000000000000,
+          "label": "Testnet Faucet (1 Billion USDC)"
+        }
+      ]
+    }

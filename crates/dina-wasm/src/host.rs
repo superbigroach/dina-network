@@ -207,10 +207,13 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
         |mut caller: Caller<'_, WasmHostState>, to_ptr: i32, amount: i64| -> i32 {
             consume_fuel(&mut caller,DEFAULT_GAS_COSTS.transfer);
 
-            let amount = amount as u64;
-            if amount == 0 {
-                return 1; // zero-amount transfer is invalid
+            // Reject negative amounts -- a malicious contract could pass a
+            // negative i64 which, when cast to u64 via `as`, wraps to a
+            // very large positive value, draining the contract balance.
+            if amount <= 0 {
+                return 1; // zero or negative amount transfer is invalid
             }
+            let amount = amount as u64;
 
             // Read destination address from WASM memory
             let to_bytes = match read_wasm_memory(&mut caller, to_ptr as u32, 32) {

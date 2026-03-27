@@ -1,0 +1,60 @@
+# =============================================================================
+# Dina Network — Ansible Inventory
+#
+# Example inventory with 3 validators and 1 RPC node.
+# Replace the IP addresses and SSH key path with your actual values.
+#
+# Usage:
+#   ansible-playbook -i inventory.yml playbook.yml
+# =============================================================================
+all:
+  vars:
+    # ---- Connection settings ------------------------------------------------
+    ansible_user: dina
+    ansible_ssh_private_key_file: ~/.ssh/dina-deploy
+    ansible_python_interpreter: /usr/bin/python3
+
+    # ---- Dina network configuration ----------------------------------------
+    dina_chain_id: "dina-testnet-1"
+    dina_node_image: "gcr.io/PROJECT_ID/dina-node:latest"
+    dina_explorer_image: "gcr.io/PROJECT_ID/dina-explorer:latest"
+    dina_faucet_image: "gcr.io/PROJECT_ID/dina-faucet:latest"
+    dina_p2p_port: 9944
+    dina_rpc_port: 8545
+    dina_rest_port: 8080
+    dina_data_dir: /opt/dina/data
+    dina_keys_dir: /opt/dina/keys
+    dina_log_level: "info,dina_consensus=debug,dina_network=debug"
+
+  children:
+    # ---- Validator nodes ----------------------------------------------------
+    validators:
+      hosts:
+        validator-0:
+          ansible_host: 10.1.0.10       # Replace with actual IP
+          dina_validator_index: 0
+          dina_is_seed: true             # First validator is the bootstrap seed
+        validator-1:
+          ansible_host: 10.2.0.10       # Replace with actual IP
+          dina_validator_index: 1
+          dina_is_seed: false
+        validator-2:
+          ansible_host: 10.3.0.10       # Replace with actual IP
+          dina_validator_index: 2
+          dina_is_seed: false
+
+    # ---- RPC node -----------------------------------------------------------
+    rpc_nodes:
+      hosts:
+        rpc-0:
+          ansible_host: 10.1.0.20       # Replace with actual IP
+
+    # ---- Explorer (can colocate with RPC) -----------------------------------
+    explorer_nodes:
+      hosts:
+        rpc-0:                          # Reuses the RPC host
+
+    # ---- Faucet (testnet only) ----------------------------------------------
+    faucet_nodes:
+      hosts:
+        rpc-0:                          # Reuses the RPC host

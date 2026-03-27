@@ -1,0 +1,43 @@
+# =============================================================================
+# Dina Network — Example Terraform Variables
+#
+# Copy this file to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+# =============================================================================
+
+project_id  = "my-gcp-project-id"
+region      = "us-central1"
+environment = "testnet"
+
+# Container images — update after pushing to GCR/Artifact Registry
+dina_node_image     = "gcr.io/my-gcp-project-id/dina-node:v0.1.0"
+dina_explorer_image = "gcr.io/my-gcp-project-id/dina-explorer:v0.1.0"
+dina_faucet_image   = "gcr.io/my-gcp-project-id/dina-faucet:v0.1.0"
+
+# Chain
+chain_id = "dina-testnet-1"
+
+# Validator placement
+validator_regions = ["us-central1", "europe-west1", "asia-east1"]
+validator_zones   = ["us-central1-a", "europe-west1-b", "asia-east1-b"]
+
+# Machine sizing
+validator_machine_type = "e2-small"
+validator_disk_size_gb = 50
+
+# RPC scaling
+rpc_min_instances = 1
+rpc_max_instances = 10
+
+# Domain
+domain = "dina.network"
+
+# Alerts
+alert_email         = "ops@dina.network"
+alert_slack_channel = ""  # Set to Slack webhook URL to enable Slack alerts
+
+# Labels
+labels = {
+  project    = "dina-network"
+  managed_by = "terraform"
+}

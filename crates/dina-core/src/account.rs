@@ -83,6 +83,15 @@ impl AccountState {
             self.accounts.insert(*to, Account::new(*to));
         }
 
+        // Check for receiver overflow before mutating state.
+        let receiver_balance = self.accounts.get(to).unwrap().balance;
+        if receiver_balance.checked_add(amount).is_none() {
+            return Err(DinaError::Custom(format!(
+                "receiver balance overflow: {} + {} exceeds u64::MAX",
+                receiver_balance, amount
+            )));
+        }
+
         self.accounts.get_mut(from).unwrap().balance -= amount;
         self.accounts.get_mut(to).unwrap().balance += amount;
 
@@ -108,23 +117,35 @@ impl AccountState {
     }
 
     /// Increment the nonce of an account.
+    ///
+    /// Returns an error if the nonce would overflow (extremely unlikely in
+    /// practice but prevents undefined behavior).
     pub fn increment_nonce(&mut self, address: &Address) -> DinaResult<()> {
         let account = self
             .accounts
             .get_mut(address)
             .ok_or_else(|| DinaError::AccountNotFound(address.to_string()))?;
 
-        account.nonce += 1;
+        account.nonce = account.nonce.checked_add(1).ok_or_else(|| {
+            DinaError::Custom(format!(
+                "nonce overflow for account {}",
+                address
+            ))
+        })?;
         Ok(())
     }
 
     /// Credit an amount to an account. Creates the account if it does not exist.
+    ///
+    /// Uses saturating addition to prevent overflow. In production, balances
+    /// should never approach `u64::MAX` (which would represent ~18 quintillion
+    /// micro-USDC), but this prevents a panic in adversarial conditions.
     pub fn credit(&mut self, address: &Address, amount: u64) {
         let account = self
             .accounts
             .entry(*address)
             .or_insert_with(|| Account::new(*address));
-        account.balance += amount;
+        account.balance = account.balance.saturating_add(amount);
     }
 
     /// Return the number of accounts.

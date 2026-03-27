@@ -1,0 +1,13 @@
+[package]
+name = "example-voting"
+version.workspace = true
+edition.workspace = true
+description = "On-chain voting contract with one-vote-per-address enforcement"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "lib"]

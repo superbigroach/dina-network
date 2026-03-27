@@ -1,0 +1,216 @@
+# =============================================================================
+# Dina Network — Validator StatefulSet
+#
+# Runs 3 validator nodes as a StatefulSet. Each pod gets:
+#   - A stable hostname (dina-validator-{0,1,2})
+#   - A PersistentVolumeClaim for chain data that survives restarts
+#   - Its own validator signing key from the shared secret
+#   - Anti-affinity rules to spread across physical nodes
+#   - Liveness and readiness probes via the /health endpoint
+#
+# StatefulSet is used instead of Deployment because validators need:
+#   - Stable network identities (for P2P peer discovery)
+#   - Persistent storage (chain data must survive pod rescheduling)
+#   - Ordered startup (validator-0 is the seed node)
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dina-validator
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-validator
+    app.kubernetes.io/component: validator
+    app.kubernetes.io/part-of: dina
+spec:
+  serviceName: dina-validator
+  replicas: 3
+  podManagementPolicy: OrderedReady  # validator-0 starts first as seed
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dina-validator
+      app.kubernetes.io/component: validator
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dina-validator
+        app.kubernetes.io/component: validator
+        app.kubernetes.io/part-of: dina
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      # ---- Anti-affinity: spread validators across different nodes ----------
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: dina-validator
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: dina-validator
+                topologyKey: topology.kubernetes.io/zone
+
+      # ---- Termination: give the node time to gracefully shut down ----------
+      terminationGracePeriodSeconds: 60
+
+      # ---- Init container: copy the correct validator key -------------------
+      initContainers:
+        - name: init-key
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              # Extract the ordinal index from the pod hostname
+              ORDINAL=$(echo "$HOSTNAME" | rev | cut -d'-' -f1 | rev)
+              echo "Initializing validator key for index $ORDINAL"
+              cp "/secrets/validator-${ORDINAL}-key" /keys/node_key
+              chmod 600 /keys/node_key
+          volumeMounts:
+            - name: validator-keys
+              mountPath: /secrets
+              readOnly: true
+            - name: key-dir
+              mountPath: /keys
+
+      # ---- Main container: dina-node in validator mode ---------------------
+      containers:
+        - name: dina-node
+          image: gcr.io/PROJECT_ID/dina-node:latest
+          imagePullPolicy: Always
+
+          command: ["dina-node"]
+          args:
+            - "--data-dir=/data"
+            - "--listen=/ip4/0.0.0.0/tcp/9944"
+            - "--rpc-port=8545"
+            - "--rest-port=8080"
+            - "--validator"
+            - "--validator-key=/keys/node_key"
+            - "--chain-id=$(CHAIN_ID)"
+            # Bootstrap from validator-0 using its stable DNS name.
+            # validator-0 itself ignores this flag (it IS the seed).
+            - "--bootstrap=$(BOOTSTRAP_ADDR)"
+
+          envFrom:
+            - configMapRef:
+                name: dina-config
+
+          ports:
+            - name: p2p
+              containerPort: 9944
+              protocol: TCP
+            - name: rpc
+              containerPort: 8545
+              protocol: TCP
+            - name: rest
+              containerPort: 8080
+              protocol: TCP
+
+          # ---- Resource limits ---------------------------------------------
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+          # ---- Health probes -----------------------------------------------
+          startupProbe:
+            httpGet:
+              path: /health
+              port: rest
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30  # Allow up to 2.5 minutes for initial sync
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: rest
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: rest
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          # ---- Volume mounts -----------------------------------------------
+          volumeMounts:
+            - name: chain-data
+              mountPath: /data
+            - name: key-dir
+              mountPath: /keys
+              readOnly: true
+
+      # ---- Volumes (key-dir is an emptyDir populated by the init container) -
+      volumes:
+        - name: validator-keys
+          secret:
+            secretName: dina-validator-keys
+        - name: key-dir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+
+  # ---- PersistentVolumeClaim template: one per validator --------------------
+  volumeClaimTemplates:
+    - metadata:
+        name: chain-data
+        labels:
+          app.kubernetes.io/name: dina-validator
+          app.kubernetes.io/component: validator
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard  # Change to premium-rwo for SSD
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+# =============================================================================
+# Headless Service for StatefulSet
+#
+# Provides stable DNS names for each validator pod:
+#   dina-validator-0.dina-validator.dina-network.svc.cluster.local
+#   dina-validator-1.dina-validator.dina-network.svc.cluster.local
+#   dina-validator-2.dina-validator.dina-network.svc.cluster.local
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: dina-validator
+  namespace: dina-network
+  labels:
+    app.kubernetes.io/name: dina-validator
+    app.kubernetes.io/component: validator
+    app.kubernetes.io/part-of: dina
+spec:
+  clusterIP: None  # Headless — each pod gets its own DNS entry
+  selector:
+    app.kubernetes.io/name: dina-validator
+    app.kubernetes.io/component: validator
+  ports:
+    - name: p2p
+      port: 9944
+      targetPort: p2p
+    - name: rpc
+      port: 8545
+      targetPort: rpc
+    - name: rest
+      port: 8080
+      targetPort: rest
