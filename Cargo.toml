@@ -128,6 +128,8 @@ members = [
     "contracts/bridge-across",
     "contracts/bridge-stargate",
     "contracts/dex-swap",
+    "contracts/defi-vault",
+    "contracts/defi-lending",
 ]
 
 [workspace.package]

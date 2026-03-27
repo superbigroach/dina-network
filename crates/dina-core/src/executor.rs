@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::account::AccountState;
+use sha2::{Digest, Sha256};
+use wasmtime::{Config, Engine, Linker, Module, Store};
+
+use crate::account::{Account, AccountState};
 use crate::block::Block;
 use crate::crypto::hash_bytes;
 use crate::device::{DeviceIdentity, DeviceType};
@@ -61,12 +64,190 @@ mod gas {
     pub const REGISTER_DEVICE: u64 = 25_000;
 }
 
+/// Minimal host state for inline WASM execution within the block executor.
+/// This avoids a circular dependency on the full `dina-wasm` crate.
+struct InlineWasmHostState {
+    /// Contract storage overlay (key-value pairs).
+    storage: HashMap<Vec<u8>, Vec<u8>>,
+    /// Events emitted during execution.
+    events: Vec<(String, Vec<u8>)>,
+    /// Caller address bytes.
+    caller: [u8; 32],
+}
+
+/// Register minimal host functions for inline WASM execution.
+///
+/// Only the functions required by the `__dispatch` contract ABI are
+/// linked here: storage get/set, event emission, and caller identity.
+fn register_inline_host_functions(
+    linker: &mut Linker<InlineWasmHostState>,
+) -> Result<(), wasmtime::Error> {
+    // __host_caller(out_ptr: i32) -> i32
+    linker.func_wrap("env", "__host_caller", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, out_ptr: i32| -> i32 {
+        let addr_bytes = caller.data().caller;
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return -1,
+        };
+        if memory.write(&mut caller, out_ptr as usize, &addr_bytes).is_err() {
+            return -1;
+        }
+        out_ptr
+    })?;
+
+    // __host_block_time() -> i64
+    linker.func_wrap("env", "__host_block_time", |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 {
+        0i64
+    })?;
+
+    // __host_block_height() -> i64
+    linker.func_wrap("env", "__host_block_height", |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 {
+        0i64
+    })?;
+
+    // __host_self_balance() -> i64
+    linker.func_wrap("env", "__host_self_balance", |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 {
+        0i64
+    })?;
+
+    // __host_transfer(to_ptr: i32, amount: i64) -> i32
+    linker.func_wrap("env", "__host_transfer", |_caller: wasmtime::Caller<'_, InlineWasmHostState>, _to_ptr: i32, _amount: i64| -> i32 {
+        1 // not supported in inline executor
+    })?;
+
+    // __host_storage_get(key_ptr, key_len) -> i64
+    linker.func_wrap("env", "__host_storage_get", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, key_ptr: i32, key_len: i32| -> i64 {
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return 0,
+        };
+        let data = memory.data(&caller);
+        let start = key_ptr as usize;
+        let end = start + key_len as usize;
+        if end > data.len() { return 0; }
+        let key = data[start..end].to_vec();
+
+        let value = match caller.data().storage.get(&key) {
+            Some(v) => v.clone(),
+            None => return 0,
+        };
+
+        let val_len = value.len() as u32;
+        // Allocate via __alloc
+        let alloc_fn = match caller.get_export("__alloc").and_then(|e| e.into_func()) {
+            Some(f) => f,
+            None => return 0,
+        };
+        let typed = match alloc_fn.typed::<i32, i32>(&caller) {
+            Ok(t) => t,
+            Err(_) => return 0,
+        };
+        let val_ptr = match typed.call(&mut caller, val_len as i32) {
+            Ok(p) => p as u32,
+            Err(_) => return 0,
+        };
+
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return 0,
+        };
+        if memory.write(&mut caller, val_ptr as usize, &value).is_err() {
+            return 0;
+        }
+
+        ((val_ptr as i64) << 32) | (val_len as i64)
+    })?;
+
+    // __host_storage_set(key_ptr, key_len, val_ptr, val_len)
+    linker.func_wrap("env", "__host_storage_set", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32| {
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return,
+        };
+        let data = memory.data(&caller);
+        let ks = key_ptr as usize;
+        let ke = ks + key_len as usize;
+        let vs = val_ptr as usize;
+        let ve = vs + val_len as usize;
+        if ke > data.len() || ve > data.len() { return; }
+        let key = data[ks..ke].to_vec();
+        let value = data[vs..ve].to_vec();
+        caller.data_mut().storage.insert(key, value);
+    })?;
+
+    // __host_emit_event(name_ptr, name_len, data_ptr, data_len)
+    linker.func_wrap("env", "__host_emit_event", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, name_ptr: i32, name_len: i32, data_ptr: i32, data_len: i32| {
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return,
+        };
+        let data = memory.data(&caller);
+        let ns = name_ptr as usize;
+        let ne = ns + name_len as usize;
+        let ds = data_ptr as usize;
+        let de = ds + data_len as usize;
+        if ne > data.len() || de > data.len() { return; }
+        let name = String::from_utf8_lossy(&data[ns..ne]).into_owned();
+        let event_data = data[ds..de].to_vec();
+        caller.data_mut().events.push((name, event_data));
+    })?;
+
+    // __host_sha256(data_ptr, data_len) -> i32
+    linker.func_wrap("env", "__host_sha256", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, data_ptr: i32, data_len: i32| -> i32 {
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return 0,
+        };
+        let mem_data = memory.data(&caller);
+        let start = data_ptr as usize;
+        let end = start + data_len as usize;
+        if end > mem_data.len() { return 0; }
+        let input = mem_data[start..end].to_vec();
+
+        let hash = Sha256::digest(&input);
+
+        let alloc_fn = match caller.get_export("__alloc").and_then(|e| e.into_func()) {
+            Some(f) => f,
+            None => return 0,
+        };
+        let typed = match alloc_fn.typed::<i32, i32>(&caller) {
+            Ok(t) => t,
+            Err(_) => return 0,
+        };
+        let out_ptr = match typed.call(&mut caller, 32) {
+            Ok(p) => p as u32,
+            Err(_) => return 0,
+        };
+
+        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+            Some(m) => m,
+            None => return 0,
+        };
+        if memory.write(&mut caller, out_ptr as usize, &hash).is_err() {
+            return 0;
+        }
+
+        out_ptr as i32
+    })?;
+
+    // __host_verify_ed25519(pubkey_ptr, msg_ptr, msg_len, sig_ptr) -> i32
+    linker.func_wrap("env", "__host_verify_ed25519", |_caller: wasmtime::Caller<'_, InlineWasmHostState>, _pk: i32, _msg: i32, _mlen: i32, _sig: i32| -> i32 {
+        0 // signature verification not supported in inline executor
+    })?;
+
+    Ok(())
+}
+
 /// The block execution engine. Takes a block of transactions and applies
 /// them to the account state, producing receipts and a new state root.
 pub struct BlockExecutor {
     state: AccountState,
     /// Registered devices, keyed by device public key.
     devices: HashMap<[u8; 32], DeviceIdentity>,
+    /// Deployed contract WASM bytecodes, keyed by contract address.
+    contract_code: HashMap<Address, Vec<u8>>,
+    /// Per-contract key-value storage.
+    contract_storage: HashMap<Address, HashMap<Vec<u8>, Vec<u8>>>,
 }
 
 impl BlockExecutor {
@@ -75,6 +256,8 @@ impl BlockExecutor {
         Self {
             state,
             devices: HashMap::new(),
+            contract_code: HashMap::new(),
+            contract_storage: HashMap::new(),
         }
     }
 
@@ -260,19 +443,37 @@ impl BlockExecutor {
                 wasm_bytecode,
                 ..
             } => {
-                // Store the code hash on the sender's account (contract
-                // account creation is a future enhancement -- for now the
-                // deployer account gets the code_hash set).
                 let code_hash = hash_bytes(wasm_bytecode);
-                if let Some(acct) = self.state.get_account(from).cloned() {
-                    let mut updated = acct;
-                    updated.code_hash = Some(code_hash);
-                    self.state.set_account(updated);
-                }
+
+                // Derive a deterministic contract address from deployer + nonce.
+                let deployer_nonce = self
+                    .state
+                    .get_account(from)
+                    .map(|a| a.nonce)
+                    .unwrap_or(0);
+                let contract_addr = {
+                    let mut hasher = Sha256::new();
+                    hasher.update(from.as_bytes());
+                    hasher.update(deployer_nonce.to_le_bytes());
+                    let result = hasher.finalize();
+                    let mut bytes = [0u8; 32];
+                    bytes.copy_from_slice(&result);
+                    Address(bytes)
+                };
+
+                // Store the WASM bytecode keyed by the contract address.
+                self.contract_code
+                    .insert(contract_addr, wasm_bytecode.clone());
+
+                // Create a contract account with the code hash.
+                let mut contract_account = Account::new(contract_addr);
+                contract_account.code_hash = Some(code_hash);
+                self.state.set_account(contract_account);
+
                 Ok(vec![Event {
-                    contract: Some(*from),
+                    contract: Some(contract_addr),
                     name: "ContractDeployed".to_string(),
-                    data: code_hash.0.to_vec(),
+                    data: contract_addr.as_bytes().to_vec(),
                 }])
             }
 
@@ -281,6 +482,7 @@ impl BlockExecutor {
                 usdc_attached,
                 from,
                 method,
+                args,
                 ..
             } => {
                 // Transfer attached USDC to the contract address.
@@ -288,13 +490,30 @@ impl BlockExecutor {
                     self.state.transfer(from, contract, *usdc_attached)?;
                 }
 
-                // WASM execution is not yet implemented. For now we emit an
-                // event recording the call.
-                Ok(vec![Event {
-                    contract: Some(*contract),
-                    name: format!("ContractCalled::{method}"),
-                    data: Vec::new(),
-                }])
+                // Look up the contract bytecode.
+                let bytecode = self
+                    .contract_code
+                    .get(contract)
+                    .ok_or_else(|| {
+                        DinaError::ContractNotFound(contract.to_string())
+                    })?
+                    .clone();
+
+                // Load existing contract storage.
+                let existing_storage = self
+                    .contract_storage
+                    .get(contract)
+                    .cloned()
+                    .unwrap_or_default();
+
+                // Execute the WASM contract inline using wasmtime.
+                let (events, updated_storage) =
+                    self.execute_wasm(&bytecode, from, contract, method, args, existing_storage)?;
+
+                // Persist updated contract storage.
+                self.contract_storage.insert(*contract, updated_storage);
+
+                Ok(events)
             }
 
             Transaction::RegisterDevice {
@@ -328,6 +547,124 @@ impl BlockExecutor {
                 }])
             }
         }
+    }
+
+    /// Execute a WASM contract method inline using wasmtime.
+    ///
+    /// This replicates the dispatch ABI used by `dina-wasm`: the contract
+    /// must export `__alloc(size: i32) -> i32`, `__dispatch(method_ptr,
+    /// method_len, args_ptr, args_len) -> i64`, and `memory`.
+    fn execute_wasm(
+        &self,
+        bytecode: &[u8],
+        caller_addr: &Address,
+        contract_addr: &Address,
+        method: &str,
+        args: &[u8],
+        existing_storage: HashMap<Vec<u8>, Vec<u8>>,
+    ) -> DinaResult<(Vec<Event>, HashMap<Vec<u8>, Vec<u8>>)> {
+        let mut engine_config = Config::new();
+        engine_config.consume_fuel(true);
+        engine_config.wasm_bulk_memory(true);
+
+        let engine = Engine::new(&engine_config)
+            .map_err(|e| DinaError::WasmExecutionError(format!("engine init failed: {e}")))?;
+
+        let module = Module::new(&engine, bytecode)
+            .map_err(|e| DinaError::WasmExecutionError(format!("invalid WASM: {e}")))?;
+
+        let host_state = InlineWasmHostState {
+            storage: existing_storage,
+            events: Vec::new(),
+            caller: *caller_addr.as_bytes(),
+        };
+
+        let mut store = Store::new(&engine, host_state);
+        store
+            .set_fuel(10_000_000)
+            .map_err(|e| DinaError::WasmExecutionError(format!("set fuel failed: {e}")))?;
+
+        let mut linker = Linker::new(&engine);
+        register_inline_host_functions(&mut linker)
+            .map_err(|e| DinaError::WasmExecutionError(format!("host link failed: {e}")))?;
+
+        let instance = linker
+            .instantiate(&mut store, &module)
+            .map_err(|e| DinaError::WasmExecutionError(format!("instantiation failed: {e}")))?;
+
+        // Allocate and write method name into guest memory.
+        let alloc_fn = instance
+            .get_typed_func::<i32, i32>(&mut store, "__alloc")
+            .map_err(|_| {
+                DinaError::WasmExecutionError("contract must export __alloc".into())
+            })?;
+
+        let memory = instance
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| DinaError::WasmExecutionError("no memory export".into()))?;
+
+        let method_bytes = method.as_bytes();
+        let method_ptr = alloc_fn
+            .call(&mut store, method_bytes.len() as i32)
+            .map_err(|e| DinaError::WasmExecutionError(format!("alloc method failed: {e}")))?;
+        memory
+            .write(&mut store, method_ptr as usize, method_bytes)
+            .map_err(|e| {
+                DinaError::WasmExecutionError(format!("method write failed: {e}"))
+            })?;
+
+        // Allocate and write args.
+        let args_ptr = alloc_fn
+            .call(&mut store, args.len().max(1) as i32)
+            .map_err(|e| DinaError::WasmExecutionError(format!("alloc args failed: {e}")))?;
+        if !args.is_empty() {
+            memory
+                .write(&mut store, args_ptr as usize, args)
+                .map_err(|e| {
+                    DinaError::WasmExecutionError(format!("args write failed: {e}"))
+                })?;
+        }
+
+        // Call __dispatch(method_ptr, method_len, args_ptr, args_len) -> packed i64.
+        let dispatch_fn = instance
+            .get_typed_func::<(i32, i32, i32, i32), i64>(&mut store, "__dispatch")
+            .map_err(|_| {
+                DinaError::WasmExecutionError("contract must export __dispatch".into())
+            })?;
+
+        let _packed_result = dispatch_fn
+            .call(
+                &mut store,
+                (
+                    method_ptr,
+                    method_bytes.len() as i32,
+                    args_ptr,
+                    args.len() as i32,
+                ),
+            )
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("fuel") {
+                    DinaError::WasmExecutionError("out of gas".into())
+                } else {
+                    DinaError::WasmExecutionError(format!("__dispatch failed: {e}"))
+                }
+            })?;
+
+        // Extract results from host state.
+        let state = store.into_data();
+
+        let events = state
+            .events
+            .into_iter()
+            .map(|(name, data)| Event {
+                contract: Some(*contract_addr),
+                name,
+                data,
+            })
+            .collect();
+
+        Ok((events, state.storage))
     }
 
     /// Estimate gas usage for a transaction based on its type.

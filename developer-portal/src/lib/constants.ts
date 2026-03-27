@@ -104,6 +104,8 @@ export const NAV_SECTIONS = [
     title: "DeFi",
     items: [
       { title: "DinaDEX Swap", href: "/docs/swap" },
+      { title: "Yield Vaults", href: "/docs/defi/vaults" },
+      { title: "Lending Pool", href: "/docs/defi/lending" },
     ],
   },
   {

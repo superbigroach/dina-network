@@ -422,6 +422,81 @@ dependencies = [
 ]
 
 [[package]]
+name = "bridge-across"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bridge-axelar"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bridge-base"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "bridge-cctp"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "bridge-layerzero"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bridge-stargate"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bridge-usdc"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bridge-wormhole"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "bs58"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -979,6 +1054,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "defi-lending"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "defi-vault"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1009,6 +1102,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 dependencies = [
  "powerfmt",
+]
+
+[[package]]
+name = "dex-swap"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1124,6 +1226,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.18",
+ "wasmtime",
  "x25519-dalek",
 ]
 
