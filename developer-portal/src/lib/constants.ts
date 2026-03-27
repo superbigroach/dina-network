@@ -94,6 +94,8 @@ export const NAV_SECTIONS = [
       { title: "Circle CCTP", href: "/docs/bridges/cctp" },
       { title: "Wormhole", href: "/docs/bridges/wormhole" },
       { title: "LayerZero", href: "/docs/bridges/layerzero" },
+      { title: "Across", href: "/docs/bridges/across" },
+      { title: "Stargate", href: "/docs/bridges/stargate" },
       { title: "Axelar", href: "/docs/bridges/axelar" },
       { title: "Bridged USDC", href: "/docs/bridges/usdc" },
     ],

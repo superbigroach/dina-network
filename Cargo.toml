@@ -125,6 +125,8 @@ members = [
     "contracts/bridge-wormhole",
     "contracts/bridge-layerzero",
     "contracts/bridge-axelar",
+    "contracts/bridge-across",
+    "contracts/bridge-stargate",
 ]
 
 [workspace.package]
