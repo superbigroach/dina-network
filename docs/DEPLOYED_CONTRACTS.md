@@ -33,6 +33,16 @@ Deployed: 2026-03-27
 | Base Bridge | `0x20ca0668...5ea0fe` | Base ↔ Dina lock/mint bridge |
 | CCTP Bridge | `0xaba71d31...f265e6` | Circle CCTP MessageTransmitter |
 
+## Developer Infrastructure
+
+| Contract | TX Hash | Description |
+|----------|---------|-------------|
+| Upgradeable Proxy | `0xb251eeb3...3cc88e` | Deploy once, upgrade code anytime (timelock protected) |
+| Multicall | `0xa0fa1c1d...aad157` | Batch multiple contract calls in 1 transaction |
+| Timelock | `0xd3fbd4a7...11ade5` | Governance delay on critical operations |
+| Contract Factory | `0x8fea9c1c...1d7180` | Deploy contracts from registered templates |
+| Event Indexer | `0x7ad0df7d...84d3a2` | On-chain event log for querying |
+
 ## How to Interact
 
 ```typescript

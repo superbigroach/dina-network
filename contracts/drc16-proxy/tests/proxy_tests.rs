@@ -1,94 +1,93 @@
-use drc16_proxy::{dispatch, ProxyState};
+use drc16_proxy::dispatch;
 
-fn addr(seed: u8) -> [u8; 32] {
-    [seed; 32]
-}
+const ADMIN: &str = "admin_address";
+const ALICE: &str = "alice_address";
+const CODE_V1: &[u8] = b"wasm_v1";
+const CODE_V2: &[u8] = b"wasm_v2";
+const DELAY: u64 = 3600;
 
-fn init() -> Option<ProxyState> {
-    let mut state: Option<ProxyState> = None;
-    let args = serde_json::to_vec(&serde_json::json!({"implementation": addr(10)})).unwrap();
-    dispatch(&mut state, "init", &args, addr(1));
+fn deploy() -> Option<drc16_proxy::ProxyState> {
+    let mut state = None;
+    let args = serde_json::to_vec(&serde_json::json!({
+        "admin": ADMIN,
+        "implementation_code": CODE_V1.to_vec(),
+        "upgrade_delay": DELAY,
+    }))
+    .unwrap();
+    dispatch(&mut state, "deploy_proxy", &args, ADMIN);
     state
 }
 
 #[test]
-fn init_sets_implementation_and_admin() {
-    let state = init();
+fn deploy_sets_admin_and_version() {
+    let state = deploy();
     let s = state.as_ref().unwrap();
-    assert_eq!(s.implementation, addr(10));
-    assert_eq!(s.admin, addr(1));
+    assert_eq!(s.admin, ADMIN);
+    assert_eq!(s.version, 1);
+    assert!(!s.paused);
 }
 
 #[test]
-fn upgrade_to_changes_implementation() {
-    let mut state = init();
-    let args = serde_json::to_vec(&serde_json::json!({"new_impl": addr(20)})).unwrap();
-    dispatch(&mut state, "upgrade_to", &args, addr(1));
-
-    let result = dispatch(&mut state, "implementation", b"", addr(1));
-    let impl_addr: [u8; 32] = serde_json::from_slice(&result).unwrap();
-    assert_eq!(impl_addr, addr(20));
+fn proxy_call_forwards() {
+    let mut state = deploy();
+    let args = serde_json::to_vec(&serde_json::json!({
+        "method": "transfer",
+        "args": [1, 2, 3],
+    }))
+    .unwrap();
+    let result = dispatch(&mut state, "proxy_call", &args, ALICE);
+    let s: String = serde_json::from_slice(&result).unwrap();
+    assert_eq!(s, "forwarded:transfer");
 }
 
 #[test]
-#[should_panic(expected = "only admin can upgrade")]
-fn upgrade_by_non_admin_fails() {
-    let mut state = init();
-    let args = serde_json::to_vec(&serde_json::json!({"new_impl": addr(20)})).unwrap();
-    dispatch(&mut state, "upgrade_to", &args, addr(99));
+fn upgrade_lifecycle() {
+    let mut state = deploy();
+    // Propose
+    let args = serde_json::to_vec(&serde_json::json!({
+        "new_code": CODE_V2.to_vec(),
+        "current_time": 1000u64,
+    }))
+    .unwrap();
+    dispatch(&mut state, "propose_upgrade", &args, ADMIN);
+    assert!(state.as_ref().unwrap().pending_upgrade.is_some());
+
+    // Execute
+    let args = serde_json::to_vec(&serde_json::json!({
+        "current_time": 1000u64 + DELAY,
+    }))
+    .unwrap();
+    dispatch(&mut state, "execute_upgrade", &args, ADMIN);
+    assert_eq!(state.as_ref().unwrap().version, 2);
 }
 
 #[test]
-#[should_panic(expected = "implementation cannot be zero address")]
-fn upgrade_to_zero_address_fails() {
-    let mut state = init();
-    let zero: [u8; 32] = [0u8; 32];
-    let args = serde_json::to_vec(&serde_json::json!({"new_impl": zero})).unwrap();
-    dispatch(&mut state, "upgrade_to", &args, addr(1));
+#[should_panic(expected = "only admin can propose upgrade")]
+fn non_admin_cannot_propose() {
+    let mut state = deploy();
+    let args = serde_json::to_vec(&serde_json::json!({
+        "new_code": CODE_V2.to_vec(),
+        "current_time": 1000u64,
+    }))
+    .unwrap();
+    dispatch(&mut state, "propose_upgrade", &args, ALICE);
 }
 
 #[test]
-fn change_admin_sets_pending() {
-    let mut state = init();
-    let args = serde_json::to_vec(&serde_json::json!({"new_admin": addr(2)})).unwrap();
-    dispatch(&mut state, "change_admin", &args, addr(1));
-    assert_eq!(state.as_ref().unwrap().pending_admin, Some(addr(2)));
-    // Admin hasn't changed yet
-    assert_eq!(state.as_ref().unwrap().admin, addr(1));
+fn transfer_admin() {
+    let mut state = deploy();
+    let args = serde_json::to_vec(&serde_json::json!({
+        "new_admin": ALICE,
+    }))
+    .unwrap();
+    dispatch(&mut state, "transfer_admin", &args, ADMIN);
+    assert_eq!(state.as_ref().unwrap().admin, ALICE);
 }
 
 #[test]
-fn accept_admin_completes_transfer() {
-    let mut state = init();
-    let change_args = serde_json::to_vec(&serde_json::json!({"new_admin": addr(2)})).unwrap();
-    dispatch(&mut state, "change_admin", &change_args, addr(1));
-    dispatch(&mut state, "accept_admin", b"", addr(2));
-
-    let s = state.as_ref().unwrap();
-    assert_eq!(s.admin, addr(2));
-    assert_eq!(s.pending_admin, None);
-}
-
-#[test]
-#[should_panic(expected = "only pending admin can accept")]
-fn accept_admin_by_wrong_address_fails() {
-    let mut state = init();
-    let change_args = serde_json::to_vec(&serde_json::json!({"new_admin": addr(2)})).unwrap();
-    dispatch(&mut state, "change_admin", &change_args, addr(1));
-    dispatch(&mut state, "accept_admin", b"", addr(99));
-}
-
-#[test]
-#[should_panic(expected = "no pending admin transfer")]
-fn accept_admin_without_pending_fails() {
-    let mut state = init();
-    dispatch(&mut state, "accept_admin", b"", addr(1));
-}
-
-#[test]
-fn proxy_admin_query_returns_admin() {
-    let mut state = init();
-    let result = dispatch(&mut state, "proxy_admin", b"", addr(1));
-    let admin: [u8; 32] = serde_json::from_slice(&result).unwrap();
-    assert_eq!(admin, addr(1));
+fn get_admin_query() {
+    let mut state = deploy();
+    let result = dispatch(&mut state, "get_admin", b"", ADMIN);
+    let admin: String = serde_json::from_slice(&result).unwrap();
+    assert_eq!(admin, ADMIN);
 }

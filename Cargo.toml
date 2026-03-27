@@ -130,6 +130,10 @@ members = [
     "contracts/dex-swap",
     "contracts/defi-vault",
     "contracts/defi-lending",
+    "contracts/dev-multicall",
+    "contracts/dev-timelock",
+    "contracts/dev-factory",
+    "contracts/dev-events",
 ]
 
 [workspace.package]
