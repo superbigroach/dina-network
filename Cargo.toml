@@ -119,6 +119,12 @@ members = [
     "contracts/drc70-model-marketplace",
     "contracts/drc71-collaborative-training",
     "contracts/drc72-device-cluster",
+    "contracts/bridge-usdc",
+    "contracts/bridge-cctp",
+    "contracts/bridge-base",
+    "contracts/bridge-wormhole",
+    "contracts/bridge-layerzero",
+    "contracts/bridge-axelar",
 ]
 
 [workspace.package]

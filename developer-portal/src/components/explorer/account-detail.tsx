@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   ArrowUpRight,
   Copy,
@@ -106,8 +106,8 @@ function Skeleton({ className = "" }: { className?: string }) {
 // ---------------------------------------------------------------------------
 
 export default function AccountDetailPage() {
-  const params = useParams();
-  const address = params.address as string;
+  const pathname = usePathname();
+  const address = pathname.split("/explorer/account/")[1] ?? "";
 
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [transactions, setTransactions] = useState<AccountTx[]>([]);

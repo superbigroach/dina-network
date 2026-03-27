@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   ArrowUpRight,
   Copy,
@@ -132,8 +132,8 @@ function DetailRow({
 // ---------------------------------------------------------------------------
 
 export default function TransactionDetailPage() {
-  const params = useParams();
-  const txHash = params.hash as string;
+  const pathname = usePathname();
+  const txHash = pathname.split("/explorer/tx/")[1] ?? "";
 
   const [tx, setTx] = useState<TransactionDetail | null>(null);
   const [loading, setLoading] = useState(true);

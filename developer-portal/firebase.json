@@ -1,0 +1,27 @@
+{
+  "hosting": {
+    "site": "dina-developer-portal",
+    "public": "out",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "rewrites": [
+      {
+        "source": "/explorer/block/**",
+        "destination": "/explorer.html"
+      },
+      {
+        "source": "/explorer/account/**",
+        "destination": "/explorer.html"
+      },
+      {
+        "source": "/explorer/tx/**",
+        "destination": "/explorer.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

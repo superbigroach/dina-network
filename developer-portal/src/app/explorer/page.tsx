@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Search,
@@ -16,6 +17,9 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
+import BlockDetailPage from "@/components/explorer/block-detail";
+import AccountDetailPage from "@/components/explorer/account-detail";
+import TransactionDetailPage from "@/components/explorer/tx-detail";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -180,6 +184,21 @@ function ValidatorCard({ v, loading }: { v: ValidatorHealth; loading: boolean })
 // ---------------------------------------------------------------------------
 
 export default function ExplorerPage() {
+  const pathname = usePathname();
+
+  // Route to detail pages when the path contains sub-segments.
+  // Firebase Hosting rewrites all /explorer/** to this page via
+  // the "**" -> "/explorer.html" or "/index.html" rewrite.
+  if (pathname.startsWith("/explorer/block/")) {
+    return <BlockDetailPage />;
+  }
+  if (pathname.startsWith("/explorer/account/")) {
+    return <AccountDetailPage />;
+  }
+  if (pathname.startsWith("/explorer/tx/")) {
+    return <TransactionDetailPage />;
+  }
+
   const [validators, setValidators] = useState<ValidatorHealth[]>(
     VALIDATORS.map((v) => ({
       ip: v.ip,

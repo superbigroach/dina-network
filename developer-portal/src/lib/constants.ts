@@ -88,6 +88,17 @@ export const NAV_SECTIONS = [
     ],
   },
   {
+    title: "Bridges",
+    items: [
+      { title: "Overview", href: "/docs/bridges" },
+      { title: "Circle CCTP", href: "/docs/bridges/cctp" },
+      { title: "Wormhole", href: "/docs/bridges/wormhole" },
+      { title: "LayerZero", href: "/docs/bridges/layerzero" },
+      { title: "Axelar", href: "/docs/bridges/axelar" },
+      { title: "Bridged USDC", href: "/docs/bridges/usdc" },
+    ],
+  },
+  {
     title: "Infrastructure",
     items: [
       { title: "Run a Validator", href: "/docs/validators" },

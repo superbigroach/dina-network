@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Blocks,
   ArrowUpRight,
@@ -132,8 +132,8 @@ function DetailRow({
 // ---------------------------------------------------------------------------
 
 export default function BlockDetailPage() {
-  const params = useParams();
-  const blockNumber = params.number as string;
+  const pathname = usePathname();
+  const blockNumber = pathname.split("/explorer/block/")[1] ?? "0";
 
   const [block, setBlock] = useState<BlockDetail | null>(null);
   const [loading, setLoading] = useState(true);
