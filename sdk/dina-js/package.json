@@ -1,15 +1,28 @@
 {
-  "name": "@dina-network/sdk",
+  "name": "dina-js",
   "version": "0.1.0",
-  "description": "TypeScript SDK for Dina Network — agent & robotics blockchain",
+  "description": "TypeScript SDK for Dina Network — the fastest blockchain with swarm wallets, parallel execution, and 82 DRC standards",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "dina", "blockchain", "sdk", "wallet", "usdc", "ed25519",
+    "web3", "agent-wallet", "swarm-wallet", "parallel-execution",
+    "wasm", "iot", "cognitum"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superbigroach/dina-network",
+    "directory": "sdk/dina-js"
+  },
+  "homepage": "https://github.com/superbigroach/dina-network#readme",
+  "author": "Sebastian Borjas <s.borjas@lucilla.ca>",
   "dependencies": {
     "@noble/ed25519": "^2.0.0",
     "@noble/hashes": "^1.3.0"
