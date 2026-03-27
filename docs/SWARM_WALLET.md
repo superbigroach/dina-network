@@ -1,4 +1,10 @@
-# DRC-63: Swarm Wallet — Parallel Multi-Agent Transaction Processing
+# DRC-63: Parallel Wallet (formerly "Swarm Wallet")
+
+> **Renamed:** "Swarm Wallet" has been renamed to "Parallel Wallet" for clarity.
+> The DRC number (DRC-63) and all functionality remain the same.
+> The contract directory is still `drc63-swarm-wallet` for backwards compatibility.
+
+## Parallel Multi-User Transaction Processing
 
 ## The Problem Every Blockchain Has
 
