@@ -49,6 +49,7 @@ export const NAV_SECTIONS = [
   {
     title: "Smart Contracts",
     items: [
+      { title: "Developer Guide", href: "/docs/contracts/guide" },
       { title: "Deploy Contract", href: "/docs/contracts/deploy" },
       { title: "Call Contract", href: "/docs/contracts/call" },
       { title: "DRC Standards", href: "/docs/contracts/standards" },
