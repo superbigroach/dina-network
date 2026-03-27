@@ -10,6 +10,7 @@ use colored::Colorize;
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 
+use dina_core::fees::FeeSchedule;
 use dina_core::transaction::Sig64;
 use dina_core::types::Address;
 
@@ -101,6 +102,21 @@ fn resolve_signing_key(
 
     // Fall back to raw key file.
     load_signing_key(key_path)
+}
+
+/// Fetch the current nonce for an address from the RPC node.
+/// Returns 0 if the account does not exist yet.
+async fn fetch_nonce(client: &RpcClient, address: &Address) -> Result<u64> {
+    match client.get_account(&address.to_string()).await {
+        Ok(info) => Ok(info
+            .get("nonce")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)),
+        Err(_) => {
+            // Account not found on-chain -- first transaction, nonce is 0.
+            Ok(0)
+        }
+    }
 }
 
 /// Pretty-print a serde_json::Value with coloring, or print raw JSON.
@@ -619,14 +635,24 @@ async fn cmd_transfer(
 
     let memo_bytes = memo.map(|m| m.into_bytes());
 
+    // Fetch the sender's current nonce from the node.
+    let nonce = fetch_nonce(client, &from).await?;
+
+    // Calculate the fee using the standard fee schedule.
+    let fee_schedule = FeeSchedule::default_testnet();
+    let memo_size = memo_bytes.as_ref().map_or(0, |m| m.len());
+    let fee = fee_schedule.calculate_transfer_fee(memo_size);
+
+    // Build the transaction with a placeholder signature, compute signing bytes,
+    // then replace the signature with the real one.
     let mut tx = dina_core::Transaction::Transfer {
         from,
         to: to_addr,
         amount,
         memo: memo_bytes,
         device_witness: None,
-        nonce: 0,
-        fee: 100,
+        nonce,
+        fee,
         signature: Sig64([0u8; 64]),
     };
 
@@ -650,6 +676,8 @@ async fn cmd_transfer(
             "to": to_addr.to_string(),
             "amount_micro_usdc": amount,
             "amount_usdc": format_usdc(amount),
+            "nonce": nonce,
+            "fee_micro_usdc": fee,
             "tx_hash": tx_hash,
         });
         println!("{}", serde_json::to_string(&val)?);
@@ -658,6 +686,8 @@ async fn cmd_transfer(
         println!("  From:    {}", from.to_string().cyan());
         println!("  To:      {}", to_addr.to_string().cyan());
         println!("  Amount:  {}", format_usdc(amount).yellow());
+        println!("  Fee:     {}", FeeSchedule::format_fee(fee).dimmed());
+        println!("  Nonce:   {nonce}");
         println!("  Tx Hash: {}", tx_hash.cyan());
     }
 
@@ -678,8 +708,6 @@ async fn cmd_deploy(
         .with_context(|| format!("failed to read WASM file '{wasm_file}'"))?;
 
     let wasm_size = wasm_bytes.len();
-    // Estimate fee: base 1000 + 1 micro-USDC per 100 bytes of WASM.
-    let estimated_fee: u64 = 1000 + (wasm_size as u64 / 100);
 
     let init_args = if init_args_hex.is_empty() {
         Vec::new()
@@ -688,12 +716,17 @@ async fn cmd_deploy(
         hex::decode(raw).context("invalid hex in init_args")?
     };
 
+    // Fetch nonce and calculate fee using the standard fee schedule.
+    let nonce = fetch_nonce(client, &from).await?;
+    let fee_schedule = FeeSchedule::default_testnet();
+    let fee = fee_schedule.calculate_deploy_fee(wasm_size);
+
     let mut tx = dina_core::Transaction::DeployContract {
         from,
         wasm_bytecode: wasm_bytes,
         init_args,
-        nonce: 0,
-        fee: estimated_fee,
+        nonce,
+        fee,
         signature: Sig64([0u8; 64]),
     };
 
@@ -716,16 +749,18 @@ async fn cmd_deploy(
             "deployer": from.to_string(),
             "wasm_file": wasm_file,
             "wasm_size_bytes": wasm_size,
-            "estimated_fee_micro_usdc": estimated_fee,
+            "fee_micro_usdc": fee,
+            "nonce": nonce,
             "tx_hash": tx_hash,
         });
         println!("{}", serde_json::to_string(&val)?);
     } else {
         println!("{}", "Contract deployment submitted.".green());
-        println!("  Deployer:       {}", from.to_string().cyan());
-        println!("  WASM:           {wasm_file} ({wasm_size} bytes)");
-        println!("  Estimated fee:  {}", format_usdc(estimated_fee).yellow());
-        println!("  Tx Hash:        {}", tx_hash.cyan());
+        println!("  Deployer:  {}", from.to_string().cyan());
+        println!("  WASM:      {wasm_file} ({wasm_size} bytes)");
+        println!("  Fee:       {}", FeeSchedule::format_fee(fee).yellow());
+        println!("  Nonce:     {nonce}");
+        println!("  Tx Hash:   {}", tx_hash.cyan());
     }
 
     Ok(())
@@ -752,14 +787,19 @@ async fn cmd_call(
         hex::decode(raw).context("invalid hex in args")?
     };
 
+    // Fetch nonce and calculate fee using the standard fee schedule.
+    let nonce = fetch_nonce(client, &from).await?;
+    let fee_schedule = FeeSchedule::default_testnet();
+    let fee = fee_schedule.calculate_contract_fee(method, args.len(), 0);
+
     let mut tx = dina_core::Transaction::CallContract {
         from,
         contract: contract_addr,
         method: method.to_string(),
         args,
         usdc_attached: value,
-        nonce: 0,
-        fee: 500,
+        nonce,
+        fee,
         signature: Sig64([0u8; 64]),
     };
 
@@ -783,6 +823,8 @@ async fn cmd_call(
             "contract": contract_addr.to_string(),
             "method": method,
             "value_micro_usdc": value,
+            "fee_micro_usdc": fee,
+            "nonce": nonce,
             "tx_hash": tx_hash,
         });
         println!("{}", serde_json::to_string(&val)?);
@@ -792,6 +834,8 @@ async fn cmd_call(
         println!("  Contract: {}", contract_addr.to_string().cyan());
         println!("  Method:   {method}");
         println!("  Value:    {}", format_usdc(value).yellow());
+        println!("  Fee:      {}", FeeSchedule::format_fee(fee).dimmed());
+        println!("  Nonce:    {nonce}");
         println!("  Tx Hash:  {}", tx_hash.cyan());
     }
 
@@ -820,12 +864,17 @@ async fn cmd_device_register(
         signature: Sig64([0u8; 64]),
     };
 
+    // Fetch nonce and calculate fee using the standard fee schedule.
+    let nonce = fetch_nonce(client, &owner).await?;
+    let fee_schedule = FeeSchedule::default_testnet();
+    let fee = fee_schedule.base_register_device_fee.clamp(fee_schedule.min_fee, fee_schedule.max_fee);
+
     let mut tx = dina_core::Transaction::RegisterDevice {
         device_pubkey,
         owner,
         attestation,
-        nonce: 0,
-        fee: 200,
+        nonce,
+        fee,
         signature: Sig64([0u8; 64]),
     };
 
@@ -1210,14 +1259,18 @@ async fn cmd_channel(
             }))
             .context("failed to serialize channel open args")?;
 
+            let nonce = fetch_nonce(client, &from).await?;
+            let fee_schedule = FeeSchedule::default_testnet();
+            let fee = fee_schedule.calculate_contract_fee("open_channel", args.len(), 0);
+
             let mut tx = dina_core::Transaction::CallContract {
                 from,
                 contract: Address::ZERO, // Channel system contract (address 0).
                 method: "open_channel".to_string(),
                 args,
                 usdc_attached: micro,
-                nonce: 0,
-                fee: 500,
+                nonce,
+                fee,
                 signature: Sig64([0u8; 64]),
             };
 
@@ -1269,14 +1322,18 @@ async fn cmd_channel(
             }))
             .context("failed to serialize channel pay args")?;
 
+            let nonce = fetch_nonce(client, &from).await?;
+            let fee_schedule = FeeSchedule::default_testnet();
+            let fee = fee_schedule.calculate_contract_fee("channel_pay", args.len(), 0);
+
             let mut tx = dina_core::Transaction::CallContract {
                 from,
                 contract: Address::ZERO,
                 method: "channel_pay".to_string(),
                 args,
                 usdc_attached: 0,
-                nonce: 0,
-                fee: 100,
+                nonce,
+                fee,
                 signature: Sig64([0u8; 64]),
             };
 
@@ -1320,14 +1377,18 @@ async fn cmd_channel(
             }))
             .context("failed to serialize channel close args")?;
 
+            let nonce = fetch_nonce(client, &from).await?;
+            let fee_schedule = FeeSchedule::default_testnet();
+            let fee = fee_schedule.calculate_contract_fee("close_channel", args.len(), 0);
+
             let mut tx = dina_core::Transaction::CallContract {
                 from,
                 contract: Address::ZERO,
                 method: "close_channel".to_string(),
                 args,
                 usdc_attached: 0,
-                nonce: 0,
-                fee: 200,
+                nonce,
+                fee,
                 signature: Sig64([0u8; 64]),
             };
 

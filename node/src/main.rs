@@ -10,16 +10,18 @@ use clap::Parser;
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 use tokio::signal;
-use tokio::sync::{mpsc, RwLock};
-use tracing::{error, info};
+use tokio::sync::RwLock;
+use tracing::{error, info, warn};
 
 use dina_core::account::AccountState;
-use dina_core::types::Address;
+use dina_core::block::{Block, BlockHeader};
+use dina_core::executor::BlockExecutor;
+use dina_core::types::{Address, Hash};
 use dina_rpc::jsonrpc::NodeState;
 use dina_rpc::server::{RpcConfig, RpcServer};
 use dina_storage::DinaDB;
-use dina_wasm::runtime::{RuntimeConfig, WasmRuntime};
 
+use crate::chain_state::ChainState;
 use crate::genesis::{
     create_genesis_block, default_testnet_genesis, load_genesis_config, GenesisConfig,
 };
@@ -68,6 +70,10 @@ struct Cli {
     /// Log level filter (trace, debug, info, warn, error).
     #[arg(long, default_value = "info")]
     log_level: String,
+
+    /// Block time in milliseconds (single-validator mode).
+    #[arg(long, default_value_t = 2000)]
+    block_time_ms: u64,
 }
 
 /// Expand ~ to the user home directory.
@@ -163,33 +169,36 @@ fn load_validator_key(path: &str) -> Result<SigningKey> {
 }
 
 /// Initialize the genesis state if the database has no blocks.
+/// Returns the genesis block (either loaded from DB or freshly created).
 fn initialize_genesis(
     db: &DinaDB,
     genesis_config: &GenesisConfig,
     account_state: &mut AccountState,
-) -> Result<()> {
-    let latest_height = db
-        .get_latest_block_height()
-        .context("failed to check latest block height")?;
-
-    if latest_height > 0 {
-        info!(
-            height = latest_height,
-            "Chain already initialized, skipping genesis"
-        );
-        return Ok(());
-    }
-
-    // Check if genesis block (height 0) already exists
-    if db
+) -> Result<Block> {
+    // Check if genesis block (height 0) already exists in the DB
+    if let Some(existing_genesis) = db
         .get_block(0)
         .context("failed to check for genesis block")?
-        .is_some()
     {
-        info!("Genesis block already exists");
-        return Ok(());
+        info!(
+            hash = %existing_genesis.hash(),
+            "Genesis block already exists, loading accounts from DB"
+        );
+
+        // Restore account state from the genesis accounts
+        for ga in &genesis_config.initial_accounts {
+            if let Ok(Some(acct)) = db.get_account(ga.address) {
+                account_state.credit(&acct.address, acct.balance);
+            } else {
+                // Account not in DB yet — use genesis config values
+                account_state.credit(&ga.address, ga.balance);
+            }
+        }
+
+        return Ok(existing_genesis);
     }
 
+    // First run: create and store genesis
     let genesis_block = create_genesis_block(genesis_config);
 
     // Set up initial account balances
@@ -215,14 +224,48 @@ fn initialize_genesis(
         "Genesis block stored at height 0"
     );
 
-    Ok(())
+    Ok(genesis_block)
+}
+
+/// Build a new block on top of the given parent, including transactions from
+/// the mempool. Signs the block header with the validator key.
+fn build_block(
+    parent: &Block,
+    transactions: Vec<dina_core::transaction::Transaction>,
+    validator_key: &SigningKey,
+) -> Block {
+    let validator_address = Address::from_pubkey(&validator_key.verifying_key());
+    let now = chrono::Utc::now().timestamp() as u64;
+    // Ensure timestamp is strictly greater than parent
+    let timestamp = now.max(parent.header.timestamp + 1);
+
+    let header = BlockHeader {
+        block_number: parent.header.block_number + 1,
+        timestamp,
+        parent_hash: parent.hash(),
+        transactions_root: Hash::ZERO, // Filled after execution
+        state_root: Hash::ZERO,        // Filled after execution
+        proposer: validator_address,
+        signature: [0u8; 64],          // Signed below
+    };
+
+    let mut block = Block {
+        header,
+        transactions,
+    };
+
+    // Sign the block header
+    let header_hash = block.header.hash();
+    block.header.signature = dina_core::crypto::sign(validator_key, header_hash.as_bytes());
+
+    block
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Initialize tracing subscriber with the requested log level.
+    // ── 1. Initialize tracing ───────────────────────────────────────────
     let filter = tracing_subscriber::EnvFilter::try_new(&cli.log_level)
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
 
@@ -240,12 +283,12 @@ async fn main() -> Result<()> {
         "Starting Dina Network node"
     );
 
-    // 1. Expand and create data directory
+    // ── 2. Expand and create data directory ─────────────────────────────
     let data_dir = expand_home(&cli.data_dir);
     std::fs::create_dir_all(&data_dir)
         .with_context(|| format!("failed to create data directory: {}", data_dir.display()))?;
 
-    // 2. Load or generate node identity
+    // ── 3. Load or generate node identity ───────────────────────────────
     let node_key = load_or_generate_identity(&data_dir)?;
     let node_address = Address::from_pubkey(&node_key.verifying_key());
     let node_pubkey = node_key.verifying_key().to_bytes();
@@ -256,7 +299,7 @@ async fn main() -> Result<()> {
         "Node identity ready"
     );
 
-    // 3. Open database
+    // ── 4. Open database ────────────────────────────────────────────────
     let db_path = data_dir.join("chain.redb");
     let db_path_str = db_path.to_string_lossy().to_string();
     let db = DinaDB::open(&db_path_str)
@@ -264,7 +307,7 @@ async fn main() -> Result<()> {
 
     info!(path = %db_path.display(), "Database opened");
 
-    // 4. Load genesis config
+    // ── 5. Load genesis config ──────────────────────────────────────────
     let genesis_config = if let Some(ref genesis_path) = cli.genesis {
         load_genesis_config(genesis_path)?
     } else {
@@ -272,29 +315,96 @@ async fn main() -> Result<()> {
         default_testnet_genesis()
     };
 
-    // 5. Initialize genesis block if first run
+    // ── 6. Initialize genesis block and account state ───────────────────
     let mut account_state = AccountState::new();
-    initialize_genesis(&db, &genesis_config, &mut account_state)?;
+    let genesis_block = initialize_genesis(&db, &genesis_config, &mut account_state)?;
 
-    // 6. Create shared node state for RPC
-    let node_state = NodeState::new(cli.chain_id.clone());
+    info!(
+        genesis_hash = %genesis_block.hash(),
+        accounts = genesis_config.initial_accounts.len(),
+        "Genesis state initialized"
+    );
 
-    // Apply genesis account balances to the in-memory state
+    // ── 7. Create ChainState (in-memory canonical chain + accounts) ─────
+    let chain_state = Arc::new(RwLock::new(
+        ChainState::new(genesis_block.clone(), cli.chain_id.clone()),
+    ));
+
+    // Seed the chain state accounts from genesis
     {
-        let mut accounts = node_state.accounts.write().await;
+        let mut cs = chain_state.write().await;
         for ga in &genesis_config.initial_accounts {
-            accounts.credit(&ga.address, ga.balance);
+            cs.accounts.credit(&ga.address, ga.balance);
         }
     }
 
-    // 7. Initialize mempool
+    // If the DB has blocks beyond genesis, replay them into ChainState.
+    {
+        let latest_height = db
+            .get_latest_block_height()
+            .context("failed to read latest block height")?;
+        if latest_height > 0 {
+            info!(
+                latest_height,
+                "Replaying stored blocks into in-memory chain state"
+            );
+            let mut cs = chain_state.write().await;
+            for height in 1..=latest_height {
+                if let Some(block) = db.get_block(height).context("failed to load block")? {
+                    if let Err(e) = cs.apply_block(block) {
+                        warn!(height, err = %e, "Failed to replay block (may already be applied)");
+                    }
+                }
+            }
+            info!(height = cs.current_height(), "Chain replay complete");
+        }
+    }
+
+    // ── 8. Create shared NodeState for RPC ──────────────────────────────
+    let node_state = NodeState::new(cli.chain_id.clone());
+
+    // Replace the default genesis block with the real one
+    {
+        let mut blocks = node_state.blocks.write().await;
+        let mut idx = node_state.block_index.write().await;
+        blocks.clear();
+        idx.clear();
+        idx.insert(genesis_block.hash(), 0);
+        blocks.push(genesis_block.clone());
+    }
+
+    // Populate the NodeState accounts from the chain state
+    {
+        let cs = chain_state.read().await;
+        let mut accounts = node_state.accounts.write().await;
+        for (addr, acct) in cs.accounts.iter() {
+            accounts.credit(addr, acct.balance);
+        }
+    }
+
+    // Replay blocks into NodeState as well (for RPC block queries)
+    {
+        let latest_height = db
+            .get_latest_block_height()
+            .context("failed to read latest block height")?;
+        if latest_height > 0 {
+            let mut blocks = node_state.blocks.write().await;
+            let mut idx = node_state.block_index.write().await;
+            for height in 1..=latest_height {
+                if let Some(block) = db.get_block(height).context("failed to load block")? {
+                    let hash = block.hash();
+                    let pos = blocks.len();
+                    idx.insert(hash, pos);
+                    blocks.push(block);
+                }
+            }
+        }
+    }
+
+    // ── 9. Initialize mempool ───────────────────────────────────────────
     let mempool = Arc::new(RwLock::new(Mempool::new()));
 
-    // 8. Initialize WASM runtime
-    let _wasm_runtime = WasmRuntime::new(RuntimeConfig::default());
-    info!("WASM runtime initialized");
-
-    // 9. Start RPC servers
+    // ── 10. Start RPC servers ───────────────────────────────────────────
     let rpc_config = RpcConfig {
         jsonrpc_bind: format!("127.0.0.1:{}", cli.rpc_port),
         rest_bind: format!("0.0.0.0:{}", cli.rest_port),
@@ -312,8 +422,41 @@ async fn main() -> Result<()> {
         "RPC servers started"
     );
 
-    // 10. Start consensus engine if running as validator
-    let consensus_handles = if cli.validator {
+    // ── 11. Bridge: drain RPC tx_pool into node Mempool ─────────────────
+    //
+    // The RPC server pushes submitted transactions into node_state.tx_pool.
+    // This task drains that Vec and inserts them into the real Mempool so
+    // the block production loop can pick them up.
+    let rpc_tx_pool = node_state.tx_pool.clone();
+    let mempool_bridge = mempool.clone();
+    let bridge_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(100));
+        loop {
+            interval.tick().await;
+            // Drain the RPC tx_pool
+            let txs = {
+                let mut pool = rpc_tx_pool.write().await;
+                if pool.is_empty() {
+                    continue;
+                }
+                std::mem::take(&mut *pool)
+            };
+            // Insert into the real mempool
+            let mut mp = mempool_bridge.write().await;
+            for tx in txs {
+                let hash = tx.hash();
+                if let Err(e) = mp.add_transaction(tx) {
+                    warn!(%hash, err = %e, "Failed to add transaction to mempool");
+                }
+            }
+        }
+    });
+
+    // ── 12. Validator: single-validator block production loop ────────────
+    let shutdown = tokio::sync::watch::channel(false);
+    let (shutdown_tx, shutdown_rx) = (shutdown.0, shutdown.1);
+
+    let validator_handle = if cli.validator {
         let validator_key = if let Some(ref key_path) = cli.validator_key {
             load_validator_key(key_path)?
         } else {
@@ -321,111 +464,145 @@ async fn main() -> Result<()> {
             node_key.clone()
         };
 
-        let validator_pubkey = validator_key.verifying_key().to_bytes();
         let validator_address = Address::from_pubkey(&validator_key.verifying_key());
-
         info!(
             address = %validator_address,
-            pubkey = %hex::encode(validator_pubkey),
-            "Starting consensus engine as validator"
+            pubkey = %hex::encode(validator_key.verifying_key().to_bytes()),
+            block_time_ms = cli.block_time_ms,
+            "Starting single-validator block production"
         );
 
-        let consensus_config = dina_consensus::ConsensusConfig {
-            validator_keys: genesis_config
-                .validators
-                .iter()
-                .copied()
-                .chain(std::iter::once(validator_pubkey))
-                .collect(),
-            block_time_ms: 2000,
-            timeout_ms: 10000,
-        };
+        let block_time = tokio::time::Duration::from_millis(cli.block_time_ms);
+        let chain_state_prod = chain_state.clone();
+        let mempool_prod = mempool.clone();
+        let node_state_prod = node_state.clone();
+        let db_prod = db.clone();
+        let mut shutdown_rx_prod = shutdown_rx.clone();
 
-        let (output_tx, mut output_rx) = mpsc::unbounded_channel();
-        let (tx_tx, tx_rx) = mpsc::unbounded_channel();
+        Some(tokio::spawn(async move {
+            let mut interval = tokio::time::interval(block_time);
+            // Skip the first immediate tick
+            interval.tick().await;
 
-        let mut consensus =
-            dina_consensus::TurboBFT::new(consensus_config, validator_key, output_tx);
-
-        // Feed pending transactions from the mempool to consensus
-        let mempool_feeder = mempool.clone();
-        let tx_sender = tx_tx.clone();
-        let feeder_handle = tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_millis(1000));
             loop {
-                interval.tick().await;
-                let pool = mempool_feeder.read().await;
-                let pending = pool.get_pending(100);
-                if !pending.is_empty() {
-                    if tx_sender.send(pending).is_err() {
+                tokio::select! {
+                    _ = interval.tick() => {},
+                    _ = shutdown_rx_prod.changed() => {
+                        info!("Block production loop shutting down");
                         break;
                     }
                 }
-            }
-        });
 
-        // Process consensus outputs (committed blocks)
-        let node_state_consensus = node_state.clone();
-        let db_consensus = db.clone();
-        let mempool_pruner = mempool.clone();
-        let output_handle = tokio::spawn(async move {
-            while let Some(output) = output_rx.recv().await {
-                match output {
-                    dina_consensus::turbobft::ConsensusOutput::BlockCommitted {
-                        block, ..
-                    } => {
-                        info!(
-                            height = block.header.block_number,
-                            hash = %block.hash(),
-                            txs = block.transactions.len(),
-                            "Block committed by consensus"
-                        );
+                // Collect pending transactions from mempool
+                let pending_txs = {
+                    let pool = mempool_prod.read().await;
+                    pool.get_pending(500) // Up to 500 txs per block
+                };
 
-                        // Store block in database
-                        if let Err(e) = db_consensus.store_block(&block) {
-                            error!("Failed to store committed block: {e}");
+                // Build a new block
+                let block = {
+                    let cs = chain_state_prod.read().await;
+                    let parent = cs.latest_block().clone();
+                    build_block(&parent, pending_txs, &validator_key)
+                };
+
+                let block_height = block.header.block_number;
+                let tx_count = block.transactions.len();
+
+                // Execute the block via BlockExecutor to compute state changes
+                let execution_result = {
+                    let cs = chain_state_prod.read().await;
+                    let mut executor = BlockExecutor::new(cs.accounts.clone());
+                    executor.execute_block(&block)
+                };
+
+                let _exec_result = match execution_result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        error!(height = block_height, err = %e, "Block execution failed");
+                        continue;
+                    }
+                };
+
+                // Apply the block to ChainState (validates parent hash, height, timestamp)
+                {
+                    let mut cs = chain_state_prod.write().await;
+                    match cs.apply_block(block.clone()) {
+                        Ok(result) => {
+                            info!(
+                                height = block_height,
+                                hash = %block.hash(),
+                                txs = tx_count,
+                                successful = result.successful_txs,
+                                failed = result.failed_txs,
+                                fees = result.total_fees,
+                                "Block committed"
+                            );
+                        }
+                        Err(e) => {
+                            error!(height = block_height, err = %e, "Failed to apply block to chain state");
                             continue;
                         }
+                    }
+                }
 
-                        // Remove committed transactions from mempool
-                        let tx_hashes: Vec<_> =
-                            block.transactions.iter().map(|tx| tx.hash()).collect();
-                        {
-                            let mut pool = mempool_pruner.write().await;
-                            pool.remove_batch(&tx_hashes);
-                        }
+                // Persist the block to the database
+                if let Err(e) = db_prod.store_block(&block) {
+                    error!(height = block_height, err = %e, "Failed to store block in database");
+                }
 
-                        // Update in-memory block list
-                        {
-                            let mut blocks = node_state_consensus.blocks.write().await;
-                            let mut idx =
-                                node_state_consensus.block_index.write().await;
-                            let pos = blocks.len();
-                            idx.insert(block.hash(), pos);
-                            blocks.push(block);
+                // Persist updated accounts to the database
+                {
+                    let cs = chain_state_prod.read().await;
+                    for (addr, acct) in cs.accounts.iter() {
+                        if let Err(e) = db_prod.set_account(*addr, acct) {
+                            error!(address = %addr, err = %e, "Failed to persist account");
                         }
                     }
-                    _ => {
-                        // BroadcastProposal, BroadcastVote, BroadcastViewChange
-                        // would be sent over P2P in production
+                }
+
+                // Remove committed transactions from the mempool
+                {
+                    let tx_hashes: Vec<_> =
+                        block.transactions.iter().map(|tx| tx.hash()).collect();
+                    if !tx_hashes.is_empty() {
+                        let mut pool = mempool_prod.write().await;
+                        pool.remove_batch(&tx_hashes);
+                    }
+                }
+
+                // Update NodeState so RPC sees the new block and accounts
+                {
+                    // Update blocks list
+                    let mut blocks = node_state_prod.blocks.write().await;
+                    let mut idx = node_state_prod.block_index.write().await;
+                    let pos = blocks.len();
+                    idx.insert(block.hash(), pos);
+                    blocks.push(block.clone());
+                }
+                {
+                    // Sync account state to RPC
+                    let cs = chain_state_prod.read().await;
+                    let mut accounts = node_state_prod.accounts.write().await;
+                    // Replace the entire account state so RPC reflects
+                    // the latest balances and nonces.
+                    *accounts = cs.accounts.clone();
+                }
+                {
+                    // Index transactions by hash for RPC lookups
+                    let mut tx_idx = node_state_prod.tx_index.write().await;
+                    for tx in &block.transactions {
+                        tx_idx.insert(tx.hash(), (tx.clone(), Some(block_height)));
                     }
                 }
             }
-        });
-
-        // Run the consensus loop
-        let consensus_handle = tokio::spawn(async move {
-            consensus.start(tx_rx).await;
-        });
-
-        Some((consensus_handle, output_handle, feeder_handle))
+        }))
     } else {
-        info!("Running as non-validator node (no consensus participation)");
+        info!("Running as non-validator node (no block production)");
         None
     };
 
-    // 11. Periodic mempool maintenance
+    // ── 13. Periodic mempool maintenance ────────────────────────────────
     let mempool_maintenance = mempool.clone();
     let maintenance_handle = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
@@ -443,12 +620,31 @@ async fn main() -> Result<()> {
         }
     });
 
+    // ── 14. Periodic status logging ─────────────────────────────────────
+    let chain_state_status = chain_state.clone();
+    let mempool_status = mempool.clone();
+    let status_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let cs = chain_state_status.read().await;
+            let pool = mempool_status.read().await;
+            info!(
+                height = cs.current_height(),
+                mempool = pool.size(),
+                "Node status"
+            );
+        }
+    });
+
     info!(
         listen = %cli.listen,
+        rpc = %rpc_config.jsonrpc_bind,
+        rest = %rpc_config.rest_bind,
         "Dina node fully started and ready"
     );
 
-    // 12. Wait for shutdown signal
+    // ── 15. Wait for shutdown signal ────────────────────────────────────
     match signal::ctrl_c().await {
         Ok(()) => {
             info!("Received shutdown signal, shutting down gracefully...");
@@ -458,20 +654,31 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Graceful shutdown
+    // ── 16. Graceful shutdown ───────────────────────────────────────────
+    // Signal the block production loop to stop
+    let _ = shutdown_tx.send(true);
+
     info!("Stopping RPC servers...");
     jsonrpc_handle
         .stop()
         .map_err(|e| anyhow::anyhow!("failed to stop JSON-RPC: {e:?}"))?;
     rest_handle.abort();
+    bridge_handle.abort();
     maintenance_handle.abort();
+    status_handle.abort();
 
-    if let Some((consensus, output, feeder)) = consensus_handles {
-        consensus.abort();
-        output.abort();
-        feeder.abort();
+    if let Some(handle) = validator_handle {
+        handle.abort();
     }
 
-    info!("Dina node shutdown complete");
+    // Log final state
+    {
+        let cs = chain_state.read().await;
+        info!(
+            final_height = cs.current_height(),
+            "Dina node shutdown complete"
+        );
+    }
+
     Ok(())
 }
