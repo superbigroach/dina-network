@@ -55,7 +55,7 @@ fn initialize_token_with_name_symbol_decimals_supply() {
 #[test]
 fn balance_of_returns_correct_balance_for_creator() {
     let owner = addr(1);
-    let mut state = init_and_mint(owner, 1_000_000);
+    let state = init_and_mint(owner, 1_000_000);
     let s = state.as_ref().unwrap();
 
     assert_eq!(s.balance_of(&owner), 1_000_000);

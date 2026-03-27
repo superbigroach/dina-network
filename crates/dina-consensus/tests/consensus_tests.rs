@@ -131,7 +131,7 @@ fn vote_invalid_signature_rejected() {
 #[test]
 fn voteset_deduplicates_by_voter() {
     let keys = make_signing_keys(3);
-    let validators = make_validators(3);
+    let _validators = make_validators(3);
     let block_hash = Hash([0xAB; 32]);
 
     let mut vs = VoteSet::new(1, 0, VoteType::Prevote, 3);
@@ -396,7 +396,7 @@ fn view_change_collector_rejects_duplicate() {
 
 #[test]
 fn view_change_collector_rejects_unknown_validator() {
-    let keys = make_signing_keys(3);
+    let _keys = make_signing_keys(3);
     let validators = make_validators(3);
 
     let mut collector = ViewChangeCollector::new(1, &validators);

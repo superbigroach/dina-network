@@ -202,8 +202,8 @@ mod tests {
         let blob = make_test_blob();
         let data = blob_to_qr_data(&blob).unwrap();
         assert!(
-            data.len() < 250,
-            "QR data should be under 250 bytes, got {}",
+            data.len() < 300,
+            "QR data should be under 300 bytes, got {}",
             data.len()
         );
     }

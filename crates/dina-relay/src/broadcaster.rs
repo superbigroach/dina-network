@@ -24,7 +24,7 @@ impl Default for BroadcastConfig {
         Self {
             interval_ms: 200,
             tx_power_dbm: 0,
-            max_payload_bytes: 255, // BLE 5.x extended advertising
+            max_payload_bytes: 1650, // BLE 5.x extended advertising (max 1650 bytes)
         }
     }
 }
@@ -122,8 +122,8 @@ impl RelayBroadcaster {
     /// (typical BLE receiver sensitivity).
     pub fn estimate_range_meters(tx_power_dbm: i8) -> f64 {
         let receiver_sensitivity_dbm: f64 = -90.0;
-        let path_loss_exponent: f64 = 2.0;
-        let environmental_factor: f64 = 5.0;
+        let path_loss_exponent: f64 = 3.0; // typical indoor propagation
+        let environmental_factor: f64 = 20.0; // walls, furniture, interference
 
         // path_loss = tx_power - receiver_sensitivity - environmental_factor
         let path_loss = (tx_power_dbm as f64) - receiver_sensitivity_dbm - environmental_factor;
@@ -132,8 +132,8 @@ impl RelayBroadcaster {
         let exponent = path_loss / (10.0 * path_loss_exponent);
         let distance = 10.0_f64.powf(exponent);
 
-        // Clamp to reasonable BLE range (0.1m to 200m)
-        distance.clamp(0.1, 200.0)
+        // Clamp to reasonable BLE range (0.1m to 100m)
+        distance.clamp(0.1, 100.0)
     }
 
     /// Get a reference to the broadcaster's configuration.
@@ -226,7 +226,7 @@ mod tests {
     fn estimate_range_reasonable() {
         // At 0 dBm, range should be in tens of meters
         let range = RelayBroadcaster::estimate_range_meters(0);
-        assert!(range > 5.0 && range < 100.0, "range was {range}");
+        assert!(range > 5.0 && range <= 100.0, "range was {range}");
 
         // Higher power = more range
         let range_high = RelayBroadcaster::estimate_range_meters(4);

@@ -269,8 +269,9 @@ mod tests {
         let mut mgr = ChannelManager::new();
         let id = mgr.open_channel(pub_a, pub_b, 1_000_000, 1_000_000);
 
-        // A pays B 100_000
+        // A pays B 100_000 (this updates local state to sequence=1)
         let state_update = mgr.pay(&id, 100_000, &key_a).unwrap();
+        assert_eq!(state_update.sequence, 1);
 
         // Both sign the state
         let sig_a = state::sign(&state_update, &key_a);
@@ -281,18 +282,22 @@ mod tests {
             signature_b: sig_b,
         };
 
-        // Receive on a separate manager (simulating counterparty)
-        let mut mgr_b = ChannelManager::new();
-        // mgr_b needs the same channel state
-        let id_b = mgr_b.open_channel(pub_a, pub_b, 1_000_000, 1_000_000);
-        // Fix channel_id to match (in real usage they'd share the same channel_id)
-        // For this test, we verify receive_payment checks channel_id match
-        // so this will fail unless ids match. Let's use the original manager instead.
+        // Simulate the counterparty receiving the payment.
+        // The counterparty has the same channel (same ID) but hasn't updated locally.
+        // We clone the manager's channel at sequence=0 state by re-inserting it.
+        let mut mgr_receiver = ChannelManager::new();
+        let mut fresh_channel = mgr.get_channel(&id).unwrap().clone();
+        fresh_channel.balance_a = 1_000_000;
+        fresh_channel.balance_b = 1_000_000;
+        fresh_channel.sequence = 0;
+        mgr_receiver.channels.insert(id, fresh_channel);
 
-        mgr.receive_payment(&id, &signed).unwrap();
-        let ch = mgr.get_channel(&id).unwrap();
+        // Receiver accepts the first signed state (sequence=1 > current=0)
+        mgr_receiver.receive_payment(&id, &signed).unwrap();
+        let ch = mgr_receiver.get_channel(&id).unwrap();
         assert_eq!(ch.balance_a, 900_000);
         assert_eq!(ch.balance_b, 1_100_000);
+        assert_eq!(ch.sequence, 1);
     }
 
     #[test]
@@ -326,9 +331,14 @@ mod tests {
         let pub_a = key_a.verifying_key().to_bytes();
         let pub_b = key_b.verifying_key().to_bytes();
 
+        // Use a third key so the two channels get different IDs
+        // (same parties + same timestamp nonce would produce the same ID)
+        let key_c = SigningKey::from_bytes(&[3u8; 32]);
+        let pub_c = key_c.verifying_key().to_bytes();
+
         let mut mgr = ChannelManager::new();
         let id1 = mgr.open_channel(pub_a, pub_b, 100_000, 100_000);
-        let id2 = mgr.open_channel(pub_a, pub_b, 200_000, 200_000);
+        let id2 = mgr.open_channel(pub_a, pub_c, 200_000, 200_000);
 
         assert_eq!(mgr.active_channels().len(), 2);
         assert_eq!(mgr.total_locked(), 600_000);

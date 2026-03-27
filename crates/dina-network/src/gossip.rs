@@ -6,7 +6,7 @@
 //! - `dina/consensus/v1`    -- proposals, votes, view-changes
 
 use libp2p::gossipsub::{
-    self, IdentTopic, MessageAuthenticity, MessageId, Topic, ValidationMode,
+    self, IdentTopic, MessageAuthenticity, MessageId, ValidationMode,
 };
 use libp2p::identity::Keypair;
 use sha2::{Digest, Sha256};
@@ -212,8 +212,8 @@ mod tests {
     #[test]
     fn topics_are_correct() {
         let t = topics();
-        assert_eq!(t[0].hash(), Topic::new(TOPIC_TRANSACTIONS).hash());
-        assert_eq!(t[1].hash(), Topic::new(TOPIC_BLOCKS).hash());
-        assert_eq!(t[2].hash(), Topic::new(TOPIC_CONSENSUS).hash());
+        assert_eq!(t[0].hash(), IdentTopic::new(TOPIC_TRANSACTIONS).hash());
+        assert_eq!(t[1].hash(), IdentTopic::new(TOPIC_BLOCKS).hash());
+        assert_eq!(t[2].hash(), IdentTopic::new(TOPIC_CONSENSUS).hash());
     }
 }
