@@ -272,18 +272,19 @@ dina-core              Foundation types, Ed25519 crypto, genesis, USDC accountin
 
 ## Bridges -- Connecting to 60+ Chains
 
-Dina supports 8 bridge integrations. All bridges mint the same Bridged USDC (USDC.e) token on Dina, following Circle's official Bridged USDC Standard for eventual upgrade to native USDC.
+Dina has Dina-side contracts ready for 7 bridge protocols. All bridges mint the same Bridged USDC (USDC.e) token on Dina.
 
-| Bridge | Speed | Chains | Type | Best For |
-|--------|-------|--------|------|----------|
-| **Circle CCTP** | ~15 min | 21+ | Burn/Mint (Circle attestation) | Official USDC, institutional |
-| **Across** | 1-3 min | 15+ | Intent-based relayer | Fastest option for EVM |
-| **Stargate** | 1-3 min | 20+ | Unified liquidity pool | Low fees, deep liquidity |
-| **LayerZero** | 3-10 min | 40+ | OFT (DVN verification) | Most chains, configurable security |
-| **Wormhole** | ~15 min | 30+ | Guardian network (13/19 sigs) | Battle-tested, Solana support |
-| **Axelar** | ~15 min | 60+ | ITS + GMP (validator PoS) | Most chains, cross-chain messages |
-| **Base Direct** | ~5 min | Base only | Lock/Mint (trusted relayer) | Base-to-Dina, lowest fees |
-| **Bridged USDC** | N/A | N/A | Circle standard token | Circle native USDC upgrade path |
+| Bridge | Speed | Status | What's Needed |
+|--------|-------|--------|---------------|
+| **Base Direct** | ~5 min | **READY TO DEPLOY** | Deploy Solidity to Base Sepolia + run relayer. No approval needed. |
+| **Across** | 1-3 min | NOT ACTIVE | Apply at across.to for spoke pool listing |
+| **Stargate** | 1-3 min | NOT ACTIVE | Requires LayerZero endpoint first |
+| **LayerZero** | 3-10 min | NOT ACTIVE | Apply at layerzero.network for endpoint |
+| **Wormhole** | ~15 min | NOT ACTIVE | Apply at wormhole.com for Guardian support |
+| **Axelar** | ~15 min | NOT ACTIVE | Apply at axelar.network for gateway |
+| **Circle CCTP** | ~15 min | NOT ACTIVE | Requires legal entity, security audit, Circle approval (6-12 months) |
+
+**Only the Base bridge works without third-party approval.** All other bridges have Dina-side contracts deployed and ready -- they activate when the third-party protocol approves Dina as a supported chain. Application guides are in `bridges/third-party/`.
 
 ### Bridge Architecture
 

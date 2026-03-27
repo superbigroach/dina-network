@@ -31,9 +31,21 @@ export default function BridgesOverviewPage() {
         >
           Bridged USDC
         </Link>{" "}
-        standard -- a Circle-approved 1:1 backed representation that can be
+        standard -- a 1:1 backed representation that can be
         upgraded to native USDC in the future.
       </p>
+
+      {/* Status Banner */}
+      <div className="mt-6 rounded-lg border border-yellow-600/30 bg-yellow-900/10 p-4">
+        <h3 className="text-lg font-semibold text-yellow-400">Current Status</h3>
+        <ul className="mt-2 space-y-1 text-sm text-slate-300">
+          <li><span className="font-mono text-green-400">READY</span> — Base ↔ Dina bridge (no third-party approval needed)</li>
+          <li><span className="font-mono text-slate-500">NOT ACTIVE</span> — CCTP, Wormhole, LayerZero, Axelar, Across, Stargate (Dina-side contracts deployed, waiting for third-party approval)</li>
+        </ul>
+        <p className="mt-2 text-xs text-slate-400">
+          Only the Base bridge works today. Other bridges activate when the third-party protocol adds Dina as a supported chain. Application guides are in the repo at bridges/third-party/.
+        </p>
+      </div>
 
       {/* ASCII Architecture Diagram */}
       <div className="mt-8">
