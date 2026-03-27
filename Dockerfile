@@ -25,10 +25,6 @@ COPY cli/ cli/
 COPY contracts/ contracts/
 COPY examples/ examples/
 COPY benches/ benches/
-COPY tests/ tests/
-COPY sdk/ sdk/
-COPY explorer/ explorer/
-COPY faucet-app/ faucet-app/
 
 # Build only the node binary in release mode
 RUN cargo build --release --bin dina-node
