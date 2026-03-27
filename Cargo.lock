@@ -2031,7 +2031,160 @@ dependencies = [
 ]
 
 [[package]]
+name = "drc63-swarm-wallet"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc64-vector-index"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc65-agent-swarm"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc66-semantic-search"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc67-multi-agent-escrow"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc68-knowledge-graph"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc69-agent-delegation"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "drc7-multi-token"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc70-model-marketplace"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc71-collaborative-training"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc72-device-cluster"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc73-embedding-registry"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc74-agent-reputation-network"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc75-conditional-payment"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc76-agent-memory"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc77-swarm-consensus"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc78-device-attestation-chain"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc79-micro-payment-stream"
 version = "0.1.0"
 dependencies = [
  "borsh",
@@ -2047,6 +2200,33 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "drc80-task-decomposer"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc81-cross-device-state"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc82-agent-marketplace-v2"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
