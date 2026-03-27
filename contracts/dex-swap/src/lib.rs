@@ -136,6 +136,9 @@ impl DexState {
 
     // -- Pool creation ------------------------------------------------------
 
+    // L-1: Pool creation is intentionally permissionless (like Uniswap).
+    // Anyone can create a trading pair. Malicious token pools are the token
+    // creator's responsibility, not the DEX's.
     pub fn create_pool(&mut self, token_a: &str, token_b: &str) -> DexEvent {
         assert!(token_a != token_b, "DEX: identical tokens");
         let key = ordered_pair(token_a, token_b);

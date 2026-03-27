@@ -271,6 +271,23 @@ impl DinaRpcServer for DinaRpcServerImpl {
 
         let tx_hash = tx.hash();
 
+        // M-2: Check tx_pool size before accepting to prevent memory exhaustion.
+        {
+            let pool = self.state.tx_pool.read().await;
+            if pool.len() >= 10_000 {
+                return Err(rpc_err(-32000, "transaction pool full"));
+            }
+        }
+
+        // L-6: Pre-validate signature structure before accepting.
+        {
+            let sig = tx.signature_bytes();
+            let sender = tx.sender();
+            if sig == [0u8; 64] && sender != Address([0u8; 32]) {
+                return Err(rpc_err(ERR_INVALID_PARAMS, "invalid zero signature"));
+            }
+        }
+
         // Index the transaction (not yet in a block).
         {
             let mut idx = self.state.tx_index.write().await;
@@ -319,8 +336,11 @@ impl DinaRpcServer for DinaRpcServerImpl {
 
     async fn get_block(&self, height: u64) -> RpcResult<BlockInfo> {
         let blocks = self.state.blocks.read().await;
+        // L-3: Safe cast from u64 to usize to avoid truncation on 32-bit platforms.
+        let idx = usize::try_from(height)
+            .map_err(|_| rpc_err(ERR_INVALID_PARAMS, format!("block height {height} out of range")))?;
         let block = blocks
-            .get(height as usize)
+            .get(idx)
             .ok_or_else(|| rpc_err(ERR_NOT_FOUND, format!("block {height} not found")))?;
 
         Ok(block_to_info(block))

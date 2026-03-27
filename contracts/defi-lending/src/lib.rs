@@ -151,8 +151,9 @@ impl LendingPoolState {
         let elapsed = (current_timestamp - self.last_update_timestamp) as u128;
         let borrow_rate_bps = self.get_borrow_apy_bps() as u128;
 
-        // Interest factor = rate * elapsed / seconds_per_year
+        // L-4: Interest factor = rate * elapsed / seconds_per_year
         // We compute: new_index = old_index * (1 + rate * elapsed / year)
+        // Multiply all numerators first, then divide, to minimise precision loss.
         let interest_factor = borrow_rate_bps * elapsed * INDEX_PRECISION
             / (BPS * SECONDS_PER_YEAR);
 
@@ -253,12 +254,21 @@ impl LendingPoolState {
     // Borrow operations
     // -----------------------------------------------------------------------
 
-    /// Borrow USDC from the pool. For testnet simplicity, no collateral required.
+    /// Borrow USDC from the pool. Requires 150% collateralization.
     pub fn borrow(&mut self, caller: Address, amount: u64, timestamp: u64) {
         assert!(!self.paused, "Pool: pool is paused");
         assert!(amount > 0, "Pool: borrow amount must be positive");
 
         self.accrue_interest(timestamp);
+
+        // M-4: Require 150% collateralization — borrower must have supplied enough.
+        let user_supply = self.get_supply_balance(&caller);
+        let required_collateral = (amount as u128 * 15000 / 10000) as u64; // 150%
+        assert!(
+            user_supply >= required_collateral,
+            "Pool: insufficient collateral ({} supplied, {} required for {} borrow)",
+            user_supply, required_collateral, amount
+        );
 
         let available = self.total_supplied - self.total_borrowed;
         assert!(
@@ -556,6 +566,8 @@ mod tests {
     fn test_borrow_and_verify_position() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 1000);
+        // M-4: addr(2) must supply collateral (150%) before borrowing
+        pool.supply(addr(2), 100_000_000, 1000);
         pool.borrow(addr(2), 50_000_000, 1000);
         assert_eq!(pool.total_borrowed, 50_000_000);
         assert_eq!(pool.get_borrow_balance_for(&addr(2)), 50_000_000);
@@ -565,6 +577,8 @@ mod tests {
     fn test_interest_accrues_over_time() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 0);
+        // M-4: addr(2) must supply collateral before borrowing
+        pool.supply(addr(2), 100_000_000, 0);
         pool.borrow(addr(2), 50_000_000, 0);
 
         // Advance 1 year
@@ -589,6 +603,7 @@ mod tests {
     fn test_repay_clears_position() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 0);
+        pool.supply(addr(2), 100_000_000, 0);
         pool.borrow(addr(2), 50_000_000, 0);
 
         // Repay full amount immediately (no interest accrued yet at same timestamp)
@@ -601,14 +616,21 @@ mod tests {
     #[test]
     fn test_utilization_rate_calculation() {
         let mut pool = make_pool();
+        // addr(1) supplies 100 USDC as the main liquidity provider
         pool.supply(addr(1), 100_000_000, 0);
         assert_eq!(pool.get_utilization_bps(), 0); // no borrows
 
-        pool.borrow(addr(2), 50_000_000, 0);
+        // M-4: addr(1) borrows against their own supply (self-collateralised)
+        pool.borrow(addr(1), 50_000_000, 0);
         assert_eq!(pool.get_utilization_bps(), 5000); // 50%
 
-        pool.borrow(addr(3), 30_000_000, 0);
-        assert_eq!(pool.get_utilization_bps(), 8000); // 80%
+        // addr(2) supplies enough collateral and borrows
+        pool.supply(addr(2), 100_000_000, 0);
+        // total_supplied is now 200M, total_borrowed is 50M
+        // addr(2) borrows 30M (needs 45M collateral, has 100M supply share)
+        pool.borrow(addr(2), 30_000_000, 0);
+        // total_borrowed = 80M, total_supplied = 200M -> 4000 bps
+        assert_eq!(pool.get_utilization_bps(), 4000); // 40%
     }
 
     #[test]
@@ -621,10 +643,18 @@ mod tests {
     #[test]
     fn test_interest_rate_model_high_util() {
         let mut pool = make_pool();
+        // addr(1) supplies and borrows against own supply for high utilization
         pool.supply(addr(1), 100_000_000, 0);
-        pool.borrow(addr(2), 90_000_000, 0); // 90% utilization
-
-        let rate = pool.get_borrow_apy_bps();
+        pool.borrow(addr(1), 60_000_000, 0); // needs 90M collateral, has 100M
+        // addr(2) supplies collateral and borrows to push utilization higher
+        pool.supply(addr(2), 100_000_000, 0);
+        pool.borrow(addr(2), 30_000_000, 0); // needs 45M collateral, has 100M
+        // total_supplied = 200M, total_borrowed = 90M -> 45% util
+        // For the interest rate test we directly set state for clarity:
+        let mut pool2 = make_pool();
+        pool2.total_supplied = 100_000_000;
+        pool2.total_borrowed = 90_000_000;
+        let rate = pool2.get_borrow_apy_bps();
         // At 90%: base(200) + slope1(1000) + (10%/20%)*slope2(10000) = 200 + 1000 + 5000 = 6200
         assert_eq!(rate, 6200);
     }
@@ -633,6 +663,7 @@ mod tests {
     fn test_supply_apy_less_than_borrow_apy() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 0);
+        pool.supply(addr(2), 100_000_000, 0);
         pool.borrow(addr(2), 50_000_000, 0);
 
         let supply_apy = pool.get_supply_apy_bps();
@@ -648,6 +679,7 @@ mod tests {
     fn test_reserve_factor_accumulates_revenue() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 0);
+        pool.supply(addr(2), 100_000_000, 0);
         pool.borrow(addr(2), 50_000_000, 0);
 
         // Advance 1 year
@@ -661,11 +693,23 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "insufficient liquidity")]
+    #[should_panic(expected = "insufficient collateral")]
     fn test_cannot_borrow_more_than_available() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 0);
-        pool.borrow(addr(2), 100_000_001, 0); // 1 micro more than available
+        // addr(2) has no collateral, should fail with "insufficient collateral"
+        pool.borrow(addr(2), 100_000_001, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "insufficient collateral")]
+    fn test_collateral_requirement() {
+        let mut pool = make_pool();
+        pool.supply(addr(1), 100_000_000, 0);
+        // addr(2) supplies 100 USDC but tries to borrow 80 USDC
+        // Required collateral: 80M * 150% = 120M, but only has 100M
+        pool.supply(addr(2), 100_000_000, 0);
+        pool.borrow(addr(2), 80_000_000, 0);
     }
 
     #[test]
@@ -676,7 +720,8 @@ mod tests {
         pool.supply(addr(1), 50_000_000, 0);
         pool.supply(addr(2), 50_000_000, 0);
 
-        // Charlie borrows 50 USDC
+        // Charlie supplies collateral and borrows 50 USDC
+        pool.supply(addr(3), 100_000_000, 0);
         pool.borrow(addr(3), 50_000_000, 0);
 
         // Advance 1 year
@@ -694,6 +739,7 @@ mod tests {
     fn test_collect_reserves() {
         let mut pool = make_pool();
         pool.supply(addr(1), 100_000_000, 0);
+        pool.supply(addr(2), 100_000_000, 0);
         pool.borrow(addr(2), 50_000_000, 0);
         pool.accrue_interest(SECONDS_PER_YEAR as u64);
 
@@ -722,20 +768,25 @@ mod tests {
         dispatch(&mut state, "create_pool", &create_args, owner);
         assert!(state.is_some());
 
-        // Supply
+        // Supply (addr(1) as liquidity provider)
         let supply_args =
             serde_json::to_vec(&AmountTimestampArgs { amount: 100_000_000, timestamp: 0 }).unwrap();
         dispatch(&mut state, "supply", &supply_args, addr(1));
+
+        // M-4: addr(2) supplies collateral before borrowing
+        let supply_args2 =
+            serde_json::to_vec(&AmountTimestampArgs { amount: 100_000_000, timestamp: 0 }).unwrap();
+        dispatch(&mut state, "supply", &supply_args2, addr(2));
 
         // Borrow
         let borrow_args =
             serde_json::to_vec(&AmountTimestampArgs { amount: 30_000_000, timestamp: 0 }).unwrap();
         dispatch(&mut state, "borrow", &borrow_args, addr(2));
 
-        // Check utilization
+        // Check utilization (200M supplied, 30M borrowed = 1500 bps = 15%)
         let result = dispatch(&mut state, "get_utilization", &[], owner);
         let util: u64 = serde_json::from_slice(&result).unwrap();
-        assert_eq!(util, 3000); // 30%
+        assert_eq!(util, 1500); // 15%
 
         // Repay
         let repay_args =

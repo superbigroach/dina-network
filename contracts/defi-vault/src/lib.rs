@@ -112,6 +112,11 @@ impl VaultState {
             "Vault: deposit would exceed limit"
         );
 
+        // M-6: First deposit requires minimum 1000 micro-USDC to prevent dust/donation attacks.
+        if self.total_shares == 0 {
+            assert!(amount >= 1000, "Vault: minimum first deposit is 1000 micro-USDC");
+        }
+
         let shares_minted = self.convert_to_shares(amount);
         assert!(shares_minted > 0, "Vault: zero shares minted");
 

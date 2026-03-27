@@ -230,7 +230,8 @@ impl BaseBridgeState {
             processed: false,
         });
 
-        self.total_minted -= amount; // burned on Dina
+        // M-7: Use saturating_sub to prevent underflow wrapping on total_minted.
+        self.total_minted = self.total_minted.saturating_sub(amount); // burned on Dina
         self.collected_fees += fee;
 
         // In production, this would call burn() on the USDC.e token contract
@@ -246,7 +247,8 @@ impl BaseBridgeState {
             if w.id == withdrawal_id {
                 assert!(!w.processed, "BaseBridge: already processed");
                 w.processed = true;
-                self.total_locked -= w.amount;
+                // M-7: Use saturating_sub to prevent underflow on total_locked.
+                self.total_locked = self.total_locked.saturating_sub(w.amount);
                 return;
             }
         }

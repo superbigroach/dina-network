@@ -122,7 +122,9 @@ impl ProxyState {
         });
     }
 
-    pub fn execute_upgrade(&mut self, current_time: u64) {
+    pub fn execute_upgrade(&mut self, caller: &str, current_time: u64) {
+        // M-5: Only admin can execute an upgrade.
+        assert!(caller == self.admin, "DRC16: only admin can execute upgrade");
         let pending = self
             .pending_upgrade
             .take()
@@ -183,8 +185,11 @@ impl ProxyState {
     }
 }
 
-/// Compute a simple hex-encoded SHA-256-style hash for the code.
-/// Uses a basic djb2-variant to avoid pulling in sha2 for the contract.
+/// Compute a hex-encoded hash for the code.
+/// L-2: TODO — Currently uses a djb2-variant (non-cryptographic). Should be replaced
+/// with SHA-256 (from the sha2 crate) before mainnet to prevent hash collisions
+/// that could make upgrade history misleading. Not adding sha2 dependency here
+/// to keep the contract lightweight; will address when sha2 is added to Cargo.toml.
 fn compute_hash(data: &[u8]) -> String {
     let mut hash: u64 = 5381;
     for &b in data {
@@ -264,7 +269,8 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC16: not initialised");
             let a: ExecuteUpgradeArgs =
                 serde_json::from_slice(args).expect("DRC16: bad execute_upgrade args");
-            s.execute_upgrade(a.current_time);
+            // M-5: Pass caller so execute_upgrade can verify admin access.
+            s.execute_upgrade(caller, a.current_time);
             serde_json::to_vec("ok").unwrap()
         }
 

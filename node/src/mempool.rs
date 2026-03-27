@@ -5,7 +5,7 @@ use anyhow::{bail, Result};
 use tracing::{debug, info};
 
 use dina_core::transaction::Transaction;
-use dina_core::types::Hash;
+use dina_core::types::{Address, Hash};
 
 /// Maximum age (in seconds) before a transaction is considered expired.
 const DEFAULT_TX_EXPIRY_SECS: u64 = 3600; // 1 hour
@@ -81,6 +81,16 @@ impl Mempool {
     ///   the lowest-fee transaction.
     pub fn add_transaction(&mut self, tx: Transaction) -> Result<()> {
         let hash = tx.hash();
+
+        // M-8: Basic structural validation before accepting.
+        let sig_bytes = tx.signature_bytes();
+        if sig_bytes == [0u8; 64] {
+            // Coinbase transactions (from faucet) are allowed with zero sig
+            let sender = tx.sender();
+            if sender != Address([0u8; 32]) {
+                bail!("transaction {} has invalid zero signature", hash);
+            }
+        }
 
         // Check for duplicates
         if self.hash_index.contains_key(&hash) {

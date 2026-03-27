@@ -140,7 +140,17 @@ async fn get_block_handler(
     Path(height): Path<u64>,
 ) -> impl IntoResponse {
     let blocks = state.node.blocks.read().await;
-    match blocks.get(height as usize) {
+    // L-3: Safe cast from u64 to usize to avoid truncation on 32-bit platforms.
+    let idx = match usize::try_from(height) {
+        Ok(i) => i,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("block height {height} out of range") })),
+            );
+        }
+    };
+    match blocks.get(idx) {
         Some(block) => (StatusCode::OK, Json(serde_json::to_value(block_to_info(block)).unwrap())),
         None => (
             StatusCode::NOT_FOUND,
@@ -186,6 +196,29 @@ async fn submit_transaction_handler(
     };
 
     let tx_hash = tx.hash();
+
+    // M-2: Check tx_pool size before accepting to prevent memory exhaustion.
+    {
+        let pool = state.node.tx_pool.read().await;
+        if pool.len() >= 10_000 {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({ "error": "transaction pool full" })),
+            );
+        }
+    }
+
+    // L-6: Pre-validate signature structure before indexing.
+    {
+        let sig = tx.signature_bytes();
+        let sender = tx.sender();
+        if sig == [0u8; 64] && sender != Address([0u8; 32]) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "invalid zero signature" })),
+            );
+        }
+    }
 
     // Index and add to mempool.
     {

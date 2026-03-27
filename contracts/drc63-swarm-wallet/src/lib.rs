@@ -98,10 +98,13 @@ impl ParallelWalletState {
     /// Create a new parallel authority. Returns the authority_id.
     pub fn create_authority(
         &mut self,
+        caller: &str,
         owner: String,
         max_wallets: Option<u64>,
         timestamp: u64,
     ) -> String {
+        // L-5: Authority owner must be the caller — cannot create for someone else.
+        assert!(caller == owner, "DRC63: can only create authority for yourself");
         let id = self.next_authority_id;
         self.next_authority_id += 1;
         let authority_id = format!("pa-{id}");
@@ -498,7 +501,8 @@ pub fn dispatch(
         "create_authority" => {
             let s = state.as_mut().expect("DRC63: not initialised");
             let a: CreateAuthorityArgs = serde_json::from_slice(args).expect("DRC63: bad args");
-            let id = s.create_authority(a.owner, a.max_wallets, a.timestamp);
+            // L-5: Pass caller so create_authority can validate owner == caller.
+            let id = s.create_authority(caller, a.owner, a.max_wallets, a.timestamp);
             serde_json::to_vec(&id).unwrap()
         }
 
@@ -628,7 +632,7 @@ mod tests {
 
     fn setup_with_authority() -> (ParallelWalletState, String) {
         let mut state = setup();
-        let auth_id = state.create_authority(OWNER.to_string(), Some(1000), 1000);
+        let auth_id = state.create_authority(OWNER, OWNER.to_string(), Some(1000), 1000);
         (state, auth_id)
     }
 
@@ -636,7 +640,7 @@ mod tests {
     #[test]
     fn test_create_authority_with_max_wallets() {
         let mut state = setup();
-        let auth_id = state.create_authority(OWNER.to_string(), Some(500), 1000);
+        let auth_id = state.create_authority(OWNER, OWNER.to_string(), Some(500), 1000);
 
         let auth = state.get_authority(&auth_id).unwrap();
         assert_eq!(auth.owner, OWNER);
@@ -764,7 +768,7 @@ mod tests {
     #[should_panic(expected = "would exceed max_wallets")]
     fn test_cannot_exceed_max_wallets() {
         let mut state = setup();
-        let auth_id = state.create_authority(OWNER.to_string(), Some(5), 1000);
+        let auth_id = state.create_authority(OWNER, OWNER.to_string(), Some(5), 1000);
 
         state.create_wallets(OWNER, &auth_id, 3, 1000);
         // This should panic: 3 + 3 = 6 > 5
@@ -969,8 +973,8 @@ mod tests {
     fn test_multiple_authorities_independent() {
         let mut state = setup();
 
-        let auth1 = state.create_authority(OWNER.to_string(), Some(10), 1000);
-        let auth2 = state.create_authority(OTHER.to_string(), Some(20), 1000);
+        let auth1 = state.create_authority(OWNER, OWNER.to_string(), Some(10), 1000);
+        let auth2 = state.create_authority(OTHER, OTHER.to_string(), Some(20), 1000);
 
         state.create_wallets(OWNER, &auth1, 3, 1000);
         state.create_wallets(OTHER, &auth2, 5, 1000);

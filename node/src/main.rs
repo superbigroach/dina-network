@@ -135,6 +135,14 @@ fn load_or_generate_identity(data_dir: &Path) -> Result<SigningKey> {
         std::fs::write(&key_path, signing_key.as_bytes())
             .with_context(|| format!("failed to write node key to {}", key_path.display()))?;
 
+        // M-1: Set restrictive permissions on the key file (owner read/write only).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+                .with_context(|| format!("failed to set permissions on {}", key_path.display()))?;
+        }
+
         let address = Address::from_pubkey(&signing_key.verifying_key());
         info!(
             address = %address,
