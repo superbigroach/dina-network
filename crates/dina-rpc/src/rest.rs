@@ -7,6 +7,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
+use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use dina_core::transaction::Transaction;
@@ -236,4 +237,8 @@ pub fn rest_router(state: NodeState) -> Router {
         .route("/v1/device/{pubkey}", get(get_device_handler))
         .route("/v1/peers", get(get_peers_handler))
         .with_state(shared)
+        .layer(CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any))
 }
