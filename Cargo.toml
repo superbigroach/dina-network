@@ -127,6 +127,7 @@ members = [
     "contracts/bridge-axelar",
     "contracts/bridge-across",
     "contracts/bridge-stargate",
+    "contracts/dex-swap",
 ]
 
 [workspace.package]

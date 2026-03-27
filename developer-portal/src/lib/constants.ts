@@ -101,6 +101,12 @@ export const NAV_SECTIONS = [
     ],
   },
   {
+    title: "DeFi",
+    items: [
+      { title: "DinaDEX Swap", href: "/docs/swap" },
+    ],
+  },
+  {
     title: "Infrastructure",
     items: [
       { title: "Run a Validator", href: "/docs/validators" },
