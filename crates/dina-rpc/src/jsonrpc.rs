@@ -86,6 +86,10 @@ pub struct NetworkInfo {
 
 #[rpc(server)]
 pub trait DinaRpc {
+    /// Get the current block height.
+    #[method(name = "dina_blockNumber")]
+    async fn block_number(&self) -> RpcResult<u64>;
+
     /// Submit a signed transaction (hex-encoded) to the network.
     #[method(name = "dina_sendTransaction")]
     async fn send_transaction(&self, tx_hex: String) -> RpcResult<String>;
@@ -252,6 +256,11 @@ impl DinaRpcServerImpl {
 
 #[async_trait]
 impl DinaRpcServer for DinaRpcServerImpl {
+    async fn block_number(&self) -> RpcResult<u64> {
+        let blocks = self.state.blocks.read().await;
+        Ok(blocks.len().saturating_sub(1) as u64)
+    }
+
     async fn send_transaction(&self, tx_hex: String) -> RpcResult<String> {
         let raw = tx_hex.strip_prefix("0x").unwrap_or(&tx_hex);
         let bytes = hex::decode(raw)
