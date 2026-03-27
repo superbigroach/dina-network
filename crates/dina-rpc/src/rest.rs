@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -29,6 +30,15 @@ pub struct RestAppState {
     pub node: NodeState,
     /// Rate limiter: maps address bytes to the last faucet request time.
     pub faucet_rate_limit: Mutex<HashMap<Address, Instant>>,
+    /// C-2: Global faucet counters to prevent unlimited minting.
+    /// Total number of faucet requests processed (all-time).
+    pub faucet_global_count: AtomicU64,
+    /// Total micro-USDC minted by the faucet (all-time).
+    pub faucet_total_minted: AtomicU64,
+    /// Timestamp (epoch seconds) of the start of the current rate-limit window.
+    pub faucet_window_start: AtomicU64,
+    /// Number of faucet requests in the current 60-second window.
+    pub faucet_window_count: AtomicU64,
 }
 
 pub type AppState = Arc<RestAppState>;
@@ -234,6 +244,9 @@ async fn get_peers_handler(State(state): State<AppState>) -> impl IntoResponse {
 /// Faucet constants.
 const FAUCET_AMOUNT: u64 = 1_000_000_000; // 1,000 USDC in micro-USDC
 const FAUCET_COOLDOWN_SECS: u64 = 600; // 10 minutes
+/// C-2: Global faucet limits.
+const FAUCET_MAX_TOTAL: u64 = 1_000_000_000_000; // 1M USDC max total minted
+const FAUCET_MAX_PER_MINUTE: u64 = 100; // max 100 requests per 60-second window
 
 async fn faucet_handler(
     State(state): State<AppState>,
@@ -249,9 +262,50 @@ async fn faucet_handler(
         }
     };
 
-    // Rate limiting: max 1 request per address per 10 minutes.
+    // C-2: Check global supply cap — faucet stops after 1M USDC total minted.
+    let total_minted = state.faucet_total_minted.load(Ordering::Relaxed);
+    if total_minted >= FAUCET_MAX_TOTAL {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
+                "error": "faucet depleted — maximum total supply reached",
+            })),
+        );
+    }
+
+    // C-2: Check global per-minute rate limit.
+    {
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let window_start = state.faucet_window_start.load(Ordering::Relaxed);
+        if now_secs - window_start >= 60 {
+            // Start a new window.
+            state.faucet_window_start.store(now_secs, Ordering::Relaxed);
+            state.faucet_window_count.store(1, Ordering::Relaxed);
+        } else {
+            let count = state.faucet_window_count.fetch_add(1, Ordering::Relaxed) + 1;
+            if count > FAUCET_MAX_PER_MINUTE {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(serde_json::json!({
+                        "error": "faucet rate limited — too many global requests, try again later",
+                    })),
+                );
+            }
+        }
+    }
+
+    // Per-address rate limiting: max 1 request per address per 10 minutes.
     {
         let mut rate_map = state.faucet_rate_limit.lock().await;
+
+        // M-3: Evict stale entries to prevent unbounded memory growth.
+        if rate_map.len() > 10_000 {
+            rate_map.retain(|_, instant| instant.elapsed().as_secs() < FAUCET_COOLDOWN_SECS);
+        }
+
         if let Some(last) = rate_map.get(&addr) {
             let elapsed = last.elapsed().as_secs();
             if elapsed < FAUCET_COOLDOWN_SECS {
@@ -292,6 +346,10 @@ async fn faucet_handler(
         pool.push(faucet_tx);
     }
 
+    // C-2: Track total minted amount.
+    state.faucet_total_minted.fetch_add(FAUCET_AMOUNT, Ordering::Relaxed);
+    state.faucet_global_count.fetch_add(1, Ordering::Relaxed);
+
     info!(%addr, amount = FAUCET_AMOUNT, "faucet dispensed");
 
     (
@@ -313,6 +371,10 @@ pub fn rest_router(state: NodeState) -> Router {
     let shared = Arc::new(RestAppState {
         node: state,
         faucet_rate_limit: Mutex::new(HashMap::new()),
+        faucet_global_count: AtomicU64::new(0),
+        faucet_total_minted: AtomicU64::new(0),
+        faucet_window_start: AtomicU64::new(0),
+        faucet_window_count: AtomicU64::new(0),
     });
 
     Router::new()
@@ -325,6 +387,9 @@ pub fn rest_router(state: NodeState) -> Router {
         .route("/v1/peers", get(get_peers_handler))
         .route("/faucet/{address}", post(faucet_handler))
         .with_state(shared)
+        // H-2: CORS is kept open for portal/frontend compatibility on testnet.
+        // The faucet is protected by global rate limits (C-2) and per-address
+        // cooldowns. For production, restrict origins to known frontends.
         .layer(CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)

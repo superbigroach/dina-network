@@ -149,6 +149,10 @@ impl BridgedUsdcState {
 
     // -- Bridge functions (mint/burn) ----------------------------------------
 
+    /// H-5: Maximum total supply cap for bridged USDC on testnet.
+    /// 10M USDC = 10_000_000 * 1_000_000 micro-USDC.
+    const MAX_SUPPLY: u64 = 10_000_000_000_000;
+
     /// Mint new USDC.e tokens. Only callable by the bridge contract.
     /// This is called when USDC is locked/burned on the source chain
     /// and needs to be minted on Dina.
@@ -159,8 +163,21 @@ impl BridgedUsdcState {
         assert!(!self.is_blacklisted(&to), "USDC.e: recipient blacklisted");
         assert!(amount > 0, "USDC.e: mint amount must be positive");
 
+        // H-5: Enforce supply cap to bound total minted USDC.e on-chain.
+        assert!(
+            self.total_supply + amount <= Self::MAX_SUPPLY,
+            "USDC.e: supply cap exceeded ({} + {} > {})",
+            self.total_supply,
+            amount,
+            Self::MAX_SUPPLY
+        );
+
+        // H-5: Use checked arithmetic for balance addition to prevent overflow.
         let balance = self.balance_of(&to);
-        self.balances.insert(to, balance + amount);
+        let new_balance = balance.checked_add(amount).expect(
+            "USDC.e: balance overflow"
+        );
+        self.balances.insert(to, new_balance);
         self.total_supply += amount;
     }
 

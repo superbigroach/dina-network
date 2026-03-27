@@ -7,7 +7,7 @@
 use dina_core::account::AccountState;
 use dina_core::block::Block;
 use dina_core::chain::ChainManager;
-use dina_core::error::DinaResult;
+use dina_core::error::{DinaError, DinaResult};
 use dina_core::transaction::Transaction;
 use dina_core::types::Address;
 
@@ -95,6 +95,30 @@ impl ChainState {
         let is_coinbase = sender == Address([0u8; 32]);
 
         if !is_coinbase {
+            // -- C-1: Structural signature verification --
+            // Full Ed25519 verification requires the sender's public key, which
+            // cannot be recovered from the Address alone (Address = SHA-256 of
+            // pubkey). For now, reject transactions with an all-zero signature
+            // as a structural validity check. TODO: store the public key in the
+            // account or require it in the transaction payload so that full
+            // Ed25519 verification can be performed on mainnet.
+            let sig_bytes = tx.signature_bytes();
+            if sig_bytes == [0u8; 64] {
+                return Err(DinaError::InvalidSignature);
+            }
+
+            // -- C-3: Nonce validation --
+            // Verify the transaction nonce matches the account's expected nonce
+            // to prevent replay attacks and enforce transaction ordering.
+            let account = self.accounts.get_account(&sender)
+                .ok_or_else(|| DinaError::AccountNotFound(sender.to_string()))?;
+            if account.nonce != tx.nonce() {
+                return Err(DinaError::InvalidNonce {
+                    expected: account.nonce,
+                    got: tx.nonce(),
+                });
+            }
+
             // Deduct the fee from the sender
             self.accounts.deduct_fee(&sender, fee)?;
 
@@ -233,7 +257,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
-            signature: Sig64([0u8; 64]),
+            signature: Sig64([1u8; 64]), // non-zero signature required by C-1
         };
 
         let block1 = Block {

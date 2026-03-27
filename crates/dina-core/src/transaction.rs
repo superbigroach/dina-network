@@ -243,7 +243,7 @@ impl Transaction {
     }
 
     /// Extract the raw 64-byte signature.
-    fn signature_bytes(&self) -> [u8; 64] {
+    pub fn signature_bytes(&self) -> [u8; 64] {
         match self {
             Transaction::Transfer { signature, .. }
             | Transaction::DeployContract { signature, .. }

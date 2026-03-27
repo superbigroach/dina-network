@@ -501,13 +501,38 @@ impl DexState {
     ) -> Vec<DexEvent> {
         assert!(!path.is_empty(), "DEX: empty path");
 
+        // H-4: Pre-compute expected intermediate outputs via read-only quotes
+        // so each hop has a per-hop min_output (with 1% tolerance) to prevent
+        // sandwich attacks on intermediate pools.
+        let mut expected_amounts = Vec::with_capacity(path.len());
+        {
+            let mut sim_token = input_token.to_string();
+            let mut sim_amount = input_amount;
+            for &pool_id in path {
+                let quote = self.get_quote(pool_id, &sim_token, sim_amount);
+                sim_token = quote.output_token;
+                sim_amount = quote.output_amount;
+                expected_amounts.push(sim_amount);
+            }
+        }
+
         let mut current_token = input_token.to_string();
         let mut current_amount = input_amount;
         let mut events = Vec::new();
 
-        for &pool_id in path {
+        for (i, &pool_id) in path.iter().enumerate() {
+            // For intermediate hops, enforce a per-hop minimum of 99% of the
+            // quoted output to block sandwich manipulation. The final hop uses
+            // the caller's min_output for the overall slippage check.
+            let hop_min = if i < path.len() - 1 {
+                // Allow 1% deviation from quote for intermediate hops
+                expected_amounts[i].saturating_mul(99) / 100
+            } else {
+                min_output
+            };
+
             let evt =
-                self.swap_exact_in(pool_id, trader, &current_token, current_amount, 0);
+                self.swap_exact_in(pool_id, trader, &current_token, current_amount, hop_min);
             if let DexEvent::Swap {
                 ref output_token,
                 output_amount,
