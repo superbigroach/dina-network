@@ -30,6 +30,15 @@ export {
   AgentWalletContract,
 } from './contract';
 
+// Parallel wallet
+export { ParallelWallet } from './parallel';
+export type {
+  ParallelConfig,
+  ParallelStats,
+  TransferPriority,
+  BatchOptions,
+} from './parallel';
+
 // Payment channels
 export { PaymentChannel } from './channel';
 

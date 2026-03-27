@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.encodeString = exports.encodeBigintLE = exports.concatBytes = exports.isValidHash = exports.isValidAddress = exports.bytesToHex = exports.hexToBytes = exports.parseUSDC = exports.formatUSDC = exports.addressFromPublicKey = exports.PaymentChannel = exports.AgentWalletContract = exports.TokenContract = exports.DinaContract = exports.DinaRpcError = exports.DinaClient = exports.DinaWallet = void 0;
+exports.encodeString = exports.encodeBigintLE = exports.concatBytes = exports.isValidHash = exports.isValidAddress = exports.bytesToHex = exports.hexToBytes = exports.parseUSDC = exports.formatUSDC = exports.addressFromPublicKey = exports.PaymentChannel = exports.ParallelWallet = exports.AgentWalletContract = exports.TokenContract = exports.DinaContract = exports.DinaRpcError = exports.DinaClient = exports.DinaWallet = void 0;
 // Wallet
 var wallet_1 = require("./wallet");
 Object.defineProperty(exports, "DinaWallet", { enumerable: true, get: function () { return wallet_1.DinaWallet; } });
@@ -13,6 +13,9 @@ var contract_1 = require("./contract");
 Object.defineProperty(exports, "DinaContract", { enumerable: true, get: function () { return contract_1.DinaContract; } });
 Object.defineProperty(exports, "TokenContract", { enumerable: true, get: function () { return contract_1.TokenContract; } });
 Object.defineProperty(exports, "AgentWalletContract", { enumerable: true, get: function () { return contract_1.AgentWalletContract; } });
+// Parallel wallet
+var parallel_1 = require("./parallel");
+Object.defineProperty(exports, "ParallelWallet", { enumerable: true, get: function () { return parallel_1.ParallelWallet; } });
 // Payment channels
 var channel_1 = require("./channel");
 Object.defineProperty(exports, "PaymentChannel", { enumerable: true, get: function () { return channel_1.PaymentChannel; } });

@@ -1,7 +1,7 @@
 {
   "name": "dina-js",
-  "version": "0.1.0",
-  "description": "TypeScript SDK for Dina Network — the fastest blockchain with swarm wallets, parallel execution, and 82 DRC standards",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for Dina Network — the fastest blockchain with parallel wallets, parallel execution, and 94 DRC standards",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist", "README.md"],
