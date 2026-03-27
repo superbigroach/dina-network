@@ -406,7 +406,7 @@ async fn main() -> Result<()> {
 
     // ── 10. Start RPC servers ───────────────────────────────────────────
     let rpc_config = RpcConfig {
-        jsonrpc_bind: format!("127.0.0.1:{}", cli.rpc_port),
+        jsonrpc_bind: format!("0.0.0.0:{}", cli.rpc_port),
         rest_bind: format!("0.0.0.0:{}", cli.rest_port),
     };
 
