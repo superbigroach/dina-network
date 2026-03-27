@@ -1,0 +1,13 @@
+[package]
+name = "drc4-permit"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+sha2 = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]

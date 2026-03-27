@@ -218,4 +218,101 @@ mod tests {
         let deserialized: StealthMetaAddress = serde_json::from_str(&json).unwrap();
         assert_eq!(meta, deserialized);
     }
+
+    #[test]
+    fn generate_meta_address_produces_valid_keys() {
+        let (meta, scan_secret, spend_secret) = generate_meta_address();
+
+        // The public keys should match what we derive from the secrets
+        let scan_pk = PublicKey::from(&StaticSecret::from(scan_secret));
+        let spend_pk = PublicKey::from(&StaticSecret::from(spend_secret));
+
+        assert_eq!(meta.scan_pubkey, *scan_pk.as_bytes());
+        assert_eq!(meta.spend_pubkey, *spend_pk.as_bytes());
+    }
+
+    #[test]
+    fn detect_stealth_returns_false_for_non_recipient() {
+        let (meta1, _scan1, _spend1) = generate_meta_address();
+        let (_meta2, scan2, _spend2) = generate_meta_address();
+
+        let stealth = derive_stealth_address(&meta1);
+
+        // Try detecting with a completely different recipient's secrets
+        assert!(!detect_stealth(
+            &scan2,
+            &meta1.spend_pubkey,
+            &stealth.ephemeral_pubkey,
+            &stealth.address,
+        ));
+    }
+
+    #[test]
+    fn detect_stealth_fails_with_wrong_spend_pubkey() {
+        let (meta, scan_secret, _spend_secret) = generate_meta_address();
+        let stealth = derive_stealth_address(&meta);
+
+        let wrong_spend_pubkey: [u8; 32] = rand::random();
+        assert!(!detect_stealth(
+            &scan_secret,
+            &wrong_spend_pubkey,
+            &stealth.ephemeral_pubkey,
+            &stealth.address,
+        ));
+    }
+
+    #[test]
+    fn full_stealth_flow_generate_derive_detect_spend() {
+        // Step 1: Recipient generates meta-address and publishes it
+        let (meta, scan_secret, spend_secret) = generate_meta_address();
+
+        // Step 2: Sender derives a one-time stealth address from the meta-address
+        let stealth = derive_stealth_address(&meta);
+
+        // Step 3: Recipient scans the chain and detects the stealth address as theirs
+        let detected = detect_stealth(
+            &scan_secret,
+            &meta.spend_pubkey,
+            &stealth.ephemeral_pubkey,
+            &stealth.address,
+        );
+        assert!(detected, "recipient should detect their own stealth address");
+
+        // Step 4: Recipient derives the spending key for this stealth address
+        let spending_key = derive_stealth_spending_key(
+            &scan_secret,
+            &spend_secret,
+            &stealth.ephemeral_pubkey,
+        );
+
+        // The spending key should be non-zero (valid key material)
+        assert_ne!(spending_key, [0u8; 32]);
+
+        // The spending key should be deterministic
+        let spending_key2 = derive_stealth_spending_key(
+            &scan_secret,
+            &spend_secret,
+            &stealth.ephemeral_pubkey,
+        );
+        assert_eq!(spending_key, spending_key2);
+
+        // A different ephemeral pubkey should yield a different spending key
+        let stealth2 = derive_stealth_address(&meta);
+        let spending_key3 = derive_stealth_spending_key(
+            &scan_secret,
+            &spend_secret,
+            &stealth2.ephemeral_pubkey,
+        );
+        assert_ne!(spending_key, spending_key3);
+    }
+
+    #[test]
+    fn stealth_address_serialization_roundtrip() {
+        let (meta, _, _) = generate_meta_address();
+        let stealth = derive_stealth_address(&meta);
+
+        let json = serde_json::to_string(&stealth).unwrap();
+        let deserialized: StealthAddress = serde_json::from_str(&json).unwrap();
+        assert_eq!(stealth, deserialized);
+    }
 }

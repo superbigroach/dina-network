@@ -151,4 +151,32 @@ mod tests {
         let version = read_version(&db).unwrap();
         assert_eq!(version, CURRENT_VERSION);
     }
+
+    #[test]
+    fn migrate_creates_all_tables() {
+        use crate::tables::*;
+
+        let db = DinaDB::open_in_memory().expect("failed to open db");
+        // After migration, all tables should be accessible for reads
+        let read_txn = db.inner().begin_read().unwrap();
+
+        // Each table should exist and be openable
+        assert!(read_txn.open_table(ACCOUNTS).is_ok(), "ACCOUNTS table missing");
+        assert!(read_txn.open_table(BLOCKS).is_ok(), "BLOCKS table missing");
+        assert!(read_txn.open_table(BLOCK_HASHES).is_ok(), "BLOCK_HASHES table missing");
+        assert!(read_txn.open_table(TRANSACTIONS).is_ok(), "TRANSACTIONS table missing");
+        assert!(read_txn.open_table(CONTRACT_CODE).is_ok(), "CONTRACT_CODE table missing");
+        assert!(read_txn.open_table(CONTRACT_STORAGE).is_ok(), "CONTRACT_STORAGE table missing");
+        assert!(read_txn.open_table(DEVICE_REGISTRY).is_ok(), "DEVICE_REGISTRY table missing");
+        assert!(read_txn.open_table(STATE_METADATA).is_ok(), "STATE_METADATA table missing");
+    }
+
+    #[test]
+    fn triple_migrate_is_idempotent() {
+        let db = DinaDB::open_in_memory().expect("failed to open db");
+        // Already migrated once by open_in_memory, run two more times
+        migrate(&db).expect("second migration should succeed");
+        migrate(&db).expect("third migration should succeed");
+        assert_eq!(read_version(&db).unwrap(), CURRENT_VERSION);
+    }
 }

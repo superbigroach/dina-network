@@ -1,0 +1,17 @@
+[package]
+name = "dina-channels"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dina-core = { path = "../dina-core" }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+serde-big-array = { workspace = true }

@@ -938,6 +938,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "dina-channels"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "chrono",
+ "dina-core",
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde-big-array",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "dina-cli"
 version = "0.1.0"
 dependencies = [
@@ -1051,6 +1068,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "dina-relay"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "dina-channels",
+ "dina-core",
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "dina-rpc"
 version = "0.1.0"
 dependencies = [
@@ -1158,6 +1192,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "drc10-royalties"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "drc101-agent-wallet"
 version = "0.1.0"
 dependencies = [
@@ -1185,7 +1228,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "drc104-swarm"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "drc105-sensor-attestation"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc106-data-market"
 version = "0.1.0"
 dependencies = [
  "borsh",
@@ -1203,7 +1264,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "drc108-resource"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "drc109-emergency-stop"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc11-semi-fungible"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc110-firmware"
 version = "0.1.0"
 dependencies = [
  "borsh",
@@ -1230,7 +1318,135 @@ dependencies = [
 ]
 
 [[package]]
+name = "drc113-relay"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc12-vault"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc13-compliant"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc14-contract-sig"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc15-meta-tx"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc16-proxy"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc17-hooks"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc18-scriptable"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "drc2-device-identity"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc4-permit"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "drc5-soulbound"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc6-nft"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc7-multi-token"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "drc8-token-bound"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "drc9-rental"
 version = "0.1.0"
 dependencies = [
  "borsh",

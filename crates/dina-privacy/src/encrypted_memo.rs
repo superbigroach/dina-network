@@ -167,4 +167,77 @@ mod tests {
         let decrypted = decrypt_memo(&recipient_secret_bytes, &deserialized).unwrap();
         assert_eq!(decrypted, b"serialize me");
     }
+
+    #[test]
+    fn different_messages_produce_different_ciphertexts() {
+        // The ephemeral key is randomized, so even the same plaintext should
+        // produce different ciphertexts each time.
+        let recipient_secret_bytes: [u8; 32] = rand::random();
+        let recipient_secret = StaticSecret::from(recipient_secret_bytes);
+        let recipient_pubkey = PublicKey::from(&recipient_secret);
+
+        let memo1 = encrypt_memo(recipient_pubkey.as_bytes(), b"hello");
+        let memo2 = encrypt_memo(recipient_pubkey.as_bytes(), b"hello");
+
+        // Ephemeral pubkeys must differ (different random keys each call)
+        assert_ne!(memo1.ephemeral_pubkey, memo2.ephemeral_pubkey);
+        // Ciphertexts must differ as a consequence
+        assert_ne!(memo1.ciphertext, memo2.ciphertext);
+
+        // Both should still decrypt to the same plaintext
+        let d1 = decrypt_memo(&recipient_secret_bytes, &memo1).unwrap();
+        let d2 = decrypt_memo(&recipient_secret_bytes, &memo2).unwrap();
+        assert_eq!(d1, b"hello");
+        assert_eq!(d2, b"hello");
+    }
+
+    #[test]
+    fn different_plaintext_different_ciphertext() {
+        let recipient_secret_bytes: [u8; 32] = rand::random();
+        let recipient_secret = StaticSecret::from(recipient_secret_bytes);
+        let recipient_pubkey = PublicKey::from(&recipient_secret);
+
+        let memo_a = encrypt_memo(recipient_pubkey.as_bytes(), b"message A");
+        let memo_b = encrypt_memo(recipient_pubkey.as_bytes(), b"message B");
+
+        assert_ne!(memo_a.ciphertext, memo_b.ciphertext);
+    }
+
+    #[test]
+    fn large_plaintext_1kb_roundtrip() {
+        let recipient_secret_bytes: [u8; 32] = rand::random();
+        let recipient_secret = StaticSecret::from(recipient_secret_bytes);
+        let recipient_pubkey = PublicKey::from(&recipient_secret);
+
+        // Exactly 1KB of patterned data
+        let plaintext: Vec<u8> = (0u8..=255).cycle().take(1024).collect();
+        let memo = encrypt_memo(recipient_pubkey.as_bytes(), &plaintext);
+        let decrypted = decrypt_memo(&recipient_secret_bytes, &memo).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn tampered_ciphertext_fails_decryption() {
+        let recipient_secret_bytes: [u8; 32] = rand::random();
+        let recipient_secret = StaticSecret::from(recipient_secret_bytes);
+        let recipient_pubkey = PublicKey::from(&recipient_secret);
+
+        let mut memo = encrypt_memo(recipient_pubkey.as_bytes(), b"tamper test");
+        // Flip a byte in the ciphertext
+        if let Some(byte) = memo.ciphertext.first_mut() {
+            *byte ^= 0xFF;
+        }
+        assert!(decrypt_memo(&recipient_secret_bytes, &memo).is_err());
+    }
+
+    #[test]
+    fn tampered_nonce_fails_decryption() {
+        let recipient_secret_bytes: [u8; 32] = rand::random();
+        let recipient_secret = StaticSecret::from(recipient_secret_bytes);
+        let recipient_pubkey = PublicKey::from(&recipient_secret);
+
+        let mut memo = encrypt_memo(recipient_pubkey.as_bytes(), b"nonce tamper");
+        memo.nonce[0] ^= 0xFF;
+        assert!(decrypt_memo(&recipient_secret_bytes, &memo).is_err());
+    }
 }

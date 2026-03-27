@@ -330,4 +330,92 @@ mod tests {
 
         assert_eq!(db.get_latest_block_height().unwrap(), 42);
     }
+
+    #[test]
+    fn open_in_memory_succeeds() {
+        let db = DinaDB::open_in_memory();
+        assert!(db.is_ok(), "open_in_memory should succeed");
+    }
+
+    #[test]
+    fn get_nonexistent_block_returns_none() {
+        let db = test_db();
+        assert!(db.get_block(999).unwrap().is_none());
+    }
+
+    #[test]
+    fn get_block_by_nonexistent_hash_returns_none() {
+        let db = test_db();
+        let fake_hash = Hash([0xDE; 32]);
+        assert!(db.get_block_by_hash(fake_hash).unwrap().is_none());
+    }
+
+    #[test]
+    fn account_update_overwrites_previous() {
+        let db = test_db();
+        let addr = Address([0xCC; 32]);
+
+        let account1 = Account::with_balance(addr, 100);
+        db.set_account(addr, &account1).unwrap();
+
+        let account2 = Account::with_balance(addr, 999);
+        db.set_account(addr, &account2).unwrap();
+
+        let loaded = db.get_account(addr).unwrap().unwrap();
+        assert_eq!(loaded.balance, 999);
+    }
+
+    #[test]
+    fn store_multiple_blocks_updates_latest_height() {
+        let db = test_db();
+
+        for height in [1, 5, 10] {
+            let block = Block {
+                header: BlockHeader {
+                    block_number: height,
+                    timestamp: 1700000000 + height,
+                    parent_hash: Hash::ZERO,
+                    transactions_root: Hash::ZERO,
+                    state_root: Hash::ZERO,
+                    proposer: Address::ZERO,
+                    signature: [0u8; 64],
+                },
+                transactions: vec![],
+            };
+            db.store_block(&block).unwrap();
+        }
+
+        assert_eq!(db.get_latest_block_height().unwrap(), 10);
+
+        // All blocks should be retrievable
+        assert!(db.get_block(1).unwrap().is_some());
+        assert!(db.get_block(5).unwrap().is_some());
+        assert!(db.get_block(10).unwrap().is_some());
+        assert!(db.get_block(2).unwrap().is_none());
+    }
+
+    #[test]
+    fn block_hash_is_consistent() {
+        let db = test_db();
+        let block = Block {
+            header: BlockHeader {
+                block_number: 7,
+                timestamp: 1700000000,
+                parent_hash: Hash::ZERO,
+                transactions_root: Hash::ZERO,
+                state_root: Hash::ZERO,
+                proposer: Address::ZERO,
+                signature: [0u8; 64],
+            },
+            transactions: vec![],
+        };
+
+        let hash = block.hash();
+        db.store_block(&block).unwrap();
+
+        // Retrieve by hash and verify contents match
+        let loaded = db.get_block_by_hash(hash).unwrap().unwrap();
+        assert_eq!(loaded.header.block_number, 7);
+        assert_eq!(loaded.hash(), hash);
+    }
 }

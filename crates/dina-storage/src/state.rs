@@ -240,4 +240,150 @@ mod tests {
             .expect("storage value missing");
         assert_eq!(loaded, value);
     }
+
+    #[test]
+    fn multiple_operations_in_one_transaction_are_atomic() {
+        let store = test_store();
+        let addr1 = Address([0x41; 32]);
+        let addr2 = Address([0x42; 32]);
+        let code_hash = [0xDE; 32];
+        let contract_addr = Address([0x43; 32]);
+        let slot = [0x01; 32];
+
+        // Perform multiple operations in a single transaction
+        let txn = store.begin_transaction().unwrap();
+        txn.set_account(&addr1, &Account::with_balance(addr1, 100))
+            .unwrap();
+        txn.set_account(&addr2, &Account::with_balance(addr2, 200))
+            .unwrap();
+        txn.set_contract_code(&code_hash, b"wasm_bytecode")
+            .unwrap();
+        txn.set_contract_storage(&contract_addr, &slot, b"slot_value")
+            .unwrap();
+        txn.commit().unwrap();
+
+        // All four writes should be visible
+        let txn2 = store.begin_transaction().unwrap();
+        assert_eq!(
+            txn2.get_account(&addr1).unwrap().unwrap().balance,
+            100
+        );
+        assert_eq!(
+            txn2.get_account(&addr2).unwrap().unwrap().balance,
+            200
+        );
+        assert_eq!(
+            txn2.get_contract_code(&code_hash).unwrap().unwrap(),
+            b"wasm_bytecode"
+        );
+        assert_eq!(
+            txn2.get_contract_storage(&contract_addr, &slot)
+                .unwrap()
+                .unwrap(),
+            b"slot_value"
+        );
+    }
+
+    #[test]
+    fn dropped_multi_op_transaction_rolls_back_all() {
+        let store = test_store();
+        let addr1 = Address([0x51; 32]);
+        let addr2 = Address([0x52; 32]);
+
+        {
+            let txn = store.begin_transaction().unwrap();
+            txn.set_account(&addr1, &Account::with_balance(addr1, 100))
+                .unwrap();
+            txn.set_account(&addr2, &Account::with_balance(addr2, 200))
+                .unwrap();
+            // Drop without commit
+        }
+
+        // Neither account should exist
+        let txn2 = store.begin_transaction().unwrap();
+        assert!(txn2.get_account(&addr1).unwrap().is_none());
+        assert!(txn2.get_account(&addr2).unwrap().is_none());
+    }
+
+    #[test]
+    fn get_nonexistent_contract_code_returns_none() {
+        let store = test_store();
+        let txn = store.begin_transaction().unwrap();
+        assert!(txn.get_contract_code(&[0xFF; 32]).unwrap().is_none());
+    }
+
+    #[test]
+    fn get_nonexistent_contract_storage_returns_none() {
+        let store = test_store();
+        let txn = store.begin_transaction().unwrap();
+        let addr = Address([0x60; 32]);
+        let slot = [0x01; 32];
+        assert!(txn.get_contract_storage(&addr, &slot).unwrap().is_none());
+    }
+
+    #[test]
+    fn contract_storage_different_slots_are_independent() {
+        let store = test_store();
+        let addr = Address([0x70; 32]);
+        let slot_a = [0x01; 32];
+        let slot_b = [0x02; 32];
+
+        let txn = store.begin_transaction().unwrap();
+        txn.set_contract_storage(&addr, &slot_a, b"value_a")
+            .unwrap();
+        txn.set_contract_storage(&addr, &slot_b, b"value_b")
+            .unwrap();
+        txn.commit().unwrap();
+
+        let txn2 = store.begin_transaction().unwrap();
+        assert_eq!(
+            txn2.get_contract_storage(&addr, &slot_a).unwrap().unwrap(),
+            b"value_a"
+        );
+        assert_eq!(
+            txn2.get_contract_storage(&addr, &slot_b).unwrap().unwrap(),
+            b"value_b"
+        );
+    }
+
+    #[test]
+    fn contract_storage_different_contracts_are_independent() {
+        let store = test_store();
+        let addr_a = Address([0x80; 32]);
+        let addr_b = Address([0x81; 32]);
+        let slot = [0x01; 32];
+
+        let txn = store.begin_transaction().unwrap();
+        txn.set_contract_storage(&addr_a, &slot, b"from_a")
+            .unwrap();
+        txn.set_contract_storage(&addr_b, &slot, b"from_b")
+            .unwrap();
+        txn.commit().unwrap();
+
+        let txn2 = store.begin_transaction().unwrap();
+        assert_eq!(
+            txn2.get_contract_storage(&addr_a, &slot).unwrap().unwrap(),
+            b"from_a"
+        );
+        assert_eq!(
+            txn2.get_contract_storage(&addr_b, &slot).unwrap().unwrap(),
+            b"from_b"
+        );
+    }
+
+    #[test]
+    fn overwrite_account_in_same_transaction() {
+        let store = test_store();
+        let addr = Address([0x90; 32]);
+
+        let txn = store.begin_transaction().unwrap();
+        txn.set_account(&addr, &Account::with_balance(addr, 100))
+            .unwrap();
+        txn.set_account(&addr, &Account::with_balance(addr, 500))
+            .unwrap();
+        txn.commit().unwrap();
+
+        let txn2 = store.begin_transaction().unwrap();
+        assert_eq!(txn2.get_account(&addr).unwrap().unwrap().balance, 500);
+    }
 }

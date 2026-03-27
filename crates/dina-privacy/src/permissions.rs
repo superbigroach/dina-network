@@ -647,4 +647,418 @@ mod tests {
         pset.check_permission(&key, &Action::ViewState, 5000).unwrap();
         assert_eq!(pset.keys[0].last_used, Some(5000));
     }
+
+    #[test]
+    fn transfer_only_allows_transfer_blocks_contract_call() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA1; 32];
+        pset.add_key(
+            key,
+            "transfer only".into(),
+            KeyPermission::TransferOnly {
+                max_amount: None,
+                allowed_recipients: vec![],
+            },
+            1000,
+        );
+
+        // Transfer should succeed
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: test_address(0x02),
+                    amount: 100,
+                },
+                1001,
+            )
+            .is_ok());
+
+        // Contract call should fail
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::ContractCall {
+                    contract: test_address(0x10),
+                    method: "foo".into(),
+                },
+                1001,
+            )
+            .is_err());
+
+        // ManageKeys should fail
+        assert!(pset
+            .check_permission(&key, &Action::ManageKeys, 1001)
+            .is_err());
+    }
+
+    #[test]
+    fn contract_call_only_allows_only_specified_methods() {
+        let contract = test_address(0x10);
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA2; 32];
+        pset.add_key(
+            key,
+            "contract caller".into(),
+            KeyPermission::ContractCallOnly {
+                allowed_contracts: vec![contract],
+                allowed_methods: vec!["mint".into()],
+            },
+            1000,
+        );
+
+        // Allowed method succeeds
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::ContractCall {
+                    contract,
+                    method: "mint".into(),
+                },
+                1001,
+            )
+            .is_ok());
+
+        // Disallowed method fails
+        let err = pset
+            .check_permission(
+                &key,
+                &Action::ContractCall {
+                    contract,
+                    method: "burn".into(),
+                },
+                1001,
+            )
+            .unwrap_err();
+        assert!(
+            matches!(err, PermissionError::MethodNotAllowed(ref m) if m == "burn"),
+            "expected MethodNotAllowed, got: {err:?}"
+        );
+
+        // Transfer should also fail
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: test_address(0x02),
+                    amount: 50,
+                },
+                1001,
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn view_only_blocks_all_writes() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA3; 32];
+        pset.add_key(key, "viewer".into(), KeyPermission::ViewOnly, 1000);
+
+        // ViewState allowed
+        assert!(pset.check_permission(&key, &Action::ViewState, 1001).is_ok());
+
+        // All write actions blocked
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: test_address(0x02),
+                    amount: 1,
+                },
+                1001,
+            )
+            .is_err());
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::ContractCall {
+                    contract: test_address(0x10),
+                    method: "foo".into(),
+                },
+                1001,
+            )
+            .is_err());
+        assert!(pset
+            .check_permission(&key, &Action::ManageKeys, 1001)
+            .is_err());
+        assert!(pset
+            .check_permission(&key, &Action::EmergencyStop, 1001)
+            .is_err());
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::DeviceCommand {
+                    device_id: test_address(0x50),
+                    command: "stop".into(),
+                },
+                1001,
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn device_control_only_allows_specified_device_ids() {
+        let device1 = test_address(0x50);
+        let device2 = test_address(0x51);
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA4; 32];
+        pset.add_key(
+            key,
+            "device key".into(),
+            KeyPermission::DeviceControl {
+                device_ids: vec![device1],
+            },
+            1000,
+        );
+
+        // Allowed device
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::DeviceCommand {
+                    device_id: device1,
+                    command: "start".into(),
+                },
+                1001,
+            )
+            .is_ok());
+
+        // Disallowed device
+        let err = pset
+            .check_permission(
+                &key,
+                &Action::DeviceCommand {
+                    device_id: device2,
+                    command: "start".into(),
+                },
+                1001,
+            )
+            .unwrap_err();
+        assert!(matches!(err, PermissionError::DeviceNotAllowed(_)));
+
+        // ViewState allowed for device keys
+        assert!(pset.check_permission(&key, &Action::ViewState, 1001).is_ok());
+    }
+
+    #[test]
+    fn session_key_check_permission_returns_ok_err() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA5; 32];
+        pset.add_key(
+            key,
+            "session".into(),
+            KeyPermission::SessionKey {
+                expires_at: 2000,
+                permissions: Box::new(KeyPermission::FullAccess),
+            },
+            1000,
+        );
+
+        // Before expiry: Ok
+        assert!(pset.check_permission(&key, &Action::ViewState, 1500).is_ok());
+
+        // After expiry: Err with SessionExpired
+        let err = pset
+            .check_permission(&key, &Action::ViewState, 2500)
+            .unwrap_err();
+        assert!(
+            matches!(err, PermissionError::SessionExpired { expired_at: 2000, current_time: 2500 }),
+            "expected SessionExpired, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn session_key_with_nested_transfer_permissions() {
+        let allowed_recipient = test_address(0x02);
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA6; 32];
+        pset.add_key(
+            key,
+            "temp transfer".into(),
+            KeyPermission::SessionKey {
+                expires_at: 3000,
+                permissions: Box::new(KeyPermission::TransferOnly {
+                    max_amount: Some(100),
+                    allowed_recipients: vec![allowed_recipient],
+                }),
+            },
+            1000,
+        );
+
+        // Valid: under limit, allowed recipient, before expiry
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: allowed_recipient,
+                    amount: 50,
+                },
+                2000,
+            )
+            .is_ok());
+
+        // Over amount limit
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: allowed_recipient,
+                    amount: 200,
+                },
+                2000,
+            )
+            .is_err());
+
+        // Wrong recipient
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: test_address(0x99),
+                    amount: 50,
+                },
+                2000,
+            )
+            .is_err());
+
+        // After expiry
+        assert!(pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: allowed_recipient,
+                    amount: 50,
+                },
+                4000,
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn add_key_replaces_existing() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xA7; 32];
+
+        pset.add_key(key, "v1".into(), KeyPermission::ViewOnly, 1000);
+        assert_eq!(pset.keys.len(), 1);
+        assert_eq!(pset.keys[0].label, "v1");
+
+        // Adding the same key again replaces it
+        pset.add_key(key, "v2".into(), KeyPermission::FullAccess, 2000);
+        assert_eq!(pset.keys.len(), 1);
+        assert_eq!(pset.keys[0].label, "v2");
+
+        // Should now have FullAccess
+        assert!(pset.is_authorized(&key, &Action::ManageKeys, 2001));
+    }
+
+    #[test]
+    fn rotate_key_with_nonexistent_old_key_errors() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let old: [u8; 32] = [0xA8; 32];
+        let new: [u8; 32] = [0xA9; 32];
+        let err = pset.rotate_key(&old, new).unwrap_err();
+        assert!(matches!(err, PermissionError::KeyNotFound(_)));
+    }
+
+    #[test]
+    fn check_permission_unknown_key_returns_key_not_found() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let unknown: [u8; 32] = [0xB0; 32];
+        let err = pset
+            .check_permission(&unknown, &Action::ViewState, 1001)
+            .unwrap_err();
+        assert!(matches!(err, PermissionError::KeyNotFound(_)));
+    }
+
+    #[test]
+    fn transfer_only_amount_exceeded_error_details() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xB1; 32];
+        pset.add_key(
+            key,
+            "limited".into(),
+            KeyPermission::TransferOnly {
+                max_amount: Some(100),
+                allowed_recipients: vec![],
+            },
+            1000,
+        );
+
+        let err = pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: test_address(0x02),
+                    amount: 200,
+                },
+                1001,
+            )
+            .unwrap_err();
+        assert!(
+            matches!(err, PermissionError::AmountExceeded { amount: 200, max: 100 }),
+            "expected AmountExceeded, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn recipient_not_allowed_error_details() {
+        let allowed = test_address(0x02);
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xB2; 32];
+        pset.add_key(
+            key,
+            "restricted".into(),
+            KeyPermission::TransferOnly {
+                max_amount: None,
+                allowed_recipients: vec![allowed],
+            },
+            1000,
+        );
+
+        let err = pset
+            .check_permission(
+                &key,
+                &Action::Transfer {
+                    to: test_address(0x99),
+                    amount: 1,
+                },
+                1001,
+            )
+            .unwrap_err();
+        assert!(matches!(err, PermissionError::RecipientNotAllowed(_)));
+    }
+
+    #[test]
+    fn full_access_allows_all_action_variants() {
+        let mut pset = PermissionSet::new(test_address(0x01));
+        let key: [u8; 32] = [0xB3; 32];
+        pset.add_key(key, "admin".into(), KeyPermission::FullAccess, 1000);
+
+        let actions = vec![
+            Action::ViewState,
+            Action::ManageKeys,
+            Action::EmergencyStop,
+            Action::Transfer {
+                to: test_address(0x02),
+                amount: u64::MAX,
+            },
+            Action::ContractCall {
+                contract: test_address(0x10),
+                method: "anything".into(),
+            },
+            Action::DeviceCommand {
+                device_id: test_address(0x50),
+                command: "any_command".into(),
+            },
+        ];
+
+        for action in &actions {
+            assert!(
+                pset.check_permission(&key, action, 1001).is_ok(),
+                "FullAccess should allow {:?}",
+                action,
+            );
+        }
+    }
 }
