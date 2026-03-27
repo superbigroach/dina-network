@@ -1,53 +1,67 @@
 # Dina Network Bridges
 
-## Active Bridges
+## Bridge Status
 
-### Base <-> Dina Direct Bridge (LIVE)
+| Bridge | Status | Speed | What's Needed |
+|--------|--------|-------|---------------|
+| **Base ↔ Dina** | **READY TO DEPLOY** | ~5 min | Deploy Solidity to Base Sepolia + start relayer |
+| Circle CCTP | NOT ACTIVE | ~15 min | Circle must approve Dina (6-12 months) |
+| Wormhole | NOT ACTIVE | ~15 min | Apply at wormhole.com |
+| LayerZero | NOT ACTIVE | ~3-10 min | Apply at layerzero.network |
+| Axelar | NOT ACTIVE | ~15 min | Apply at axelar.network |
+| Across | NOT ACTIVE | ~1-3 min | Apply at across.to |
+| Stargate | NOT ACTIVE | ~1-3 min | Requires LayerZero first |
 
-The only bridge that works without third-party approval.
-Lock USDC on Base, mint bridged-USDC on Dina Network.
+**Only the Base bridge works without third-party approval.** All other bridges have Dina-side contracts ready, but the third-party protocols need to approve and deploy their side.
 
-| Component       | Location                          |
-|-----------------|-----------------------------------|
-| Base contract   | `bridges/base-bridge/contracts/DinaBridge.sol` |
-| Dina contract   | `contracts/bridge-base/`          |
-| Relayer service | `bridges/base-bridge/relayer/`    |
-| Docs            | `dina-developer-portal.web.app/docs/bridges` |
+## Base ↔ Dina Direct Bridge
 
-### How to Deploy
-
-1. Deploy `DinaBridge.sol` to Base Sepolia (see `bridges/base-bridge/README.md`)
-2. Deploy the `bridge-base` contract to Dina testnet
-3. Configure and start the relayer service
-4. Bridge USDC from Base to Dina
-
-### Architecture
+The only bridge that works right now. No permission needed — we control both sides.
 
 ```
-   Base (EVM)                           Dina Network (Rust VM)
+   Base (EVM)                           Dina Network (WASM)
   +-----------------+                  +--------------------+
-  |  DinaBridge.sol  |  -- relayer -->  |  bridge-base/lib.rs |
-  |  (lock/unlock)   |                  |  (mint/burn)        |
+  |  DinaBridge.sol  |  -- relayer -->  |  bridge-base       |
+  |  (lock/unlock)   |                 |  (mint/burn)        |
   +-----------------+                  +--------------------+
          ^                                      |
          |              Relayer Service          |
          +---------- (watches both chains) ------+
 
-  Base -> Dina: User locks USDC  -> relayer calls claim()  -> bridged-USDC minted
-  Dina -> Base: User calls withdraw() -> relayer signs proof -> USDC unlocked on Base
+  Base → Dina: User locks USDC → relayer → bridged-USDC minted on Dina
+  Dina → Base: User burns bridged-USDC → relayer → real USDC unlocked on Base
 ```
 
-## Pending Integrations
+| Component | Location | Status |
+|-----------|----------|--------|
+| Base Solidity contract | `bridges/base-bridge/contracts/DinaBridge.sol` | Ready to deploy |
+| Dina WASM contract | `contracts/bridge-base/` | Deployed to testnet |
+| Bridged USDC token | `contracts/bridge-usdc/` | Deployed to testnet |
+| Relayer service | `bridges/base-bridge/relayer/` | Ready to run |
+| Deploy script | `bridges/base-bridge/scripts/deploy.ts` | Ready |
 
-See `bridges/third-party/` for application status of:
+### Deploy Steps
 
-- Wormhole
-- LayerZero
-- Axelar
-- Across
-- Stargate
-- Circle CCTP
+1. Get Base Sepolia ETH: https://www.alchemy.com/faucets/base-sepolia
+2. Configure `.env` with deployer private key
+3. Deploy: `npx hardhat run scripts/deploy.ts --network base-sepolia`
+4. Start relayer: `cd relayer && npm start`
+5. Bridge USDC from Base to Dina
+
+See `bridges/base-bridge/README.md` for detailed instructions.
+
+## Future Integrations
+
+All Dina-side contracts are built and deployed. Application guides with requirements and steps are in `bridges/third-party/`:
+
+- `wormhole-application.md` — Guardian support for Dina
+- `layerzero-application.md` — Endpoint deployment
+- `axelar-application.md` — Gateway deployment
+- `across-application.md` — Spoke pool listing
+- `stargate-application.md` — Pool listing (requires LayerZero)
+- `circle-cctp-application.md` — Native USDC (requires legal entity + audit)
 
 ## DinaDEX Swap
 
-See `bridges/swap/` for the fee-free decentralised exchange.
+Fee-free decentralized exchange. See `bridges/swap/README.md`.
+Once tokens are bridged to Dina, anyone can create trading pools and swap.
