@@ -34,6 +34,8 @@ pub struct NetworkConfig {
     pub consensus: ConsensusConfig,
     /// Privacy feature flags.
     pub privacy: PrivacyConfig,
+    /// Parallel execution engine configuration.
+    pub parallel_execution: ParallelExecutionConfig,
 }
 
 impl NetworkConfig {
@@ -51,6 +53,7 @@ impl NetworkConfig {
             fee_distribution: FeeDistribution::default_split(),
             consensus: ConsensusConfig::default_testnet(),
             privacy: PrivacyConfig::testnet(),
+            parallel_execution: ParallelExecutionConfig::default_config(),
         }
     }
 
@@ -68,6 +71,7 @@ impl NetworkConfig {
             fee_distribution: FeeDistribution::default_split(),
             consensus: ConsensusConfig::default_mainnet(),
             privacy: PrivacyConfig::mainnet(),
+            parallel_execution: ParallelExecutionConfig::default_config(),
         }
     }
 
@@ -86,6 +90,7 @@ impl NetworkConfig {
             fee_distribution: FeeDistribution::default_split(),
             consensus: ConsensusConfig::development(),
             privacy: PrivacyConfig::development(),
+            parallel_execution: ParallelExecutionConfig::default_config(),
         }
     }
 
@@ -151,6 +156,7 @@ impl fmt::Display for NetworkConfig {
         writeln!(f, "  channel_max_duration  : {} blocks", self.channel_max_duration_blocks)?;
         writeln!(f, "  consensus             : {}", self.consensus)?;
         writeln!(f, "  privacy               : {}", self.privacy)?;
+        writeln!(f, "  parallel_execution    : {}", self.parallel_execution)?;
         write!(f, "}}")
     }
 }
@@ -300,6 +306,70 @@ impl fmt::Display for PrivacyConfig {
         .flatten()
         .collect();
         write!(f, "Privacy {{ {} }}", flags.join(", "))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Parallel Execution Configuration
+// ---------------------------------------------------------------------------
+
+/// Configuration for the parallel transaction execution engine.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParallelExecutionConfig {
+    /// Whether parallel execution is enabled. When false, the sequential
+    /// `BlockExecutor` is used instead.
+    pub enabled: bool,
+    /// Maximum number of execution lanes. 0 means auto-detect from the
+    /// number of available CPU cores.
+    pub max_lanes: usize,
+    /// Minimum number of transactions in a block before the parallel
+    /// engine is engaged. Blocks smaller than this threshold are executed
+    /// sequentially to avoid thread-spawn overhead.
+    pub min_txs_for_parallel: usize,
+}
+
+impl ParallelExecutionConfig {
+    /// Sensible defaults: enabled, auto-detect lanes, require at least 4 txs.
+    pub fn default_config() -> Self {
+        Self {
+            enabled: true,
+            max_lanes: 0,
+            min_txs_for_parallel: 4,
+        }
+    }
+
+    /// Disabled configuration (sequential execution only).
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            max_lanes: 1,
+            min_txs_for_parallel: usize::MAX,
+        }
+    }
+}
+
+impl Default for ParallelExecutionConfig {
+    fn default() -> Self {
+        Self::default_config()
+    }
+}
+
+impl fmt::Display for ParallelExecutionConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.enabled {
+            let lanes = if self.max_lanes == 0 {
+                "auto".to_string()
+            } else {
+                self.max_lanes.to_string()
+            };
+            write!(
+                f,
+                "ParallelExec {{ lanes: {}, min_txs: {} }}",
+                lanes, self.min_txs_for_parallel
+            )
+        } else {
+            write!(f, "ParallelExec {{ disabled }}")
+        }
     }
 }
 
