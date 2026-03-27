@@ -254,7 +254,7 @@ dina-core              Foundation types, Ed25519 crypto, genesis, USDC accountin
   +-- dina-rpc         JSON-RPC 2.0 + REST API server
   +-- dina-sdk         Rust SDK for authoring DRC-compatible contracts
   +-- dina-sdk-macros  Proc-macros: #[dina_contract], #[dina_impl], #[view], #[init]
-  +-- dina-mcp         MCP tool server (12 tools for Cognitum Seed devices)
+  +-- dina-mcp         MCP tool server (12 tools for IoT devices)
   +-- dina-bench       Performance benchmarks
   +-- dina-faucet      Testnet faucet server
   +-- dina-monitoring  Prometheus metrics export
@@ -558,7 +558,7 @@ dina_network/
     dina-rpc/              JSON-RPC + REST API server (axum + jsonrpsee)
     dina-sdk/              Rust SDK for writing contracts
     dina-sdk-macros/       Proc-macros for contract boilerplate
-    dina-mcp/              MCP tool server for Cognitum Seed devices
+    dina-mcp/              MCP tool server for IoT devices
     dina-bench/            Performance benchmarks
     dina-faucet/           Testnet faucet
     dina-monitoring/       Prometheus metrics export

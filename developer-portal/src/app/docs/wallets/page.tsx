@@ -3,7 +3,7 @@ import Link from "next/link";
 export const metadata = {
   title: "Wallets — Dina Network Developer Portal",
   description:
-    "Overview of Standard, Agent (DRC-101), and Swarm (DRC-63) wallet types on the Dina Network.",
+    "Overview of Standard, Agent (DRC-101), and Parallel (DRC-63) wallet types on the Dina Network.",
 };
 
 const WALLET_TYPES = [
@@ -38,18 +38,18 @@ const WALLET_TYPES = [
     ],
   },
   {
-    name: "Swarm Wallet",
+    name: "Parallel Wallet",
     href: "/docs/wallets/swarm",
     badge: "DRC-63",
     badgeColor: "bg-purple-500/20 text-purple-400",
     description:
-      "The killer feature. A single authority controls N agent wallets that execute transactions in parallel, bypassing the sequential nonce bottleneck that limits every other blockchain. 100 agents means 100x throughput.",
+      "The killer feature. A single authority controls N sub-wallets that execute transactions in parallel, bypassing the sequential nonce bottleneck that limits every other blockchain. 4 modes (Single, Batch, Parallel, Auto) with auto-scaling from 1 to 10,000 sub-wallets. Cost-efficient: 10,000 payments for $0.10-$0.20.",
     features: [
-      "1 authority controls N agents",
-      "Parallel transaction execution",
-      "100x throughput multiplier",
-      "Batch payment processing",
-      "On-chain payroll and airdrops",
+      "1 authority controls N sub-wallets",
+      "4 modes: Single, Batch, Parallel, Auto",
+      "100x throughput per block",
+      "Auto-scaling sub-wallet count",
+      "Cost-efficient: $0.10-$0.20 per 10K payments",
     ],
   },
 ];
@@ -57,10 +57,11 @@ const WALLET_TYPES = [
 const COMPARISON_ROWS = [
   { label: "Signing", standard: "Single key", agent: "Delegated key", swarm: "N delegated keys" },
   { label: "Parallelism", standard: "1 tx / block", agent: "1 tx / block", swarm: "N tx / block" },
-  { label: "Spending limits", standard: "None (full access)", agent: "Daily + per-tx caps", swarm: "Per-agent caps" },
+  { label: "Spending limits", standard: "None (full access)", agent: "Daily + per-tx caps", swarm: "Per-wallet caps" },
   { label: "Owner control", standard: "Self", agent: "External owner", swarm: "Authority wallet" },
   { label: "Revocation", standard: "N/A", agent: "Instant by owner", swarm: "Instant by authority" },
-  { label: "Use case", standard: "End users, devs", agent: "AI bots, IoT", swarm: "Mass payments, airdrops" },
+  { label: "Modes", standard: "N/A", agent: "N/A", swarm: "Single, Batch, Parallel, Auto" },
+  { label: "Use case", standard: "End users, devs", agent: "AI bots, IoT", swarm: "Mass payments, IoT, AI agents" },
   { label: "DRC standard", standard: "--", agent: "DRC-101", swarm: "DRC-63" },
   { label: "Mnemonic backup", standard: "Yes", agent: "No (derived)", swarm: "No (derived)" },
   { label: "Key type", standard: "Ed25519", agent: "Ed25519", swarm: "Ed25519" },
@@ -152,7 +153,7 @@ export default function WalletsPage() {
                   Agent (DRC-101)
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-purple-400">
-                  Swarm (DRC-63)
+                  Parallel (DRC-63)
                 </th>
               </tr>
             </thead>
@@ -211,15 +212,16 @@ export default function WalletsPage() {
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
             <h3 className="text-lg font-semibold text-purple-400 mb-2">
-              Swarm Wallet (DRC-63)
+              Parallel Wallet (DRC-63)
             </h3>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Use a swarm wallet when you need massive parallelism. Every
-              blockchain is bottlenecked by sequential nonce-based transactions
-              per account. Swarm wallets break through this by giving you N agent
-              wallets that each process transactions independently, in parallel.
-              100 agents = 100x throughput in a single block. Use this for payroll,
-              airdrops, exchange settlement, or any high-volume payment scenario.
+              Use a parallel wallet when you need massive throughput from a single
+              identity. Every blockchain is bottlenecked by sequential nonce-based
+              transactions per account. Parallel wallets break through this by giving
+              you N sub-wallets that each process transactions independently, in
+              parallel. Choose from 4 modes (Single, Batch, Parallel, Auto) -- the
+              SDK picks the best strategy automatically. 100 sub-wallets = 100x
+              throughput in a single block, for just $0.10 more than sequential.
             </p>
           </div>
         </div>
@@ -234,7 +236,7 @@ export default function WalletsPage() {
           {[
             { label: "Create a Wallet", href: "/docs/wallets/create", desc: "Generate, import, and manage wallets" },
             { label: "Agent Wallets", href: "/docs/wallets/agent", desc: "Autonomous AI agent wallets (DRC-101)" },
-            { label: "Swarm Wallets", href: "/docs/wallets/swarm", desc: "Parallel transaction execution (DRC-63)" },
+            { label: "Parallel Wallets", href: "/docs/wallets/swarm", desc: "Per-user transaction parallelism (DRC-63)" },
             { label: "Key Management", href: "/docs/wallets/keys", desc: "Ed25519 keys, encryption, rotation" },
             { label: "HD Wallets", href: "/docs/wallets/hd", desc: "BIP-39 mnemonics and derivation paths" },
           ].map((link) => (

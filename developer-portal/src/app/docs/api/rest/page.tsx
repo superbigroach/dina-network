@@ -202,7 +202,7 @@ const ENDPOINTS: RestEndpointDoc[] = [
     id: "get-devices",
     method: "GET",
     path: "/devices",
-    description: "Returns the list of registered Cognitum Seed devices that participate in health-data attestation on the network.",
+    description: "Returns the list of registered IoT devices that participate in data attestation on the network.",
     responseFields: [
       { name: "count", type: "number", description: "Total registered devices." },
       { name: "devices", type: "Device[]", description: "Array of device objects." },

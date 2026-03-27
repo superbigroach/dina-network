@@ -855,7 +855,7 @@ const NOVEL_CATEGORIES: NovelCategory[] = [
   {
     name: "IoT & Device",
     description:
-      "DRC-70 through DRC-79. Device attestation, Cognitum Seed integration, sensor data anchoring.",
+      "DRC-70 through DRC-79. Device attestation, secure hardware integration, sensor data anchoring.",
   },
   {
     name: "Machine Economy",
@@ -896,9 +896,9 @@ const UNIQUE_FEATURES: UniqueFeature[] = [
       "Autonomous AI agents can hold funds with configurable spending limits, time-bound delegations, and full audit trails. Purpose-built for the agent economy.",
   },
   {
-    title: "Device Attestation (Cognitum Seed)",
+    title: "Device Attestation",
     description:
-      "Hardware-verified transactions via the Cognitum Seed secure element. Physical devices cryptographically prove they initiated a transaction, preventing spoofing.",
+      "Hardware-verified transactions via secure elements. Physical IoT devices cryptographically prove they initiated a transaction, preventing spoofing.",
   },
   {
     title: "52 novel smart contract standards",

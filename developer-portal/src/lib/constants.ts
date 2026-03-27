@@ -31,7 +31,7 @@ export const NAV_SECTIONS = [
       { title: "Overview", href: "/docs/wallets" },
       { title: "Create Wallet", href: "/docs/wallets/create" },
       { title: "Agent Wallets (DRC-101)", href: "/docs/wallets/agent" },
-      { title: "Swarm Wallets (DRC-63)", href: "/docs/wallets/swarm" },
+      { title: "Parallel Wallets (DRC-63)", href: "/docs/wallets/swarm" },
       { title: "Key Management", href: "/docs/wallets/keys" },
       { title: "HD Wallets & Mnemonics", href: "/docs/wallets/hd" },
     ],
@@ -127,7 +127,7 @@ export const API_ENDPOINTS = {
     getLatestBlock: { method: "GET", path: "/blocks/latest", description: "Get latest block" },
     getTx: { method: "GET", path: "/transactions/:hash", description: "Get transaction by hash" },
     getPeers: { method: "GET", path: "/peers", description: "Connected peer list" },
-    getDevices: { method: "GET", path: "/devices", description: "Registered Cognitum devices" },
+    getDevices: { method: "GET", path: "/devices", description: "Registered IoT devices" },
     faucet: { method: "POST", path: "/faucet/:address", description: "Request testnet USDC" },
   },
   // JSON-RPC methods

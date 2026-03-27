@@ -72,7 +72,7 @@ const wallet = DinaWallet.generate();
 const client = new DinaClient('https://rpc.dina.network');
 const balance = await client.getBalance(wallet.address);`;
 
-const TRUSTED_BY = ["Cognitum Seed devices", "Lucilla Health App"];
+const TRUSTED_BY = ["IoT Device Networks", "Lucilla Health App"];
 
 const FOOTER_LINKS = [
   {
