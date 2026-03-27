@@ -10,4 +10,4 @@ borsh = { workspace = true }
 sha2 = { workspace = true }
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]

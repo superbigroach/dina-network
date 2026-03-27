@@ -1,0 +1,13 @@
+[package]
+name = "dina-bridge"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dina-core = { path = "../dina-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }

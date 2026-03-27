@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use crate::error::DinaError;
 
 /// A 32-byte address derived from an Ed25519 public key via SHA-256.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Address(pub [u8; 32]);
 
 impl Address {
@@ -61,7 +61,7 @@ impl FromStr for Address {
 }
 
 /// A 32-byte hash (SHA-256 output).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Hash(pub [u8; 32]);
 
 impl Hash {

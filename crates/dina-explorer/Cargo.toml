@@ -1,0 +1,16 @@
+[package]
+name = "dina-explorer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dina-core = { path = "../dina-core" }
+dina-storage = { path = "../dina-storage" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }

@@ -1,0 +1,28 @@
+[package]
+name = "dina-bench"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+dina-core = { path = "../dina-core" }
+dina-channels = { path = "../dina-channels" }
+dina-privacy = { path = "../dina-privacy" }
+dina-storage = { path = "../dina-storage" }
+drc1-token = { path = "../../contracts/drc1-token" }
+drc101-agent-wallet = { path = "../../contracts/drc101-agent-wallet" }
+ed25519-dalek = { workspace = true }
+x25519-dalek = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "crypto_bench"
+harness = false
+
+[[bench]]
+name = "state_bench"
+harness = false

@@ -1,0 +1,145 @@
+# =============================================================================
+# Dina Network — Local 3-Validator Testnet
+# Usage: docker compose up --build
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Validator 1 (seed node — other validators bootstrap from this one)
+  # ---------------------------------------------------------------------------
+  validator-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dina-validator-1
+    hostname: validator-1
+    command:
+      - "--data-dir=/data"
+      - "--listen=/ip4/0.0.0.0/tcp/9944"
+      - "--rpc-port=8545"
+      - "--rest-port=8080"
+      - "--validator"
+      - "--validator-key=/keys/node_key"
+      - "--chain-id=dina-local-testnet"
+    volumes:
+      - validator-1-data:/data
+      - ./keys/validator-1:/keys:ro
+    networks:
+      - dina-net
+    environment:
+      - RUST_LOG=info,dina_consensus=debug,dina_network=debug
+      - DINA_CHAIN_ID=dina-local-testnet
+      - DINA_VALIDATOR_INDEX=0
+    ports:
+      - "19944:9944"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Validator 2
+  # ---------------------------------------------------------------------------
+  validator-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dina-validator-2
+    hostname: validator-2
+    command:
+      - "--data-dir=/data"
+      - "--listen=/ip4/0.0.0.0/tcp/9944"
+      - "--rpc-port=8545"
+      - "--rest-port=8080"
+      - "--validator"
+      - "--validator-key=/keys/node_key"
+      - "--chain-id=dina-local-testnet"
+      - "--bootstrap=/ip4/validator-1/tcp/9944"
+    volumes:
+      - validator-2-data:/data
+      - ./keys/validator-2:/keys:ro
+    networks:
+      - dina-net
+    environment:
+      - RUST_LOG=info,dina_consensus=debug,dina_network=debug
+      - DINA_CHAIN_ID=dina-local-testnet
+      - DINA_VALIDATOR_INDEX=1
+    depends_on:
+      - validator-1
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Validator 3
+  # ---------------------------------------------------------------------------
+  validator-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dina-validator-3
+    hostname: validator-3
+    command:
+      - "--data-dir=/data"
+      - "--listen=/ip4/0.0.0.0/tcp/9944"
+      - "--rpc-port=8545"
+      - "--rest-port=8080"
+      - "--validator"
+      - "--validator-key=/keys/node_key"
+      - "--chain-id=dina-local-testnet"
+      - "--bootstrap=/ip4/validator-1/tcp/9944"
+    volumes:
+      - validator-3-data:/data
+      - ./keys/validator-3:/keys:ro
+    networks:
+      - dina-net
+    environment:
+      - RUST_LOG=info,dina_consensus=debug,dina_network=debug
+      - DINA_CHAIN_ID=dina-local-testnet
+      - DINA_VALIDATOR_INDEX=2
+    depends_on:
+      - validator-1
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # RPC Node (non-validator, exposes JSON-RPC and REST to the host)
+  # ---------------------------------------------------------------------------
+  rpc-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dina-rpc
+    hostname: rpc-node
+    command:
+      - "--data-dir=/data"
+      - "--listen=/ip4/0.0.0.0/tcp/9944"
+      - "--rpc-port=8545"
+      - "--rest-port=8080"
+      - "--chain-id=dina-local-testnet"
+      - "--bootstrap=/ip4/validator-1/tcp/9944"
+    volumes:
+      - rpc-data:/data
+    networks:
+      - dina-net
+    environment:
+      - RUST_LOG=info,dina_rpc=debug
+      - DINA_CHAIN_ID=dina-local-testnet
+    ports:
+      - "8545:8545"
+      - "8080:8080"
+    depends_on:
+      - validator-1
+      - validator-2
+      - validator-3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  dina-net:
+    driver: bridge
+
+volumes:
+  validator-1-data:
+  validator-2-data:
+  validator-3-data:
+  rpc-data:

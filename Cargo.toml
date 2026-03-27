@@ -2,12 +2,14 @@
 resolver = "2"
 members = [
     "crates/dina-core",
+    "crates/dina-bridge",
     "crates/dina-channels",
     "crates/dina-consensus",
     "crates/dina-network",
     "crates/dina-wasm",
     "crates/dina-rpc",
     "crates/dina-storage",
+    "crates/dina-explorer",
     "crates/dina-privacy",
     "crates/dina-relay",
     "crates/dina-sdk",
@@ -44,6 +46,9 @@ members = [
     "contracts/drc108-resource",
     "contracts/drc110-firmware",
     "contracts/drc113-relay",
+    "crates/dina-faucet",
+    "crates/dina-mcp",
+    "crates/dina-bench",
 ]
 
 [workspace.package]
@@ -103,6 +108,9 @@ anyhow = "1"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
 
 # Hex encoding
 hex = "0.4"

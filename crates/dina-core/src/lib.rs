@@ -4,12 +4,18 @@ pub mod crypto;
 pub mod transaction;
 pub mod account;
 pub mod block;
+pub mod chain;
 pub mod merkle;
 pub mod device;
+pub mod executor;
+pub mod fees;
+pub mod config;
 
 pub use types::{Address, Hash};
 pub use error::DinaError;
 pub use transaction::{Transaction, Sig64};
 pub use account::{Account, AccountState};
 pub use block::{Block, BlockHeader};
+pub use chain::ChainManager;
 pub use device::{DeviceIdentity, DeviceType};
+pub use executor::{BlockExecutor, ExecutionResult, TransactionReceipt, Event};

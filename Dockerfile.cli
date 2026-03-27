@@ -1,0 +1,45 @@
+# =============================================================================
+# Dina Network — CLI Tool Dockerfile
+# Multi-stage build: Rust builder -> minimal Debian runtime
+# =============================================================================
+
+# ---------- Stage 1: Builder ----------
+FROM rust:1.94-slim AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    cmake \
+    make \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy manifests first to cache dependency builds
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY node/ node/
+COPY cli/ cli/
+COPY contracts/ contracts/
+
+# Build only the CLI binary in release mode
+RUN cargo build --release --bin dina
+
+# ---------- Stage 2: Runtime ----------
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/dina /usr/local/bin/dina
+
+RUN chmod +x /usr/local/bin/dina
+
+# Working directory for key files and output
+WORKDIR /workspace
+
+ENTRYPOINT ["dina"]

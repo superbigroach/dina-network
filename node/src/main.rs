@@ -1,3 +1,4 @@
+mod chain_state;
 mod genesis;
 mod mempool;
 

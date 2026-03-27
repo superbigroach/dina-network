@@ -12,6 +12,7 @@ pub mod gossip;
 pub mod message;
 pub mod node;
 pub mod peer;
+pub mod sync;
 
 // Re-export primary types for convenience.
 pub use discovery::{DiscoveryConfig, DiscoveryState};
@@ -21,3 +22,4 @@ pub use message::{
 };
 pub use node::{CommandHandle, DinaBehaviour, DinaNode, DinaNodeHandle, NodeCommand, NodeEvent};
 pub use peer::{PeerInfo, PeerManager, PeerManagerConfig};
+pub use sync::{SyncManager, SyncRequest, SyncState};
