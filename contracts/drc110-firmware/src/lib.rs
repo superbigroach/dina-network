@@ -128,7 +128,7 @@ impl FirmwareRegistry {
         let device_id = record.device_id;
         self.firmware_history
             .entry(device_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(record.clone());
         self.device_firmware.insert(device_id, record);
     }

@@ -60,7 +60,7 @@ pub fn validate_relay_blob(blob: &RelayBlob, party_a: &[u8; 32], party_b: &[u8; 
 ///   - relay_fee (8)
 ///   - has_recipient (1)
 ///   - recipient (32, only if has_recipient == 1)
-/// Total: 201 bytes without recipient, 233 bytes with recipient.
+///     Total: 201 bytes without recipient, 233 bytes with recipient.
 pub fn blob_to_qr_bytes(blob: &RelayBlob) -> Vec<u8> {
     let state_bytes = state::to_bytes(&blob.signed_state.state);
     let mut buf = Vec::with_capacity(233);
@@ -137,7 +137,7 @@ pub fn blob_from_qr_bytes(bytes: &[u8]) -> Result<RelayBlob> {
 ///   - signature_a (64)
 ///   - signature_b (64)
 ///   - relay_fee (8)
-/// Total: 200 bytes exactly.
+///     Total: 200 bytes exactly.
 pub fn blob_to_ble_advertisement(blob: &RelayBlob) -> Vec<u8> {
     let state_bytes = state::to_bytes(&blob.signed_state.state);
     let mut buf = Vec::with_capacity(200);

@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
 
 use crate::message::{
-    BlockPayload, NetworkMessage, Proposal, TransactionPayload, ViewChange, Vote,
+    BlockPayload, NetworkMessage, TransactionPayload,
 };
 
 /// The three canonical GossipSub topics.

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::leader::LeaderSchedule;
 use crate::view_change::{ViewChange, ViewChangeCollector};
@@ -472,7 +472,7 @@ impl TurboBFT {
     /// signs it, and returns the proposal.
     pub fn create_proposal(&self, transactions: Vec<Transaction>) -> Proposal {
         // Compute a block hash from the transactions and height
-        let block_hash = self.compute_block_hash(self.state.height, self.state.round, &transactions);
+        let _block_hash = self.compute_block_hash(self.state.height, self.state.round, &transactions);
 
         let header = BlockHeader {
             block_number: self.state.height,
@@ -501,7 +501,7 @@ impl TurboBFT {
     /// Return the quorum size: 2/3 + 1 of the total validator count.
     pub fn quorum_size(&self) -> usize {
         let n = self.config.validator_keys.len();
-        (n * 2 + 2) / 3
+        (n * 2).div_ceil(3)
     }
 
     /// Check if a set of votes constitutes a quorum.

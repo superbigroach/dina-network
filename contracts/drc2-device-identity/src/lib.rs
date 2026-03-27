@@ -101,7 +101,7 @@ impl DeviceRegistryState {
         self.pubkey_to_id.insert(public_key, device_id);
         self.owner_devices
             .entry(caller)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(device_id);
         self.total_devices += 1;
     }

@@ -152,7 +152,7 @@ impl PaymentChannel {
 
         // Verify conservation of funds (with overflow protection)
         let total = final_state.state.balance_a.checked_add(final_state.state.balance_b)
-            .ok_or_else(|| ChannelError::InvalidSignature)?;
+            .ok_or(ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
                 need: self.total_locked,
@@ -203,7 +203,7 @@ impl PaymentChannel {
 
         // Verify conservation of funds (with overflow protection)
         let total = signed_state.state.balance_a.checked_add(signed_state.state.balance_b)
-            .ok_or_else(|| ChannelError::InvalidSignature)?;
+            .ok_or(ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
                 need: self.total_locked,
@@ -265,7 +265,7 @@ impl PaymentChannel {
 
         // Verify conservation of funds (with overflow protection)
         let total = signed_state.state.balance_a.checked_add(signed_state.state.balance_b)
-            .ok_or_else(|| ChannelError::InvalidSignature)?;
+            .ok_or(ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
                 need: self.total_locked,

@@ -88,9 +88,7 @@ impl DataMarketplace {
 
     fn derive_id(addr: &Address, nonce: u64) -> [u8; 32] {
         let mut id = [0u8; 32];
-        for i in 0..32 {
-            id[i] = addr[i];
-        }
+        id.copy_from_slice(addr);
         let nonce_bytes = nonce.to_le_bytes();
         for i in 0..8 {
             id[i] ^= nonce_bytes[i];
@@ -190,7 +188,7 @@ impl DataMarketplace {
         score: u8,
         review: String,
     ) {
-        assert!(score >= 1 && score <= 5, "DRC106: rating must be 1-5");
+        assert!((1..=5).contains(&score), "DRC106: rating must be 1-5");
         let purchase = self
             .purchases
             .get_mut(&purchase_id)
@@ -213,7 +211,7 @@ impl DataMarketplace {
         };
         self.ratings
             .entry(purchase.listing_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(rating);
     }
 

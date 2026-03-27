@@ -7,7 +7,7 @@ use wasmtime::{AsContext, AsContextMut, Caller, Linker};
 use dina_core::types::Address;
 
 use crate::gas::DEFAULT_GAS_COSTS;
-use crate::sandbox::{SandboxLimits, SandboxViolation};
+use crate::sandbox::SandboxLimits;
 
 /// An event emitted by a contract during execution.
 #[derive(Debug, Clone)]
@@ -55,6 +55,7 @@ pub struct WasmHostState {
 }
 
 impl WasmHostState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         caller: Address,
         contract_address: Address,

@@ -65,6 +65,7 @@ pub struct DinaNode {
     command_rx: mpsc::Receiver<NodeCommand>,
     event_tx: mpsc::Sender<NodeEvent>,
     /// Handle for sending commands to the node.
+    #[allow(dead_code)]
     command_tx: mpsc::Sender<NodeCommand>,
 }
 
@@ -367,13 +368,12 @@ impl DinaNode {
             }
 
             SwarmEvent::Behaviour(DinaBehaviourEvent::Kademlia(
-                kad::Event::OutboundQueryProgressed { result, .. },
+                kad::Event::OutboundQueryProgressed {
+                    result: kad::QueryResult::Bootstrap(Ok(kad::BootstrapOk { num_remaining, .. })),
+                    ..
+                },
             )) => {
-                if let kad::QueryResult::Bootstrap(Ok(kad::BootstrapOk { num_remaining, .. })) =
-                    result
-                {
-                    debug!(num_remaining, "Kademlia bootstrap progress");
-                }
+                debug!(num_remaining, "Kademlia bootstrap progress");
             }
 
             // --- Identify events ---

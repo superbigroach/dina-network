@@ -24,6 +24,7 @@ pub struct WalletManager {
 }
 
 impl WalletManager {
+    #[allow(dead_code)]
     pub fn new(wallet_dir: PathBuf) -> Self {
         Self { wallet_dir }
     }

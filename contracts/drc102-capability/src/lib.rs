@@ -67,14 +67,14 @@ impl CapabilityRegistryState {
         let existing = self
             .device_capabilities
             .entry(device_id)
-            .or_insert_with(Vec::new);
+            .or_default();
 
         for cap in &capabilities {
             // Update the reverse index
             let entry = self
                 .capability_index
                 .entry(cap.capability_type.clone())
-                .or_insert_with(Vec::new);
+                .or_default();
             if !entry.contains(&device_id) {
                 entry.push(device_id);
             }

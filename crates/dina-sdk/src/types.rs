@@ -225,7 +225,7 @@ impl Default for SpendingLimits {
 
 /// Tracks spending against limits within rolling windows.
 #[derive(
-    Clone, Debug, PartialEq, Eq,
+    Clone, Debug, Default, PartialEq, Eq,
     Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct SpendingStats {
@@ -239,13 +239,3 @@ pub struct SpendingStats {
     pub monthly_reset_at: u64,
 }
 
-impl Default for SpendingStats {
-    fn default() -> Self {
-        Self {
-            spent_daily: 0,
-            spent_monthly: 0,
-            daily_reset_at: 0,
-            monthly_reset_at: 0,
-        }
-    }
-}

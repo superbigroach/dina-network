@@ -32,6 +32,7 @@ pub struct ChainState {
     /// In-memory account state (balances, nonces, contract metadata).
     pub accounts: AccountState,
     /// Transactions waiting to be included in the next block.
+    #[allow(dead_code)]
     pub pending_txs: Vec<Transaction>,
 }
 
@@ -137,11 +138,13 @@ impl ChainState {
     }
 
     /// Look up an account by address.
+    #[allow(dead_code)]
     pub fn get_account(&self, addr: &Address) -> Option<&dina_core::Account> {
         self.accounts.get_account(addr)
     }
 
     /// Get the balance of an account. Returns 0 if the account does not exist.
+    #[allow(dead_code)]
     pub fn get_balance(&self, addr: &Address) -> u64 {
         self.accounts
             .get_account(addr)

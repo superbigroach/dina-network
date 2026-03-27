@@ -118,7 +118,7 @@ impl PeerManager {
         // Check capacity (validators always allowed)
         let info = self.peers.get(&peer_id);
         let is_new = info.is_none();
-        let is_validator = info.map_or(false, |i| i.is_validator);
+        let is_validator = info.is_some_and(|i| i.is_validator);
 
         if is_new && !is_validator && self.peers.len() >= self.config.max_peers {
             debug!(%peer_id, max = self.config.max_peers, "at peer capacity, rejecting");
@@ -209,7 +209,7 @@ impl PeerManager {
     pub fn is_banned(&self, peer_id: &PeerId) -> bool {
         self.banned
             .get(peer_id)
-            .map_or(false, |b| !b.is_expired())
+            .is_some_and(|b| !b.is_expired())
     }
 
     /// Return the number of connected peers.

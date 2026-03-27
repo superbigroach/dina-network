@@ -61,7 +61,7 @@ impl ScriptableTokenState {
         assert!(caller == *creator, "DRC18: only creator can add script");
         self.scripts
             .entry(token_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(script_uri);
     }
 

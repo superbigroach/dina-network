@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 pub mod db;
 pub mod migration;
 pub mod state;

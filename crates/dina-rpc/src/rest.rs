@@ -12,8 +12,7 @@ use tracing::info;
 use dina_core::transaction::Transaction;
 use dina_core::types::Address;
 
-use crate::jsonrpc::{block_to_info, BlockInfo, DeviceInfo, NodeState};
-use dina_core::device::DeviceType;
+use crate::jsonrpc::{block_to_info, DeviceInfo, NodeState};
 
 // ---------------------------------------------------------------------------
 // Shared application state
@@ -34,12 +33,14 @@ struct HealthResponse {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 struct BalanceResponse {
     address: String,
     balance: u64,
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 struct SubmitTxRequest {
     tx_hex: String,
 }
@@ -50,6 +51,7 @@ struct SubmitTxBody {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 struct SubmitTxResponse {
     tx_hash: String,
 }
@@ -61,6 +63,7 @@ struct PeerInfo {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 struct ErrorResponse {
     error: String,
 }

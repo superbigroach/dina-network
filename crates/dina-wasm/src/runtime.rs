@@ -66,6 +66,7 @@ pub struct WasmRuntime {
     /// In-memory contract store: contract_address -> StoredContract.
     contracts: Arc<Mutex<HashMap<Address, StoredContract>>>,
     /// In-memory contract storage: contract_address -> key-value map.
+    #[allow(clippy::type_complexity)]
     contract_storage: Arc<Mutex<HashMap<Address, HashMap<Vec<u8>, Vec<u8>>>>>,
     /// Per-deployer nonce for deterministic contract address generation.
     nonces: Arc<Mutex<HashMap<Address, u64>>>,

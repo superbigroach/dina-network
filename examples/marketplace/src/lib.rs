@@ -154,7 +154,7 @@ impl MarketplaceState {
         // Update the type index for service discovery
         self.type_index
             .entry(service_type.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id);
 
         let listing = ServiceListing {

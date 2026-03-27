@@ -197,7 +197,7 @@ impl RelayRegistry {
 
         self.relay_history
             .entry(submitter)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(record);
 
         // Remove from pending

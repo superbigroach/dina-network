@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use tracing::info;
 
 use dina_core::block::Block;
-use dina_core::device::{DeviceIdentity, DeviceType};
+use dina_core::device::DeviceIdentity;
 use dina_core::fees::FeeSchedule;
 use dina_core::transaction::Transaction;
 use dina_core::types::{Address, Hash};
@@ -168,6 +168,7 @@ pub struct NodeState {
     pub blocks: Arc<RwLock<Vec<Block>>>,
     pub block_index: Arc<RwLock<HashMap<Hash, usize>>>,
     pub tx_pool: Arc<RwLock<Vec<Transaction>>>,
+    #[allow(clippy::type_complexity)]
     pub tx_index: Arc<RwLock<HashMap<Hash, (Transaction, Option<u64>)>>>,
     pub devices: Arc<RwLock<HashMap<String, DeviceIdentity>>>,
     pub peer_count: Arc<RwLock<u32>>,

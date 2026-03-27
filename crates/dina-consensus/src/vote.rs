@@ -160,7 +160,7 @@ impl VoteSet {
     /// The quorum size: 2f + 1 where f = floor((n - 1) / 3).
     /// Equivalent to ceil(2n/3) for the standard BFT threshold.
     pub fn quorum_size(&self) -> usize {
-        (self.total_validators * 2 + 2) / 3
+        (self.total_validators * 2).div_ceil(3)
     }
 
     /// Add a vote to the set. Returns true if the vote was new (not a duplicate).
@@ -262,7 +262,7 @@ impl CommitCertificate {
 
     /// Verify all vote signatures in the certificate and confirm quorum.
     pub fn verify(&self, total_validators: usize) -> bool {
-        let quorum = (total_validators * 2 + 2) / 3;
+        let quorum = (total_validators * 2).div_ceil(3);
 
         if self.votes.len() < quorum {
             warn!(

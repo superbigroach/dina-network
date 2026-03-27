@@ -64,7 +64,7 @@ pub enum ValidatorStatus {
 }
 
 /// Human-readable metadata about a validator.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidatorMetadata {
     pub name: String,
     pub website: String,
@@ -72,16 +72,6 @@ pub struct ValidatorMetadata {
     pub logo_url: String,
 }
 
-impl Default for ValidatorMetadata {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            website: String::new(),
-            description: String::new(),
-            logo_url: String::new(),
-        }
-    }
-}
 
 /// The result of distributing rewards for a single epoch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,7 +319,7 @@ impl ValidatorSet {
     pub fn is_active(&self, address: &Address) -> bool {
         self.validators
             .get(address)
-            .map_or(false, |v| v.status == ValidatorStatus::Active)
+            .is_some_and(|v| v.status == ValidatorStatus::Active)
     }
 
     /// Get a validator by address.

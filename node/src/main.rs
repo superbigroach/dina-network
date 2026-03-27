@@ -2,7 +2,7 @@ mod chain_state;
 mod genesis;
 mod mempool;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -102,7 +102,7 @@ fn home_dir() -> Option<PathBuf> {
 ///
 /// If a key file exists at `<data_dir>/node_key`, it is loaded.
 /// Otherwise a new keypair is generated and saved.
-fn load_or_generate_identity(data_dir: &PathBuf) -> Result<SigningKey> {
+fn load_or_generate_identity(data_dir: &Path) -> Result<SigningKey> {
     let key_path = data_dir.join("node_key");
 
     if key_path.exists() {

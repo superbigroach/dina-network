@@ -29,6 +29,7 @@ pub struct WsEvent {
 #[derive(Clone)]
 pub struct DinaWsState {
     senders: Arc<HashMap<SubscriptionTopic, broadcast::Sender<WsEvent>>>,
+    #[allow(dead_code)]
     subscriber_count: Arc<RwLock<u32>>,
 }
 

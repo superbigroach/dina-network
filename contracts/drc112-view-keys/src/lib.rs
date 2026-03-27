@@ -48,7 +48,7 @@ pub enum ViewScope {
 }
 
 /// Filters on what subset of scoped data to reveal
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ViewFilter {
     /// Only show data from this timestamp onward (0 = no limit)
     pub valid_from: u64,
@@ -64,18 +64,6 @@ pub struct ViewFilter {
     pub counterparty_filter: Vec<Address>,
 }
 
-impl Default for ViewFilter {
-    fn default() -> Self {
-        Self {
-            valid_from: 0,
-            valid_until: 0,
-            min_amount: 0,
-            max_amount: 0,
-            categories: Vec::new(),
-            counterparty_filter: Vec::new(),
-        }
-    }
-}
 
 /// A view key grant — permission for a grantee to see specific data
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -201,6 +189,7 @@ impl ViewKeyRegistry {
     }
 
     /// Grant a view key to a grantee
+    #[allow(clippy::too_many_arguments)]
     pub fn grant_view_key(
         &mut self,
         caller: Address,

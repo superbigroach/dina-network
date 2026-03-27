@@ -47,6 +47,12 @@ pub struct SensorAttestationState {
     pub next_id: u64,
 }
 
+impl Default for SensorAttestationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SensorAttestationState {
     pub fn new() -> Self {
         Self {
@@ -90,7 +96,7 @@ impl SensorAttestationState {
         self.attestations.insert(id, attestation);
         self.device_attestations
             .entry(device_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id);
 
         id

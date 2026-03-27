@@ -66,7 +66,7 @@ impl CredentialRegistry {
         let issuers = self
             .authorized_issuers
             .entry(credential_type)
-            .or_insert_with(Vec::new);
+            .or_default();
         if !issuers.contains(&issuer) {
             issuers.push(issuer);
         }
@@ -110,7 +110,7 @@ impl CredentialRegistry {
         self.credentials.insert(id, credential);
         self.holder_creds
             .entry(holder)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id);
 
         id

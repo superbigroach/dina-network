@@ -42,6 +42,12 @@ pub struct CategoryScore {
     pub total_rating: u64,
 }
 
+impl Default for ReputationDetails {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReputationDetails {
     pub fn new() -> Self {
         Self {
@@ -79,7 +85,7 @@ impl ReputationDetails {
             let recency_weight = 1.0 + (idx as f64) / n;
 
             // Volume weight: log2(volume + 1) capped at 20
-            let volume_weight = ((interaction.volume as f64 + 1.0).log2()).min(20.0).max(1.0);
+            let volume_weight = ((interaction.volume as f64 + 1.0).log2()).clamp(1.0, 20.0);
 
             // Outcome multiplier
             let outcome_score: f64 = match interaction.outcome {
@@ -116,6 +122,12 @@ pub struct ReputationState {
     pub reputations: BTreeMap<[u8; 32], ReputationDetails>,
 }
 
+impl Default for ReputationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReputationState {
     pub fn new() -> Self {
         Self {
@@ -137,6 +149,7 @@ impl ReputationState {
             .unwrap_or_else(ReputationDetails::new)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record_interaction(
         &mut self,
         caller: [u8; 32],
@@ -160,7 +173,7 @@ impl ReputationState {
         let details = self
             .reputations
             .entry(subject)
-            .or_insert_with(ReputationDetails::new);
+            .or_default();
 
         details.total_interactions += 1;
         details.total_volume += volume;

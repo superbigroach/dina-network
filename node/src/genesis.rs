@@ -109,6 +109,7 @@ pub fn default_testnet_genesis() -> GenesisConfig {
 }
 
 /// Save a genesis config to a JSON file.
+#[allow(dead_code)]
 pub fn save_genesis_config(config: &GenesisConfig, path: &str) -> Result<()> {
     let json =
         serde_json::to_string_pretty(config).context("failed to serialize genesis config")?;

@@ -84,6 +84,12 @@ pub struct SpendingStats {
     pub current_day: u64,
 }
 
+impl Default for SpendingStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpendingStats {
     pub fn new() -> Self {
         Self {

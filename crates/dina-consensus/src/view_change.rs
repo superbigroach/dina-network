@@ -94,7 +94,7 @@ impl ViewChangeCollector {
 
     /// The quorum needed for a view change: 2f + 1 = ceil(2n/3).
     pub fn quorum_size(&self) -> usize {
-        (self.total_validators * 2 + 2) / 3
+        (self.total_validators * 2).div_ceil(3)
     }
 
     /// Add a view change message. Returns `Some(new_round)` if quorum has now

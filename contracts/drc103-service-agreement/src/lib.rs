@@ -48,6 +48,12 @@ pub struct ServiceAgreementState {
     pub escrow_balances: BTreeMap<[u8; 32], u64>,
 }
 
+impl Default for ServiceAgreementState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceAgreementState {
     pub fn new() -> Self {
         Self {

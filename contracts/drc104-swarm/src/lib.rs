@@ -113,7 +113,7 @@ impl SwarmRegistry {
             caller == config.admin,
             "DRC104: only swarm admin can add members"
         );
-        let members = self.members.entry(swarm_id).or_insert_with(Vec::new);
+        let members = self.members.entry(swarm_id).or_default();
         assert!(
             (members.len() as u64) < config.max_members,
             "DRC104: swarm is full"
@@ -166,7 +166,7 @@ impl SwarmRegistry {
         let total = members.len();
         assert!(total > 0, "DRC104: swarm has no members");
 
-        let required = ((total as u64) * (config.quorum as u64) + 99) / 100;
+        let required = ((total as u64) * (config.quorum as u64)).div_ceil(100);
         assert!(
             valid_signers as u64 >= required,
             "DRC104: quorum not met ({valid_signers}/{required} required)"

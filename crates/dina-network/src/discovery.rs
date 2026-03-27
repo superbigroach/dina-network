@@ -164,7 +164,7 @@ pub fn add_bootstrap_peers(
     for addr in peers {
         // Extract the PeerId from the multiaddr's last `/p2p/...` component.
         if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
-            let mut addr_without_p2p = addr.clone();
+            let addr_without_p2p = addr.clone();
             // Remove the /p2p/ suffix for the address portion
             let protocols: Vec<_> = addr_without_p2p.iter().collect();
             let base_addr: Multiaddr = protocols

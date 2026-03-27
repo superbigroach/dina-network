@@ -62,6 +62,7 @@ impl Mempool {
     }
 
     /// Create a mempool with custom size and expiry limits.
+    #[allow(dead_code)]
     pub fn with_limits(max_size: usize, expiry_secs: u64) -> Self {
         Self {
             by_fee: BTreeMap::new(),
@@ -154,11 +155,13 @@ impl Mempool {
     }
 
     /// Return true if the mempool is empty.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.by_fee.is_empty()
     }
 
     /// Check if a transaction with the given hash is in the mempool.
+    #[allow(dead_code)]
     pub fn contains(&self, hash: &Hash) -> bool {
         self.hash_index.contains_key(hash)
     }
@@ -191,6 +194,7 @@ impl Mempool {
     }
 
     /// Remove all transactions from the mempool.
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         let size = self.by_fee.len();
         self.by_fee.clear();

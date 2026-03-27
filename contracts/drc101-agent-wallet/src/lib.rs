@@ -48,6 +48,12 @@ pub struct SpendingStats {
     pub current_month: u64,
 }
 
+impl Default for SpendingStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpendingStats {
     pub fn new() -> Self {
         Self {
@@ -114,6 +120,7 @@ impl AgentWalletState {
 
     // -- Core transfer logic ------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_transfer(
         &mut self,
         caller: [u8; 32],
@@ -215,6 +222,7 @@ impl AgentWalletState {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_call(
         &mut self,
         caller: [u8; 32],

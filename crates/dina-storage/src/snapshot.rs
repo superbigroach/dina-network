@@ -126,7 +126,7 @@ impl SnapshotManager {
         if current_height == 0 {
             return false;
         }
-        current_height % self.config.snapshot_interval_blocks == 0
+        current_height.is_multiple_of(self.config.snapshot_interval_blocks)
     }
 
     /// Build the file path for a snapshot at a given height.

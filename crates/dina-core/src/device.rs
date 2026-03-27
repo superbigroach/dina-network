@@ -49,7 +49,7 @@ pub struct GeoLocation {
 }
 
 /// Additional metadata associated with a device.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DeviceMetadata {
     /// Human-readable name for the device.
     pub name: Option<String>,
@@ -67,19 +67,6 @@ pub struct DeviceMetadata {
     pub extra: std::collections::HashMap<String, String>,
 }
 
-impl Default for DeviceMetadata {
-    fn default() -> Self {
-        Self {
-            name: None,
-            manufacturer: None,
-            model: None,
-            firmware_version: None,
-            location: None,
-            interfaces: Vec::new(),
-            extra: std::collections::HashMap::new(),
-        }
-    }
-}
 
 /// On-chain identity of a registered device.
 #[derive(Clone, Debug, Serialize, Deserialize)]

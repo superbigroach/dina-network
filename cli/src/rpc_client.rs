@@ -101,6 +101,7 @@ impl RpcClient {
     }
 
     /// Get a block by hash.
+    #[allow(dead_code)]
     pub async fn get_block_by_hash(&self, hash: &str) -> Result<Value> {
         self.call("dina_getBlockByHash", json!([hash])).await
     }
@@ -126,6 +127,7 @@ impl RpcClient {
     }
 
     /// Get the chain ID.
+    #[allow(dead_code)]
     pub async fn chain_id(&self) -> Result<String> {
         let result = self.call("dina_chainId", json!([])).await?;
         result

@@ -21,6 +21,12 @@ pub struct HookRegistry {
     pub send_hooks: BTreeMap<Address, Address>,
 }
 
+impl Default for HookRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HookRegistry {
     pub fn new() -> Self {
         Self {
@@ -105,7 +111,7 @@ impl TokenWithHooks {
     /// Transfers tokens and records hook calls for the runtime to dispatch.
     /// 1) If sender has a send_hook, a HookCall is queued for it.
     /// 2) If receiver has a receive_hook, a HookCall is queued for it.
-    /// The actual token transfer is performed immediately.
+    ///    The actual token transfer is performed immediately.
     pub fn send(
         &mut self,
         caller: Address,

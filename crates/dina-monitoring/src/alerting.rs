@@ -171,7 +171,7 @@ impl AlertManager {
                 {
                     let max_secs = *max_ms as f64 / 1000.0;
                     // Alert if the latest observation exceeds threshold
-                    obs.last().map_or(false, |&v| v > max_secs)
+                    obs.last().is_some_and(|&v| v > max_secs)
                 } else {
                     false
                 }

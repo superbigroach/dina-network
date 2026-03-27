@@ -40,7 +40,7 @@ impl GasMeter {
     ///
     /// Returns an error if the meter is exhausted (used + amount > limit).
     pub fn consume(&mut self, operation: &str, amount: u64) -> Result<(), DinaError> {
-        let new_used = self.used.checked_add(amount).unwrap_or(u64::MAX);
+        let new_used = self.used.saturating_add(amount);
         if new_used > self.limit {
             return Err(DinaError::WasmExecutionError(format!(
                 "out of gas: operation '{}' requires {} gas, only {} remaining",

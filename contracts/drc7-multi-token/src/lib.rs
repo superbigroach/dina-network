@@ -187,7 +187,7 @@ impl MultiTokenState {
         // Only the creator or owner can update URI
         let creator = self.creators.get(&token_id);
         assert!(
-            caller == self.owner || creator.map_or(false, |c| *c == caller),
+            caller == self.owner || creator.is_some_and(|c| *c == caller),
             "DRC7: only creator or owner can set URI"
         );
         self.uris.insert(token_id, new_uri);
