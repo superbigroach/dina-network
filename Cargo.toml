@@ -137,6 +137,7 @@ members = [
     "contracts/dina-stablecoin-factory",
     "contracts/dina-fx-swap",
     "contracts/dina-currency-registry",
+    "contracts/dina-yield-vault",
 ]
 
 [workspace.package]

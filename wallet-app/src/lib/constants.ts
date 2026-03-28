@@ -1,4 +1,4 @@
-import { Wallet, Currency, CurrencyRegion, Transaction } from './types';
+import { Wallet, Currency, CurrencyRegion, Transaction, RateStats, YieldInfo } from './types';
 
 // ---------------------------------------------------------------------------
 // Testnet Configuration
@@ -233,3 +233,223 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
 
 export const MOCK_WALLET_ADDRESS = '0xd1nA...7f3E';
 export const MOCK_WALLET_ADDRESS_FULL = '0xd1nA4b2c8E9f0A1B3d5C7e2F4a6D8b0E9c1F3a5D7f3E';
+
+// ---------------------------------------------------------------------------
+// Mock Rate Statistics (30-day analytics per currency)
+// ---------------------------------------------------------------------------
+export const MOCK_RATE_STATS: Record<string, RateStats> = {
+  CAD: {
+    current: 1_380_000,
+    high24h: 1_385_000, low24h: 1_372_000, avg24h: 1_378_000,
+    high7d: 1_395_000, low7d: 1_368_000, avg7d: 1_382_000,
+    high30d: 1_410_000, low30d: 1_355_000, avg30d: 1_385_000,
+    change24hBps: 30, change7dBps: -80, change30dBps: 120,
+  },
+  EUR: {
+    current: 930_000,
+    high24h: 935_000, low24h: 926_000, avg24h: 930_000,
+    high7d: 942_000, low7d: 920_000, avg7d: 932_000,
+    high30d: 950_000, low30d: 915_000, avg30d: 935_000,
+    change24hBps: -10, change7dBps: 50, change30dBps: -80,
+  },
+  GBP: {
+    current: 795_000,
+    high24h: 800_000, low24h: 790_000, avg24h: 795_000,
+    high7d: 808_000, low7d: 785_000, avg7d: 796_000,
+    high30d: 815_000, low30d: 778_000, avg30d: 798_000,
+    change24hBps: 20, change7dBps: -30, change30dBps: 60,
+  },
+  JPY: {
+    current: 154_000_000,
+    high24h: 154_500_000, low24h: 153_200_000, avg24h: 153_800_000,
+    high7d: 155_800_000, low7d: 152_500_000, avg7d: 154_000_000,
+    high30d: 157_000_000, low30d: 151_000_000, avg30d: 154_200_000,
+    change24hBps: 45, change7dBps: -120, change30dBps: 200,
+  },
+  MXN: {
+    current: 17_500_000,
+    high24h: 17_600_000, low24h: 17_350_000, avg24h: 17_480_000,
+    high7d: 17_800_000, low7d: 17_200_000, avg7d: 17_500_000,
+    high30d: 18_100_000, low30d: 17_000_000, avg30d: 17_550_000,
+    change24hBps: 50, change7dBps: -150, change30dBps: 300,
+  },
+  BRL: {
+    current: 5_050_000,
+    high24h: 5_080_000, low24h: 5_020_000, avg24h: 5_045_000,
+    high7d: 5_120_000, low7d: 4_980_000, avg7d: 5_060_000,
+    high30d: 5_200_000, low30d: 4_900_000, avg30d: 5_070_000,
+    change24hBps: 35, change7dBps: -90, change30dBps: 180,
+  },
+  INR: {
+    current: 83_500_000,
+    high24h: 83_700_000, low24h: 83_200_000, avg24h: 83_450_000,
+    high7d: 84_000_000, low7d: 83_000_000, avg7d: 83_500_000,
+    high30d: 84_500_000, low30d: 82_800_000, avg30d: 83_600_000,
+    change24hBps: 15, change7dBps: -40, change30dBps: 90,
+  },
+  AUD: {
+    current: 1_540_000,
+    high24h: 1_548_000, low24h: 1_532_000, avg24h: 1_538_000,
+    high7d: 1_560_000, low7d: 1_520_000, avg7d: 1_542_000,
+    high30d: 1_575_000, low30d: 1_510_000, avg30d: 1_545_000,
+    change24hBps: 25, change7dBps: -60, change30dBps: 100,
+  },
+  CHF: {
+    current: 885_000,
+    high24h: 890_000, low24h: 880_000, avg24h: 885_000,
+    high7d: 895_000, low7d: 878_000, avg7d: 886_000,
+    high30d: 900_000, low30d: 870_000, avg30d: 887_000,
+    change24hBps: -15, change7dBps: 20, change30dBps: -50,
+  },
+  KRW: {
+    current: 1_340_000_000,
+    high24h: 1_345_000_000, low24h: 1_335_000_000, avg24h: 1_339_000_000,
+    high7d: 1_355_000_000, low7d: 1_328_000_000, avg7d: 1_342_000_000,
+    high30d: 1_370_000_000, low30d: 1_320_000_000, avg30d: 1_345_000_000,
+    change24hBps: 20, change7dBps: -70, change30dBps: 150,
+  },
+  SGD: {
+    current: 1_345_000,
+    high24h: 1_350_000, low24h: 1_340_000, avg24h: 1_344_000,
+    high7d: 1_358_000, low7d: 1_335_000, avg7d: 1_346_000,
+    high30d: 1_365_000, low30d: 1_328_000, avg30d: 1_348_000,
+    change24hBps: 10, change7dBps: -25, change30dBps: 55,
+  },
+  NGN: {
+    current: 1_550_000_000,
+    high24h: 1_560_000_000, low24h: 1_540_000_000, avg24h: 1_548_000_000,
+    high7d: 1_580_000_000, low7d: 1_520_000_000, avg7d: 1_555_000_000,
+    high30d: 1_620_000_000, low30d: 1_500_000_000, avg30d: 1_560_000_000,
+    change24hBps: 60, change7dBps: -200, change30dBps: 450,
+  },
+  SEK: {
+    current: 10_800_000,
+    high24h: 10_850_000, low24h: 10_750_000, avg24h: 10_790_000,
+    high7d: 10_950_000, low7d: 10_700_000, avg7d: 10_820_000,
+    high30d: 11_100_000, low30d: 10_600_000, avg30d: 10_850_000,
+    change24hBps: 25, change7dBps: -55, change30dBps: 110,
+  },
+  PLN: {
+    current: 4_050_000,
+    high24h: 4_075_000, low24h: 4_025_000, avg24h: 4_048_000,
+    high7d: 4_110_000, low7d: 4_000_000, avg7d: 4_060_000,
+    high30d: 4_150_000, low30d: 3_950_000, avg30d: 4_065_000,
+    change24hBps: 18, change7dBps: -45, change30dBps: 85,
+  },
+  ZAR: {
+    current: 18_200_000,
+    high24h: 18_350_000, low24h: 18_050_000, avg24h: 18_180_000,
+    high7d: 18_600_000, low7d: 17_900_000, avg7d: 18_250_000,
+    high30d: 19_000_000, low30d: 17_500_000, avg30d: 18_300_000,
+    change24hBps: 55, change7dBps: -180, change30dBps: 350,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Mock Yield Positions (user's active currency positions)
+// ---------------------------------------------------------------------------
+const YIELD_NOW = Math.floor(Date.now() / 1000);
+const SEVEN_DAYS_AGO = YIELD_NOW - 7 * 86400;
+const FOURTEEN_DAYS_AGO = YIELD_NOW - 14 * 86400;
+const THIRTY_DAYS_AGO = YIELD_NOW - 30 * 86400;
+
+export const MOCK_YIELD_POSITIONS: YieldInfo[] = [
+  {
+    currency: 'CAD',
+    currencySymbol: 'C$',
+    flag: '\u{1F1E8}\u{1F1E6}',
+    localBalance: 1_380_000_000,      // C$1,380.00
+    usdcBacking: 1_000_000_000,       // $1,000 USDC
+    pendingYieldUsdc: 3_700_000,      // $3.70 USDC
+    pendingYieldLocal: 5_106_000,     // C$5.11
+    totalClaimedUsdc: 47_200_000,     // $47.20 USDC
+    totalClaimedLocal: 65_136_000,    // C$65.14
+    depositRate: 1_350_000,           // 1 USDC = 1.350 CAD at deposit
+    currentRate: 1_380_000,           // now 1.380
+    depositTime: THIRTY_DAYS_AGO,
+  },
+  {
+    currency: 'EUR',
+    currencySymbol: '\u20AC',
+    flag: '\u{1F1EA}\u{1F1FA}',
+    localBalance: 465_000_000,        // EUR 465.00
+    usdcBacking: 500_000_000,         // $500 USDC
+    pendingYieldUsdc: 1_850_000,      // $1.85 USDC
+    pendingYieldLocal: 1_720_500,     // EUR 1.72
+    totalClaimedUsdc: 23_400_000,     // $23.40 USDC
+    totalClaimedLocal: 21_762_000,    // EUR 21.76
+    depositRate: 920_000,             // 1 USDC = 0.920 EUR at deposit
+    currentRate: 930_000,             // now 0.930
+    depositTime: FOURTEEN_DAYS_AGO,
+  },
+  {
+    currency: 'GBP',
+    currencySymbol: '\u00A3',
+    flag: '\u{1F1EC}\u{1F1E7}',
+    localBalance: 397_500_000,        // GBP 397.50
+    usdcBacking: 500_000_000,         // $500 USDC
+    pendingYieldUsdc: 920_000,        // $0.92 USDC
+    pendingYieldLocal: 731_400,       // GBP 0.73
+    totalClaimedUsdc: 12_100_000,     // $12.10 USDC
+    totalClaimedLocal: 9_620_000,     // GBP 9.62
+    depositRate: 790_000,
+    currentRate: 795_000,
+    depositTime: SEVEN_DAYS_AGO,
+  },
+  {
+    currency: 'JPY',
+    currencySymbol: '\u00A5',
+    flag: '\u{1F1EF}\u{1F1F5}',
+    localBalance: 77_000_000_000,     // JPY 77,000
+    usdcBacking: 500_000_000,         // $500 USDC
+    pendingYieldUsdc: 2_100_000,      // $2.10 USDC
+    pendingYieldLocal: 323_400_000,   // JPY 323
+    totalClaimedUsdc: 18_500_000,     // $18.50 USDC
+    totalClaimedLocal: 2_849_000_000, // JPY 2,849
+    depositRate: 152_000_000,
+    currentRate: 154_000_000,
+    depositTime: THIRTY_DAYS_AGO,
+  },
+  {
+    currency: 'MXN',
+    currencySymbol: 'MX$',
+    flag: '\u{1F1F2}\u{1F1FD}',
+    localBalance: 4_375_000_000,      // MXN 4,375
+    usdcBacking: 250_000_000,         // $250 USDC
+    pendingYieldUsdc: 1_250_000,      // $1.25 USDC
+    pendingYieldLocal: 21_875_000,    // MXN 21.88
+    totalClaimedUsdc: 8_900_000,      // $8.90 USDC
+    totalClaimedLocal: 155_750_000,   // MXN 155.75
+    depositRate: 17_200_000,
+    currentRate: 17_500_000,
+    depositTime: FOURTEEN_DAYS_AGO,
+  },
+  {
+    currency: 'BRL',
+    currencySymbol: 'R$',
+    flag: '\u{1F1E7}\u{1F1F7}',
+    localBalance: 1_262_500_000,      // BRL 1,262.50
+    usdcBacking: 250_000_000,         // $250 USDC
+    pendingYieldUsdc: 680_000,        // $0.68 USDC
+    pendingYieldLocal: 3_434_000,     // BRL 3.43
+    totalClaimedUsdc: 5_300_000,      // $5.30 USDC
+    totalClaimedLocal: 26_765_000,    // BRL 26.77
+    depositRate: 4_980_000,
+    currentRate: 5_050_000,
+    depositTime: SEVEN_DAYS_AGO,
+  },
+  {
+    currency: 'INR',
+    currencySymbol: '\u20B9',
+    flag: '\u{1F1EE}\u{1F1F3}',
+    localBalance: 8_350_000_000,      // INR 8,350
+    usdcBacking: 100_000_000,         // $100 USDC
+    pendingYieldUsdc: 450_000,        // $0.45 USDC
+    pendingYieldLocal: 37_575_000,    // INR 37.58
+    totalClaimedUsdc: 3_200_000,      // $3.20 USDC
+    totalClaimedLocal: 267_200_000,   // INR 267.20
+    depositRate: 83_000_000,
+    currentRate: 83_500_000,
+    depositTime: FOURTEEN_DAYS_AGO,
+  },
+];

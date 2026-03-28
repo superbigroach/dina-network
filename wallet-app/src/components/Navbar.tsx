@@ -7,6 +7,7 @@ const navItems = [
   { href: '/send', label: 'Send' },
   { href: '/receive', label: 'Receive' },
   { href: '/convert', label: 'Convert' },
+  { href: '/yield', label: 'Yield' },
 ];
 
 export function Navbar() {

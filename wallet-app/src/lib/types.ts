@@ -56,3 +56,34 @@ export interface Transaction {
   status: 'confirmed' | 'pending';
   wallet: string;
 }
+
+export interface RateStats {
+  current: number;       // micro-units per USDC
+  high24h: number;
+  low24h: number;
+  avg24h: number;
+  high7d: number;
+  low7d: number;
+  avg7d: number;
+  high30d: number;
+  low30d: number;
+  avg30d: number;
+  change24hBps: number;  // positive = local currency weakened vs USD
+  change7dBps: number;
+  change30dBps: number;
+}
+
+export interface YieldInfo {
+  currency: string;
+  currencySymbol: string;
+  flag: string;
+  localBalance: number;       // balance in local currency (micro-units)
+  usdcBacking: number;        // USDC locked (micro-USDC)
+  pendingYieldUsdc: number;   // unclaimed USDC yield
+  pendingYieldLocal: number;  // unclaimed yield in local currency
+  totalClaimedUsdc: number;   // all-time claimed USDC
+  totalClaimedLocal: number;  // all-time claimed in local currency
+  depositRate: number;        // rate when they deposited
+  currentRate: number;        // current rate
+  depositTime: number;        // timestamp
+}
