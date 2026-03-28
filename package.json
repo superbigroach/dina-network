@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "scripts": {
+    "deploy:stablecoins": "node scripts/deploy-stablecoins.js",
+    "deploy:update": "bash scripts/deploy-testnet-update.sh",
+    "testnet:status": "node scripts/testnet-status.js",
+    "testnet:status:verbose": "node scripts/testnet-status.js --verbose"
+  },
+  "dependencies": {
+    "dina-js": "^0.2.0"
+  }
+}

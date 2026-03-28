@@ -16,3 +16,7 @@ deployment/keys/
 inventory.yml
 wallet-app/node_modules/
 wallet-app/.next/
+wallet-app/out/
+wallet-app/tsconfig.tsbuildinfo
+sdk/dina-py/dist/
+test-wallets.json
