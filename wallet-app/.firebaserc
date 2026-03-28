@@ -5,7 +5,7 @@
   "targets": {
     "lucilla-b0493": {
       "hosting": {
-        "dina-wallet": ["lucilla-b0493"]
+        "dina-wallet": ["dina-wallet"]
       }
     }
   }
