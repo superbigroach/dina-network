@@ -11,9 +11,10 @@ export default function LandingPage() {
   const [error, setError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
 
+  // When user becomes authenticated, go to dashboard
   useEffect(() => {
     if (!loading && user) {
-      router.push('/dashboard');
+      router.replace('/dashboard');
     }
   }, [user, loading, router]);
 
@@ -22,15 +23,27 @@ export default function LandingPage() {
     setSigningIn(true);
     try {
       await signInWithGoogle();
-      // signInWithRedirect navigates away — no need to router.push
+      // Don't navigate here — the useEffect above handles it
+      // when onAuthStateChanged fires with the user
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
       setError(message);
+    } finally {
       setSigningIn(false);
     }
   }
 
+  // Show loading while checking auth state
   if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // If already logged in, show loading (useEffect will redirect)
+  if (user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
@@ -41,7 +54,6 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm flex flex-col items-center gap-8">
-        {/* Logo */}
         <div className="flex flex-col items-center gap-3">
           <div className="w-16 h-16 rounded-2xl bg-emerald-600 flex items-center justify-center text-white font-bold text-3xl shadow-lg shadow-emerald-600/20">
             D
@@ -52,21 +64,18 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Yield ticker preview */}
         <div className="w-full rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Earning right now</p>
           <p className="text-3xl font-bold text-emerald-400 tabular-nums">4.50% APY</p>
           <p className="text-sm text-slate-400 mt-1">On every dollar, every second</p>
         </div>
 
-        {/* Error message */}
         {error && (
           <div className="w-full p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
             {error}
           </div>
         )}
 
-        {/* Sign in buttons */}
         <div className="w-full flex flex-col gap-3">
           <button
             onClick={handleGoogleSignIn}

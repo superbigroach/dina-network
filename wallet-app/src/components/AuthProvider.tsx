@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { onAuthChange, handleRedirectResult, type User } from '@/lib/firebase';
+import { onAuthChange, type User } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -15,10 +15,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Handle redirect result (fires after Google redirects back)
-    handleRedirectResult().catch(() => {});
-
-    // Listen for auth state changes
     const unsubscribe = onAuthChange((u) => {
       setUser(u);
       setLoading(false);
