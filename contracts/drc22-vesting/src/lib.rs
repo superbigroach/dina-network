@@ -48,6 +48,8 @@ pub struct VestingState {
     pub admin: Address,
     pub vestings: BTreeMap<u64, VestingSchedule>,
     pub next_id: u64,
+    /// Last observed timestamp for monotonicity checks.
+    pub last_timestamp: u64,
 }
 
 impl VestingState {
@@ -56,6 +58,7 @@ impl VestingState {
             admin,
             vestings: BTreeMap::new(),
             next_id: 1,
+            last_timestamp: 0,
         }
     }
 
@@ -98,6 +101,11 @@ impl VestingState {
 
     /// Release vested tokens for a schedule. Caller must be the beneficiary.
     pub fn release(&mut self, caller: Address, id: u64, current_time: u64) -> u64 {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC22: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         let schedule = self
             .vestings
             .get_mut(&id)

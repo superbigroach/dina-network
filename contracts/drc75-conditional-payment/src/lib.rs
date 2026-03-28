@@ -66,19 +66,26 @@ pub struct OracleData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConditionalPaymentState {
     pub owner: Address,
+    pub authorized_oracle: Address,
     pub payments: BTreeMap<u64, ConditionalPayment>,
     pub next_id: u64,
     pub balances: BTreeMap<Address, u64>,
 }
 
 impl ConditionalPaymentState {
-    pub fn new(owner: Address) -> Self {
+    pub fn new(owner: Address, authorized_oracle: Address) -> Self {
         Self {
             owner,
+            authorized_oracle,
             payments: BTreeMap::new(),
             next_id: 1,
             balances: BTreeMap::new(),
         }
+    }
+
+    pub fn set_authorized_oracle(&mut self, caller: Address, oracle: Address) {
+        assert!(caller == self.owner, "DRC75: only owner can set oracle");
+        self.authorized_oracle = oracle;
     }
 
     pub fn deposit(&mut self, caller: Address, amount: u64) {
@@ -124,7 +131,16 @@ impl ConditionalPaymentState {
     }
 
     /// Check whether the condition is satisfied and execute the payment.
-    pub fn check_and_execute(&mut self, payment_id: u64, oracle: &OracleData) -> bool {
+    pub fn check_and_execute(
+        &mut self,
+        caller: Address,
+        payment_id: u64,
+        oracle: &OracleData,
+    ) -> bool {
+        assert!(
+            caller == self.authorized_oracle,
+            "DRC75: only authorized oracle can execute"
+        );
         let payment = self
             .payments
             .get(&payment_id)
@@ -210,6 +226,14 @@ struct CheckArgs {
     oracle_data: OracleData,
 }
 #[derive(Serialize, Deserialize, Debug)]
+struct InitArgs {
+    authorized_oracle: Address,
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct SetOracleArgs {
+    oracle: Address,
+}
+#[derive(Serialize, Deserialize, Debug)]
 struct CancelExpiredArgs {
     current_time: u64,
 }
@@ -231,7 +255,14 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "DRC75: already initialised");
-            *state = Some(ConditionalPaymentState::new(caller));
+            let a: InitArgs = serde_json::from_slice(args).expect("DRC75: bad init args");
+            *state = Some(ConditionalPaymentState::new(caller, a.authorized_oracle));
+            serde_json::to_vec("ok").unwrap()
+        }
+        "set_authorized_oracle" => {
+            let s = state.as_mut().expect("DRC75: not initialised");
+            let a: SetOracleArgs = serde_json::from_slice(args).expect("DRC75: bad args");
+            s.set_authorized_oracle(caller, a.oracle);
             serde_json::to_vec("ok").unwrap()
         }
         "deposit" => {
@@ -256,7 +287,7 @@ pub fn dispatch(
         "check_and_execute" => {
             let s = state.as_mut().expect("DRC75: not initialised");
             let a: CheckArgs = serde_json::from_slice(args).expect("DRC75: bad args");
-            let result = s.check_and_execute(a.payment_id, &a.oracle_data);
+            let result = s.check_and_execute(caller, a.payment_id, &a.oracle_data);
             serde_json::to_vec(&result).unwrap()
         }
         "cancel_expired" => {
@@ -285,9 +316,10 @@ mod tests {
     const OWNER: Address = [0u8; 32];
     const ALICE: Address = [1u8; 32];
     const BOB: Address = [2u8; 32];
+    const ORACLE: Address = [10u8; 32];
 
     fn setup() -> ConditionalPaymentState {
-        let mut s = ConditionalPaymentState::new(OWNER);
+        let mut s = ConditionalPaymentState::new(OWNER, ORACLE);
         s.deposit(ALICE, 50_000);
         s
     }
@@ -316,7 +348,7 @@ mod tests {
             current_time: None,
             oracle_result: None,
         };
-        assert!(!s.check_and_execute(id, &oracle));
+        assert!(!s.check_and_execute(ORACLE, id, &oracle));
         assert_eq!(s.payments.get(&id).unwrap().status, PaymentStatus::Pending);
 
         // Price met
@@ -327,7 +359,7 @@ mod tests {
             current_time: None,
             oracle_result: None,
         };
-        assert!(s.check_and_execute(id, &oracle));
+        assert!(s.check_and_execute(ORACLE, id, &oracle));
         assert_eq!(s.payments.get(&id).unwrap().status, PaymentStatus::Executed);
         assert_eq!(s.balances.get(&BOB).copied().unwrap(), 1000);
     }
@@ -355,7 +387,7 @@ mod tests {
             current_time: None,
             oracle_result: None,
         };
-        assert!(s.check_and_execute(id, &oracle));
+        assert!(s.check_and_execute(ORACLE, id, &oracle));
     }
 
     #[test]
@@ -423,7 +455,7 @@ mod tests {
             current_time: None,
             oracle_result: Some(true),
         };
-        assert!(s.check_and_execute(id, &oracle));
+        assert!(s.check_and_execute(ORACLE, id, &oracle));
         assert_eq!(s.balances.get(&BOB).copied().unwrap(), 300);
     }
 

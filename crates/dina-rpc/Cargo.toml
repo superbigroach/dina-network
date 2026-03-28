@@ -7,6 +7,8 @@ edition.workspace = true
 dina-core = { path = "../dina-core" }
 dina-monitoring = { path = "../dina-monitoring" }
 axum = { workspace = true }
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"], default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 jsonrpsee = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

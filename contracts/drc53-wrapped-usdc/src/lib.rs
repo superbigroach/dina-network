@@ -51,7 +51,12 @@ impl WrappedUsdcState {
     // -- Mutations -----------------------------------------------------------
 
     /// Wrap native USDC: deposit `amount` of native USDC and receive wUSDC.
+    /// Only the authorized minter (contract owner / trusted bridge) can wrap.
     pub fn wrap(&mut self, caller: Address, amount: u64) {
+        assert!(
+            caller == self.admin,
+            "DRC53: only authorized minter can wrap USDC"
+        );
         assert!(amount > 0, "DRC53: wrap amount must be positive");
         // In production, the runtime verifies the native USDC transfer.
         let bal = self.balance_of(&caller);
@@ -70,7 +75,12 @@ impl WrappedUsdcState {
     }
 
     /// Unwrap wUSDC: burn wUSDC and receive native USDC back.
+    /// Only the authorized minter (contract owner / trusted bridge) can unwrap.
     pub fn unwrap(&mut self, caller: Address, amount: u64) {
+        assert!(
+            caller == self.admin,
+            "DRC53: only authorized minter can unwrap USDC"
+        );
         assert!(amount > 0, "DRC53: unwrap amount must be positive");
         let bal = self.balance_of(&caller);
         assert!(bal >= amount, "DRC53: insufficient wUSDC balance");
@@ -244,9 +254,10 @@ mod tests {
     fn test_wrap_and_balance() {
         let mut state = setup();
         let args = serde_json::to_vec(&AmountArg { amount: 1000 }).unwrap();
-        dispatch(&mut state, "wrap", &args, addr(2));
+        // Only admin (addr(1)) can wrap
+        dispatch(&mut state, "wrap", &args, addr(1));
         let s = state.as_ref().unwrap();
-        assert_eq!(s.balance_of(&addr(2)), 1000);
+        assert_eq!(s.balance_of(&addr(1)), 1000);
         assert_eq!(s.total_supply, 1000);
     }
 
@@ -254,11 +265,11 @@ mod tests {
     fn test_unwrap() {
         let mut state = setup();
         let wrap = serde_json::to_vec(&AmountArg { amount: 500 }).unwrap();
-        dispatch(&mut state, "wrap", &wrap, addr(2));
+        dispatch(&mut state, "wrap", &wrap, addr(1));
         let unwrap = serde_json::to_vec(&AmountArg { amount: 200 }).unwrap();
-        dispatch(&mut state, "unwrap", &unwrap, addr(2));
+        dispatch(&mut state, "unwrap", &unwrap, addr(1));
         let s = state.as_ref().unwrap();
-        assert_eq!(s.balance_of(&addr(2)), 300);
+        assert_eq!(s.balance_of(&addr(1)), 300);
         assert_eq!(s.total_supply, 300);
     }
 
@@ -266,7 +277,14 @@ mod tests {
     fn test_transfer_wusdc() {
         let mut state = setup();
         let wrap = serde_json::to_vec(&AmountArg { amount: 1000 }).unwrap();
-        dispatch(&mut state, "wrap", &wrap, addr(2));
+        dispatch(&mut state, "wrap", &wrap, addr(1));
+        // Admin transfers to addr(2), then addr(2) transfers to addr(3)
+        let xfer1 = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 1000,
+        })
+        .unwrap();
+        dispatch(&mut state, "transfer", &xfer1, addr(1));
         let xfer = serde_json::to_vec(&TransferArgs {
             to: addr(3),
             amount: 400,
@@ -283,7 +301,14 @@ mod tests {
     fn test_approve_and_transfer_from() {
         let mut state = setup();
         let wrap = serde_json::to_vec(&AmountArg { amount: 1000 }).unwrap();
-        dispatch(&mut state, "wrap", &wrap, addr(2));
+        dispatch(&mut state, "wrap", &wrap, addr(1));
+        // Admin transfers to addr(2) first
+        let xfer_to_2 = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 1000,
+        })
+        .unwrap();
+        dispatch(&mut state, "transfer", &xfer_to_2, addr(1));
         let approve = serde_json::to_vec(&ApproveArgs {
             spender: addr(3),
             amount: 500,
@@ -307,9 +332,9 @@ mod tests {
     fn test_unwrap_insufficient() {
         let mut state = setup();
         let wrap = serde_json::to_vec(&AmountArg { amount: 100 }).unwrap();
-        dispatch(&mut state, "wrap", &wrap, addr(2));
+        dispatch(&mut state, "wrap", &wrap, addr(1));
         let unwrap = serde_json::to_vec(&AmountArg { amount: 500 }).unwrap();
-        dispatch(&mut state, "unwrap", &unwrap, addr(2));
+        dispatch(&mut state, "unwrap", &unwrap, addr(1));
     }
 
     #[test]

@@ -40,6 +40,8 @@ pub struct BridgeState {
     pub balances: BTreeMap<Address, u64>,
     /// Accumulated balance of released funds available for relayer withdrawal.
     pub relayer_balance: u64,
+    /// Last observed timestamp for monotonicity checks.
+    pub last_timestamp: u64,
 }
 
 impl BridgeState {
@@ -54,6 +56,7 @@ impl BridgeState {
             total_refunded: 0,
             balances: BTreeMap::new(),
             relayer_balance: 0,
+            last_timestamp: 0,
         }
     }
 
@@ -114,6 +117,11 @@ impl BridgeState {
     /// Relayer confirms the cross-chain transfer and releases escrowed funds.
     pub fn release(&mut self, caller: Address, lock_id: u64, proof: Vec<u8>, current_time: u64) {
         assert!(
+            current_time >= self.last_timestamp,
+            "DRC60: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
+        assert!(
             caller == self.relayer || caller == self.owner,
             "DRC60: only relayer/owner can release"
         );
@@ -145,6 +153,11 @@ impl BridgeState {
 
     /// Sender can reclaim funds after timeout if not released.
     pub fn refund(&mut self, caller: Address, lock_id: u64, current_time: u64) {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC60: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         let lock = self.locks.get_mut(&lock_id).expect("DRC60: lock not found");
         assert!(
             lock.status == BridgeStatus::Locked,

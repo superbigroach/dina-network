@@ -70,6 +70,10 @@ pub struct WasmRuntime {
     contract_storage: Arc<Mutex<HashMap<Address, HashMap<Vec<u8>, Vec<u8>>>>>,
     /// Per-deployer nonce for deterministic contract address generation.
     nonces: Arc<Mutex<HashMap<Address, u64>>>,
+    /// Compiled WASM module cache keyed by contract address.
+    /// Avoids expensive recompilation on every `call_contract()` invocation,
+    /// which otherwise makes the node vulnerable to performance-based DoS.
+    module_cache: Mutex<HashMap<Address, Module>>,
 }
 
 impl WasmRuntime {
@@ -92,6 +96,7 @@ impl WasmRuntime {
             contracts: Arc::new(Mutex::new(HashMap::new())),
             contract_storage: Arc::new(Mutex::new(HashMap::new())),
             nonces: Arc::new(Mutex::new(HashMap::new())),
+            module_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -229,6 +234,12 @@ impl WasmRuntime {
             storage.insert(contract_address, init_storage);
         }
 
+        // Cache the compiled module so call_contract() doesn't recompile.
+        {
+            let mut cache = self.module_cache.lock().unwrap_or_else(|e| e.into_inner());
+            cache.insert(contract_address, module);
+        }
+
         info!(
             address = %contract_address,
             deployer = %deployer,
@@ -299,10 +310,19 @@ impl WasmRuntime {
             .set_fuel(effective_gas)
             .map_err(|e| DinaError::WasmExecutionError(format!("failed to set fuel: {e}")))?;
 
-        // Compile and link.
-        let module = Module::new(&self.engine, &stored.wasm_bytes).map_err(|e| {
-            DinaError::WasmExecutionError(format!("failed to compile contract: {e}"))
-        })?;
+        // Use cached module if available, otherwise compile and cache it.
+        let module = {
+            let mut cache = self.module_cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(cached) = cache.get(&contract_addr) {
+                cached.clone()
+            } else {
+                let compiled = Module::new(&self.engine, &stored.wasm_bytes).map_err(|e| {
+                    DinaError::WasmExecutionError(format!("failed to compile contract: {e}"))
+                })?;
+                cache.insert(contract_addr, compiled.clone());
+                compiled
+            }
+        };
 
         let mut linker = Linker::new(&self.engine);
         host::register_host_functions(&mut linker).map_err(|e| {

@@ -22,6 +22,8 @@ pub struct Campaign {
 pub struct CrowdfundState {
     pub campaigns: BTreeMap<u64, Campaign>,
     pub next_id: u64,
+    /// Last observed timestamp for monotonicity checks.
+    pub last_timestamp: u64,
 }
 
 impl Default for CrowdfundState {
@@ -35,6 +37,7 @@ impl CrowdfundState {
         Self {
             campaigns: BTreeMap::new(),
             next_id: 0,
+            last_timestamp: 0,
         }
     }
 
@@ -67,6 +70,11 @@ impl CrowdfundState {
         amount: u64,
         current_time: u64,
     ) {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC28: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         assert!(amount > 0, "DRC28: contribution must be positive");
         let campaign = self
             .campaigns
@@ -85,6 +93,11 @@ impl CrowdfundState {
     }
 
     pub fn claim(&mut self, caller: Address, campaign_id: u64, current_time: u64) -> u64 {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC28: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         let campaign = self
             .campaigns
             .get_mut(&campaign_id)
@@ -103,6 +116,11 @@ impl CrowdfundState {
     }
 
     pub fn refund(&mut self, caller: Address, campaign_id: u64, current_time: u64) -> u64 {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC28: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         let campaign = self
             .campaigns
             .get_mut(&campaign_id)

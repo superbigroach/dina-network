@@ -67,15 +67,24 @@ impl EscrowState {
         }
     }
 
-    pub fn register_arbitrator(&mut self, caller: Address, name: String) {
+    pub fn register_arbitrator(
+        &mut self,
+        caller: Address,
+        arbitrator_address: Address,
+        name: String,
+    ) {
+        assert!(
+            caller == self.owner,
+            "DRC54: only owner can register arbitrators"
+        );
         let info = ArbitratorInfo {
-            address: caller,
+            address: arbitrator_address,
             name,
             cases_handled: 0,
             reputation_score: 100,
             active: true,
         };
-        self.arbitrators.insert(caller, info);
+        self.arbitrators.insert(arbitrator_address, info);
     }
 
     pub fn create_escrow(
@@ -296,6 +305,7 @@ impl EscrowState {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RegisterArbitratorArgs {
+    arbitrator_address: Address,
     name: String,
 }
 
@@ -362,7 +372,7 @@ pub fn dispatch(
         "register_arbitrator" => {
             let s = state.as_mut().expect("DRC54: not initialised");
             let a: RegisterArbitratorArgs = serde_json::from_slice(args).expect("DRC54: bad args");
-            s.register_arbitrator(caller, a.name);
+            s.register_arbitrator(caller, a.arbitrator_address, a.name);
             serde_json::to_vec("ok").unwrap()
         }
         "create_escrow" => {
@@ -508,7 +518,7 @@ mod tests {
     fn test_dispute_and_arbitrate_to_seller() {
         let mut state = init_state();
         let s = state.as_mut().unwrap();
-        s.register_arbitrator(ARBITRATOR, "Judge Bot".into());
+        s.register_arbitrator(BUYER, ARBITRATOR, "Judge Bot".into());
         let id = s.create_escrow(
             BUYER,
             SELLER,
@@ -530,7 +540,7 @@ mod tests {
     fn test_dispute_and_arbitrate_to_buyer() {
         let mut state = init_state();
         let s = state.as_mut().unwrap();
-        s.register_arbitrator(ARBITRATOR, "Judge Bot".into());
+        s.register_arbitrator(BUYER, ARBITRATOR, "Judge Bot".into());
         let id = s.create_escrow(
             BUYER,
             SELLER,
@@ -560,8 +570,12 @@ mod tests {
     fn test_dispatch_roundtrip() {
         let mut state = None;
         dispatch(&mut state, "init", b"{}", BUYER);
-        let args = serde_json::to_vec(&RegisterArbitratorArgs { name: "Arb".into() }).unwrap();
-        dispatch(&mut state, "register_arbitrator", &args, ARBITRATOR);
+        let args = serde_json::to_vec(&RegisterArbitratorArgs {
+            arbitrator_address: ARBITRATOR,
+            name: "Arb".into(),
+        })
+        .unwrap();
+        dispatch(&mut state, "register_arbitrator", &args, BUYER);
         assert!(state
             .as_ref()
             .unwrap()

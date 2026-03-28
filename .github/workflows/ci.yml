@@ -1,30 +1,183 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Full audit every Monday at 4am UTC
+    - cron: '0 4 * * 1'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
-  check:
+  # =============================================
+  # TIER 1: Fast checks (every PR, <5 min)
+  # =============================================
+
+  format-and-lint:
+    name: Format + Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
+          components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-
       - uses: Swatinem/rust-cache@v2
-
-      - name: Check
-        run: cargo check --workspace
-
-      - name: Test
-        run: cargo test --workspace
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+      - name: Clippy (strict)
+        run: |
+          cargo clippy --workspace --all-targets -- \
+            -D warnings \
+            -D clippy::arithmetic_side_effects \
+            -W clippy::pedantic \
+            -A clippy::module_name_repetitions \
+            -A clippy::must_use_candidate \
+            -A clippy::missing_errors_doc \
+            -A clippy::missing_panics_doc \
+            -A clippy::too_many_arguments \
+            -A clippy::too_many_lines \
+            -A clippy::cast_possible_truncation \
+            -A clippy::cast_sign_loss \
+            -A clippy::cast_lossless \
+            -A clippy::unreadable_literal \
+            -A clippy::doc_markdown \
+            -A clippy::similar_names \
+            -A clippy::wildcard_imports \
+            -A clippy::struct_excessive_bools
 
-      - name: Security audit
-        run: cargo install cargo-audit && cargo audit
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install audit tools
+        run: cargo install cargo-audit cargo-deny
+
+      - name: Vulnerability scan (RustSec)
+        run: cargo audit
+
+      - name: License + dependency policy
+        run: cargo deny check
+
+  # =============================================
+  # TIER 2: Tests + WASM validation (every PR)
+  # =============================================
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo check --workspace
+
+      - name: Unit + integration tests
+        run: cargo test --workspace
+
+  wasm-validation:
+    name: WASM Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-tools
+        run: cargo install wasm-tools
+
+      - name: Build all contracts to WASM
+        run: |
+          for dir in contracts/*/; do
+            if [ -f "$dir/Cargo.toml" ]; then
+              echo "Building $dir..."
+              cargo build --manifest-path "$dir/Cargo.toml" \
+                --target wasm32-unknown-unknown --release 2>&1 || true
+            fi
+          done
+
+      - name: Validate WASM modules
+        run: |
+          FAILED=0
+          for wasm in target/wasm32-unknown-unknown/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            echo "Validating $(basename $wasm)..."
+            wasm-tools validate "$wasm" || FAILED=1
+            # Check for floating point (nondeterminism)
+            if wasm-tools print "$wasm" 2>/dev/null | grep -q "f32\.\|f64\."; then
+              echo "WARNING: $(basename $wasm) contains floating point ops (nondeterministic)"
+            fi
+          done
+          exit $FAILED
+
+  semgrep:
+    name: Static Analysis (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep scan
+        run: semgrep scan --config "p/rust" --config "p/security-audit" crates/ contracts/ node/ cli/
+        continue-on-error: true
+
+  # =============================================
+  # TIER 3: Deep analysis (weekly or on-demand)
+  # =============================================
+
+  miri:
+    name: Miri (UB Detection)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Miri undefined behavior check
+        run: cargo +nightly miri test -p dina-core -p dina-consensus
+        continue-on-error: true
+        env:
+          MIRIFLAGS: "-Zmiri-disable-isolation"
+
+  unsafe-audit:
+    name: Unsafe Code Audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-geiger
+        run: cargo install cargo-geiger
+        continue-on-error: true
+
+      - name: Unsafe code report
+        run: cargo geiger --all-features 2>&1 | tee geiger-report.txt || true
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: geiger-report
+          path: geiger-report.txt
+        if: always()

@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use std::collections::BTreeMap;
+
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Axelar Integration — ITS (Interchain Token Service) for Dina Network
@@ -63,6 +67,10 @@ pub struct AxelarState {
     pub owner: [u8; 32],
     /// The Axelar gateway address (validates cross-chain messages)
     pub gateway_address: [u8; 32],
+    /// Ed25519 public key of the gateway for cryptographic message verification.
+    /// Inbound messages must carry a valid Ed25519 signature over the message
+    /// hash, signed by this key, in addition to the gateway caller check.
+    pub gateway_pubkey: [u8; 32],
     /// The ITS (Interchain Token Service) address
     pub its_address: [u8; 32],
     /// The bridged USDC token address on Dina
@@ -89,6 +97,7 @@ impl AxelarState {
     pub fn new(
         owner: [u8; 32],
         gateway_address: [u8; 32],
+        gateway_pubkey: [u8; 32],
         its_address: [u8; 32],
         usdc_token: [u8; 32],
     ) -> Self {
@@ -98,6 +107,7 @@ impl AxelarState {
         Self {
             owner,
             gateway_address,
+            gateway_pubkey,
             its_address,
             usdc_token,
             processed_commands: BTreeMap::new(),
@@ -108,6 +118,65 @@ impl AxelarState {
             paused: false,
             chain_name: "dina".to_string(),
         }
+    }
+
+    /// Update the gateway public key. Only callable by owner.
+    pub fn set_gateway_pubkey(&mut self, caller: [u8; 32], new_pubkey: [u8; 32]) {
+        assert!(caller == self.owner, "Axelar: only owner");
+        self.gateway_pubkey = new_pubkey;
+    }
+
+    /// Verify an Ed25519 signature over the given message hash.
+    fn verify_gateway_signature(&self, message_hash: &[u8; 32], signature: &[u8; 64]) {
+        let verifying_key = VerifyingKey::from_bytes(&self.gateway_pubkey)
+            .expect("Axelar: invalid gateway public key");
+        let sig = Signature::from_bytes(signature);
+        verifying_key
+            .verify(message_hash, &sig)
+            .expect("Axelar: invalid gateway signature");
+    }
+
+    /// Compute the message hash for execute() verification.
+    /// Hash covers: command_id, source_chain, source_address, payload.
+    fn compute_execute_hash(
+        command_id: &[u8; 32],
+        source_chain: &str,
+        source_address: &str,
+        payload: &[u8],
+    ) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(command_id);
+        hasher.update(source_chain.as_bytes());
+        hasher.update(source_address.as_bytes());
+        hasher.update(payload);
+        let result = hasher.finalize();
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&result);
+        hash
+    }
+
+    /// Compute the message hash for execute_with_token() verification.
+    /// Hash covers: command_id, source_chain, source_address, payload,
+    /// token_symbol, amount.
+    fn compute_execute_with_token_hash(
+        command_id: &[u8; 32],
+        source_chain: &str,
+        source_address: &str,
+        payload: &[u8],
+        token_symbol: &str,
+        amount: u64,
+    ) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(command_id);
+        hasher.update(source_chain.as_bytes());
+        hasher.update(source_address.as_bytes());
+        hasher.update(payload);
+        hasher.update(token_symbol.as_bytes());
+        hasher.update(amount.to_le_bytes());
+        let result = hasher.finalize();
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&result);
+        hash
     }
 
     // -- Admin ---------------------------------------------------------------
@@ -193,6 +262,11 @@ impl AxelarState {
     /// This is called by the Axelar gateway after the validator network
     /// has confirmed the message. The command_id is unique and prevents
     /// replay attacks.
+    ///
+    /// The `gateway_signature` parameter is an Ed25519 signature over the
+    /// SHA-256 hash of (command_id || source_chain || source_address || payload),
+    /// produced by the gateway's signing key. This provides cryptographic
+    /// verification beyond the caller address check.
     pub fn execute(
         &mut self,
         caller: [u8; 32],
@@ -200,6 +274,7 @@ impl AxelarState {
         source_chain: String,
         source_address: String,
         payload: Vec<u8>,
+        gateway_signature: [u8; 64],
     ) {
         assert!(!self.paused, "Axelar: paused");
         assert!(
@@ -210,6 +285,11 @@ impl AxelarState {
             !self.processed_commands.contains_key(&command_id),
             "Axelar: command already processed"
         );
+
+        // Cryptographic verification: verify gateway Ed25519 signature
+        let message_hash =
+            Self::compute_execute_hash(&command_id, &source_chain, &source_address, &payload);
+        self.verify_gateway_signature(&message_hash, &gateway_signature);
 
         // Verify the source is trusted
         let trusted = self.trusted_sources.get(&source_chain);
@@ -245,6 +325,10 @@ impl AxelarState {
     /// This is the most common Axelar receive pattern — the gateway has
     /// already validated the message and released the tokens to this
     /// contract. We just need to process the payload and forward tokens.
+    ///
+    /// The `gateway_signature` parameter is an Ed25519 signature over the
+    /// SHA-256 hash of (command_id || source_chain || source_address ||
+    /// payload || token_symbol || amount).
     pub fn execute_with_token(
         &mut self,
         caller: [u8; 32],
@@ -254,6 +338,7 @@ impl AxelarState {
         payload: Vec<u8>,
         token_symbol: String,
         amount: u64,
+        gateway_signature: [u8; 64],
     ) {
         assert!(!self.paused, "Axelar: paused");
         assert!(
@@ -264,6 +349,17 @@ impl AxelarState {
             !self.processed_commands.contains_key(&command_id),
             "Axelar: command already processed"
         );
+
+        // Cryptographic verification: verify gateway Ed25519 signature
+        let message_hash = Self::compute_execute_with_token_hash(
+            &command_id,
+            &source_chain,
+            &source_address,
+            &payload,
+            &token_symbol,
+            amount,
+        );
+        self.verify_gateway_signature(&message_hash, &gateway_signature);
 
         // Verify the source is trusted
         let trusted = self.trusted_sources.get(&source_chain);
@@ -338,8 +434,14 @@ impl AxelarState {
 #[derive(Serialize, Deserialize, Debug)]
 struct InitArgs {
     gateway_address: [u8; 32],
+    gateway_pubkey: [u8; 32],
     its_address: [u8; 32],
     usdc_token: [u8; 32],
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SetGatewayPubkeyArgs {
+    new_pubkey: [u8; 32],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -377,6 +479,8 @@ struct ExecuteArgs {
     source_chain: String,
     source_address: String,
     payload: Vec<u8>,
+    #[serde(with = "BigArray")]
+    gateway_signature: [u8; 64],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -387,6 +491,8 @@ struct ExecuteWithTokenArgs {
     payload: Vec<u8>,
     token_symbol: String,
     amount: u64,
+    #[serde(with = "BigArray")]
+    gateway_signature: [u8; 64],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -421,6 +527,7 @@ pub fn dispatch(
             *state = Some(AxelarState::new(
                 caller,
                 a.gateway_address,
+                a.gateway_pubkey,
                 a.its_address,
                 a.usdc_token,
             ));
@@ -452,6 +559,12 @@ pub fn dispatch(
             s.set_its(caller, a.new_its);
             serde_json::to_vec("ok").unwrap()
         }
+        "set_gateway_pubkey" => {
+            let s = state.as_mut().expect("Axelar: not initialised");
+            let a: SetGatewayPubkeyArgs = serde_json::from_slice(args).expect("Axelar: bad args");
+            s.set_gateway_pubkey(caller, a.new_pubkey);
+            serde_json::to_vec("ok").unwrap()
+        }
         "pause" => {
             let s = state.as_mut().expect("Axelar: not initialised");
             s.pause(caller);
@@ -481,6 +594,7 @@ pub fn dispatch(
                 a.source_chain,
                 a.source_address,
                 a.payload,
+                a.gateway_signature,
             );
             serde_json::to_vec("ok").unwrap()
         }
@@ -495,6 +609,7 @@ pub fn dispatch(
                 a.payload,
                 a.token_symbol,
                 a.amount,
+                a.gateway_signature,
             );
             serde_json::to_vec("ok").unwrap()
         }
@@ -535,12 +650,10 @@ pub fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
 
     fn owner() -> [u8; 32] {
         [1u8; 32]
-    }
-    fn gateway() -> [u8; 32] {
-        [10u8; 32]
     }
     fn its() -> [u8; 32] {
         [11u8; 32]
@@ -552,16 +665,60 @@ mod tests {
         [3u8; 32]
     }
 
-    fn setup() -> AxelarState {
-        let mut s = AxelarState::new(owner(), gateway(), its(), usdc());
+    /// Returns (gateway_address, gateway_pubkey, signing_key).
+    fn gateway_keypair() -> ([u8; 32], [u8; 32], SigningKey) {
+        let signing_key = SigningKey::from_bytes(&[10u8; 32]);
+        let pubkey = signing_key.verifying_key().to_bytes();
+        // Use the pubkey bytes as the gateway "address" for simplicity in tests.
+        let address = [10u8; 32];
+        (address, pubkey, signing_key)
+    }
+
+    fn sign_execute(
+        signing_key: &SigningKey,
+        command_id: &[u8; 32],
+        source_chain: &str,
+        source_address: &str,
+        payload: &[u8],
+    ) -> [u8; 64] {
+        let hash =
+            AxelarState::compute_execute_hash(command_id, source_chain, source_address, payload);
+        let sig = signing_key.sign(&hash);
+        sig.to_bytes()
+    }
+
+    fn sign_execute_with_token(
+        signing_key: &SigningKey,
+        command_id: &[u8; 32],
+        source_chain: &str,
+        source_address: &str,
+        payload: &[u8],
+        token_symbol: &str,
+        amount: u64,
+    ) -> [u8; 64] {
+        let hash = AxelarState::compute_execute_with_token_hash(
+            command_id,
+            source_chain,
+            source_address,
+            payload,
+            token_symbol,
+            amount,
+        );
+        let sig = signing_key.sign(&hash);
+        sig.to_bytes()
+    }
+
+    fn setup() -> (AxelarState, SigningKey) {
+        let (gw_addr, gw_pubkey, gw_key) = gateway_keypair();
+        let mut s = AxelarState::new(owner(), gw_addr, gw_pubkey, its(), usdc());
         s.set_trusted_source(owner(), "ethereum".to_string(), "0xABC".to_string());
         s.set_trusted_source(owner(), "base".to_string(), "0xDEF".to_string());
-        s
+        (s, gw_key)
     }
 
     #[test]
     fn test_init() {
-        let s = setup();
+        let (s, _) = setup();
         assert_eq!(s.chain_name, "dina");
         assert!(s.is_chain_trusted("ethereum"));
         assert!(s.is_chain_trusted("base"));
@@ -570,7 +727,7 @@ mod tests {
 
     #[test]
     fn test_send_to_chain() {
-        let mut s = setup();
+        let (mut s, _) = setup();
         s.send_to_chain(
             alice(),
             "ethereum".to_string(),
@@ -583,20 +740,24 @@ mod tests {
     #[test]
     #[should_panic(expected = "untrusted destination")]
     fn test_send_to_untrusted_fails() {
-        let mut s = setup();
+        let (mut s, _) = setup();
         s.send_to_chain(alice(), "solana".to_string(), "abc".to_string(), 1_000_000);
     }
 
     #[test]
     fn test_execute() {
-        let mut s = setup();
+        let (mut s, gw_key) = setup();
+        let (gw_addr, _, _) = gateway_keypair();
         let cmd_id = [42u8; 32];
+        let payload = vec![1, 2, 3, 4];
+        let sig = sign_execute(&gw_key, &cmd_id, "ethereum", "0xABC", &payload);
         s.execute(
-            gateway(),
+            gw_addr,
             cmd_id,
             "ethereum".to_string(),
             "0xABC".to_string(),
-            vec![1, 2, 3, 4],
+            payload,
+            sig,
         );
         assert!(s.is_command_processed(&cmd_id));
         assert_eq!(s.processed_command_count(), 1);
@@ -605,49 +766,80 @@ mod tests {
     #[test]
     #[should_panic(expected = "only gateway")]
     fn test_execute_not_gateway_fails() {
-        let mut s = setup();
+        let (mut s, gw_key) = setup();
+        let cmd_id = [42u8; 32];
+        let sig = sign_execute(&gw_key, &cmd_id, "ethereum", "0xABC", &[]);
         s.execute(
             alice(),
-            [42u8; 32],
+            cmd_id,
             "ethereum".to_string(),
             "0xABC".to_string(),
             vec![],
+            sig,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid gateway signature")]
+    fn test_execute_bad_signature_fails() {
+        let (mut s, _) = setup();
+        let (gw_addr, _, _) = gateway_keypair();
+        let cmd_id = [42u8; 32];
+        let bad_sig = [0u8; 64]; // invalid signature
+        s.execute(
+            gw_addr,
+            cmd_id,
+            "ethereum".to_string(),
+            "0xABC".to_string(),
+            vec![1, 2, 3],
+            bad_sig,
         );
     }
 
     #[test]
     #[should_panic(expected = "command already processed")]
     fn test_replay_prevention() {
-        let mut s = setup();
+        let (mut s, gw_key) = setup();
+        let (gw_addr, _, _) = gateway_keypair();
         let cmd_id = [42u8; 32];
+        let sig = sign_execute(&gw_key, &cmd_id, "ethereum", "0xABC", &[]);
         s.execute(
-            gateway(),
+            gw_addr,
             cmd_id,
             "ethereum".to_string(),
             "0xABC".to_string(),
             vec![],
+            sig,
         );
+        let sig2 = sign_execute(&gw_key, &cmd_id, "ethereum", "0xABC", &[]);
         s.execute(
-            gateway(),
+            gw_addr,
             cmd_id,
             "ethereum".to_string(),
             "0xABC".to_string(),
             vec![],
+            sig2,
         );
     }
 
     #[test]
     fn test_execute_with_token() {
-        let mut s = setup();
+        let (mut s, gw_key) = setup();
+        let (gw_addr, _, _) = gateway_keypair();
         let cmd_id = [43u8; 32];
+        let payload = vec![5, 6, 7];
+        let sig = sign_execute_with_token(
+            &gw_key, &cmd_id, "base", "0xDEF", &payload, "USDC", 2_000_000,
+        );
         s.execute_with_token(
-            gateway(),
+            gw_addr,
             cmd_id,
             "base".to_string(),
             "0xDEF".to_string(),
-            vec![5, 6, 7],
+            payload,
             "USDC".to_string(),
             2_000_000,
+            sig,
         );
         assert!(s.is_command_processed(&cmd_id));
     }
@@ -655,34 +847,42 @@ mod tests {
     #[test]
     #[should_panic(expected = "unregistered token")]
     fn test_execute_with_unknown_token_fails() {
-        let mut s = setup();
+        let (mut s, gw_key) = setup();
+        let (gw_addr, _, _) = gateway_keypair();
+        let cmd_id = [44u8; 32];
+        let sig = sign_execute_with_token(&gw_key, &cmd_id, "ethereum", "0xABC", &[], "WBTC", 100);
         s.execute_with_token(
-            gateway(),
-            [44u8; 32],
+            gw_addr,
+            cmd_id,
             "ethereum".to_string(),
             "0xABC".to_string(),
             vec![],
             "WBTC".to_string(),
             100,
+            sig,
         );
     }
 
     #[test]
     #[should_panic(expected = "untrusted source")]
     fn test_execute_from_untrusted_source_fails() {
-        let mut s = setup();
+        let (mut s, gw_key) = setup();
+        let (gw_addr, _, _) = gateway_keypair();
+        let cmd_id = [45u8; 32];
+        let sig = sign_execute(&gw_key, &cmd_id, "ethereum", "0xUNKNOWN", &[]);
         s.execute(
-            gateway(),
-            [45u8; 32],
+            gw_addr,
+            cmd_id,
             "ethereum".to_string(),
             "0xUNKNOWN".to_string(),
             vec![],
+            sig,
         );
     }
 
     #[test]
     fn test_register_token() {
-        let mut s = setup();
+        let (mut s, _) = setup();
         s.register_token(owner(), "WETH".to_string(), [99u8; 32]);
         assert!(s.is_token_registered("WETH"));
     }
@@ -690,7 +890,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "paused")]
     fn test_paused_blocks_send() {
-        let mut s = setup();
+        let (mut s, _) = setup();
         s.pause(owner());
         s.send_to_chain(
             alice(),

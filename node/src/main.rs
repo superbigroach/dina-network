@@ -78,6 +78,17 @@ struct Cli {
     /// Block time in milliseconds (single-validator mode).
     #[arg(long, default_value_t = 2000)]
     block_time_ms: u64,
+
+    /// Path to a PEM-encoded TLS certificate chain for the REST API.
+    /// When both --tls-cert and --tls-key are provided, the REST server
+    /// will listen over HTTPS. The JSON-RPC endpoint remains plaintext;
+    /// use a reverse proxy (nginx/envoy/caddy) for full TLS coverage.
+    #[arg(long)]
+    tls_cert: Option<String>,
+
+    /// Path to a PEM-encoded TLS private key for the REST API.
+    #[arg(long)]
+    tls_key: Option<String>,
 }
 
 /// Expand ~ to the user home directory.
@@ -422,6 +433,8 @@ async fn main() -> Result<()> {
     let rpc_config = RpcConfig {
         jsonrpc_bind: format!("{}:{}", cli.rpc_bind, cli.rpc_port),
         rest_bind: format!("{}:{}", cli.rpc_bind, cli.rest_port),
+        tls_cert_path: cli.tls_cert.clone(),
+        tls_key_path: cli.tls_key.clone(),
     };
 
     let rpc_server = RpcServer::new(rpc_config.clone(), node_state.clone());

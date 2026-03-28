@@ -33,6 +33,8 @@ pub struct PaymentStreamState {
     pub streams: BTreeMap<u64, PaymentStream>,
     pub next_id: u64,
     pub balances: BTreeMap<Address, u64>,
+    /// Last observed timestamp for monotonicity checks.
+    pub last_timestamp: u64,
 }
 
 impl PaymentStreamState {
@@ -42,6 +44,7 @@ impl PaymentStreamState {
             streams: BTreeMap::new(),
             next_id: 1,
             balances: BTreeMap::new(),
+            last_timestamp: 0,
         }
     }
 
@@ -87,6 +90,11 @@ impl PaymentStreamState {
 
     /// Withdraw accumulated payments from a stream. Only the receiver can withdraw.
     pub fn withdraw(&mut self, caller: Address, stream_id: u64, current_time: u64) -> u64 {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC79: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         let stream = self
             .streams
             .get_mut(&stream_id)
@@ -143,6 +151,11 @@ impl PaymentStreamState {
 
     /// Cancel a stream, returning un-streamed funds to sender.
     pub fn cancel_stream(&mut self, caller: Address, stream_id: u64, current_time: u64) {
+        assert!(
+            current_time >= self.last_timestamp,
+            "DRC79: timestamp cannot go backwards"
+        );
+        self.last_timestamp = current_time;
         let stream = self
             .streams
             .get_mut(&stream_id)

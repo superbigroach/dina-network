@@ -1,3 +1,4 @@
+import * as ed from '@noble/ed25519';
 import { sha256 } from '@noble/hashes/sha256';
 import type { Address, Hash, SignedState } from './types';
 import { DinaClient } from './client';
@@ -13,6 +14,7 @@ import {
 interface ChannelState {
   channelId: string;
   counterparty: Address;
+  counterpartyPubKey: Uint8Array;
   nonce: number;
   myBalance: bigint;
   theirBalance: bigint;
@@ -38,9 +40,12 @@ export class PaymentChannel {
   /**
    * Open a new payment channel with a counterparty.
    * Locks `depositAmount` USDC on-chain into the channel contract.
+   * @param counterparty - The counterparty's address.
+   * @param depositAmount - Amount of USDC to lock in the channel.
+   * @param counterpartyPubKey - The counterparty's Ed25519 public key for signature verification.
    * @returns The channel ID.
    */
-  async open(counterparty: Address, depositAmount: bigint): Promise<string> {
+  async open(counterparty: Address, depositAmount: bigint, counterpartyPubKey: Uint8Array): Promise<string> {
     const txHash = await this.client.callContract(this.wallet, {
       contract: counterparty, // The channel factory contract
       method: 'open_channel',
@@ -65,6 +70,7 @@ export class PaymentChannel {
     this.channels.set(channelId, {
       channelId,
       counterparty,
+      counterpartyPubKey,
       nonce: 0,
       myBalance: depositAmount,
       theirBalance: 0n,
@@ -122,14 +128,29 @@ export class PaymentChannel {
       );
     }
 
-    // Verify signature using the counterparty's implied state
-    // In a real implementation we'd look up the counterparty's public key
-    // and verify against it. Here we validate structural correctness.
+    // Verify total balance conservation
     const totalBefore = channel.myBalance + channel.theirBalance;
     const totalAfter = signedState.balanceA + signedState.balanceB;
     if (totalAfter !== totalBefore) {
       throw new Error(
         'Invalid state: total channel balance changed'
+      );
+    }
+
+    // Verify Ed25519 signature from counterparty over the signed state
+    const stateHash = sha256(
+      concatBytes(
+        hexToBytes(signedState.channelId),
+        encodeBigintLE(BigInt(signedState.nonce)),
+        encodeBigintLE(signedState.balanceA),
+        encodeBigintLE(signedState.balanceB)
+      )
+    );
+    const sigBytes = hexToBytes(signedState.signature);
+    const validSig = ed.verify(sigBytes, stateHash, channel.counterpartyPubKey);
+    if (!validSig) {
+      throw new Error(
+        'Invalid signature: counterparty signature verification failed'
       );
     }
 

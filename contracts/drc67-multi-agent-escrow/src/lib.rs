@@ -198,8 +198,15 @@ impl EscrowState {
         assert!(new_release > 0, "DRC67: nothing new to release");
 
         let mut payouts = Vec::new();
-        for agent in &esc.agents {
-            let agent_amount = (new_release * agent.contribution_share_bps as u64) / 10000;
+        let mut distributed = 0u64;
+        for (i, agent) in esc.agents.iter().enumerate() {
+            let agent_amount = if i == esc.agents.len() - 1 {
+                // Last agent gets the remainder to avoid rounding errors
+                new_release - distributed
+            } else {
+                (new_release * agent.contribution_share_bps as u64) / 10000
+            };
+            distributed += agent_amount;
             if agent_amount > 0 {
                 payouts.push((agent.address, agent_amount));
             }
