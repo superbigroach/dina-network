@@ -69,6 +69,10 @@ impl TokenState {
         );
         self.balances.insert(caller, from_balance - amount);
         let to_balance = self.balance_of(&to);
+        assert!(
+            to_balance.checked_add(amount).is_some(),
+            "DRC1: balance overflow"
+        );
         self.balances.insert(to, to_balance + amount);
     }
 
@@ -76,13 +80,7 @@ impl TokenState {
         self.allowances.insert((caller, spender), amount);
     }
 
-    pub fn transfer_from(
-        &mut self,
-        caller: [u8; 32],
-        from: [u8; 32],
-        to: [u8; 32],
-        amount: u64,
-    ) {
+    pub fn transfer_from(&mut self, caller: [u8; 32], from: [u8; 32], to: [u8; 32], amount: u64) {
         assert!(amount > 0, "DRC1: transfer amount must be positive");
         let allowed = self.allowance(&from, &caller);
         assert!(
@@ -97,6 +95,10 @@ impl TokenState {
         self.allowances.insert((from, caller), allowed - amount);
         self.balances.insert(from, from_balance - amount);
         let to_balance = self.balance_of(&to);
+        assert!(
+            to_balance.checked_add(amount).is_some(),
+            "DRC1: balance overflow"
+        );
         self.balances.insert(to, to_balance + amount);
     }
 
@@ -104,8 +106,15 @@ impl TokenState {
         assert!(caller == self.owner, "DRC1: only owner can mint");
         assert!(amount > 0, "DRC1: mint amount must be positive");
         let balance = self.balance_of(&to);
+        assert!(
+            balance.checked_add(amount).is_some(),
+            "DRC1: balance overflow"
+        );
         self.balances.insert(to, balance + amount);
-        self.total_supply += amount;
+        self.total_supply = self
+            .total_supply
+            .checked_add(amount)
+            .expect("DRC1: total_supply overflow");
     }
 
     pub fn burn(&mut self, caller: [u8; 32], amount: u64) {
@@ -116,7 +125,28 @@ impl TokenState {
             "DRC1: insufficient balance to burn ({balance} < {amount})"
         );
         self.balances.insert(caller, balance - amount);
-        self.total_supply -= amount;
+        self.total_supply = self
+            .total_supply
+            .checked_sub(amount)
+            .expect("DRC1: total_supply underflow");
+    }
+
+    pub fn increase_allowance(&mut self, caller: [u8; 32], spender: [u8; 32], added: u64) {
+        let current = self.allowance(&caller, &spender);
+        let new_allowance = current
+            .checked_add(added)
+            .expect("DRC1: allowance overflow");
+        self.allowances.insert((caller, spender), new_allowance);
+    }
+
+    pub fn decrease_allowance(&mut self, caller: [u8; 32], spender: [u8; 32], subtracted: u64) {
+        let current = self.allowance(&caller, &spender);
+        assert!(
+            current >= subtracted,
+            "DRC1: decreased allowance below zero"
+        );
+        self.allowances
+            .insert((caller, spender), current - subtracted);
     }
 }
 
@@ -166,6 +196,18 @@ struct AllowanceArgs {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct IncreaseAllowanceArgs {
+    spender: [u8; 32],
+    added: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct DecreaseAllowanceArgs {
+    spender: [u8; 32],
+    subtracted: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct InitArgs {
     name: String,
     symbol: String,
@@ -207,29 +249,25 @@ pub fn dispatch(
         }
         "balance_of" => {
             let s = state.as_ref().expect("DRC1: not initialised");
-            let a: BalanceOfArgs =
-                serde_json::from_slice(args).expect("DRC1: bad balance_of args");
+            let a: BalanceOfArgs = serde_json::from_slice(args).expect("DRC1: bad balance_of args");
             serde_json::to_vec(&s.balance_of(&a.account)).unwrap()
         }
         "allowance" => {
             let s = state.as_ref().expect("DRC1: not initialised");
-            let a: AllowanceArgs =
-                serde_json::from_slice(args).expect("DRC1: bad allowance args");
+            let a: AllowanceArgs = serde_json::from_slice(args).expect("DRC1: bad allowance args");
             serde_json::to_vec(&s.allowance(&a.owner, &a.spender)).unwrap()
         }
 
         // -- Mutations -------------------------------------------------------
         "transfer" => {
             let s = state.as_mut().expect("DRC1: not initialised");
-            let a: TransferArgs =
-                serde_json::from_slice(args).expect("DRC1: bad transfer args");
+            let a: TransferArgs = serde_json::from_slice(args).expect("DRC1: bad transfer args");
             s.transfer(caller, a.to, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
         "approve" => {
             let s = state.as_mut().expect("DRC1: not initialised");
-            let a: ApproveArgs =
-                serde_json::from_slice(args).expect("DRC1: bad approve args");
+            let a: ApproveArgs = serde_json::from_slice(args).expect("DRC1: bad approve args");
             s.approve(caller, a.spender, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -250,6 +288,20 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC1: not initialised");
             let a: BurnArgs = serde_json::from_slice(args).expect("DRC1: bad burn args");
             s.burn(caller, a.amount);
+            serde_json::to_vec("ok").unwrap()
+        }
+        "increase_allowance" => {
+            let s = state.as_mut().expect("DRC1: not initialised");
+            let a: IncreaseAllowanceArgs =
+                serde_json::from_slice(args).expect("DRC1: bad increase_allowance args");
+            s.increase_allowance(caller, a.spender, a.added);
+            serde_json::to_vec("ok").unwrap()
+        }
+        "decrease_allowance" => {
+            let s = state.as_mut().expect("DRC1: not initialised");
+            let a: DecreaseAllowanceArgs =
+                serde_json::from_slice(args).expect("DRC1: bad decrease_allowance args");
+            s.decrease_allowance(caller, a.spender, a.subtracted);
             serde_json::to_vec("ok").unwrap()
         }
 

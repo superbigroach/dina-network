@@ -68,31 +68,46 @@ impl PaymentStreamState {
 
         let id = self.next_id;
         self.next_id += 1;
-        self.streams.insert(id, PaymentStream {
+        self.streams.insert(
             id,
-            sender: caller,
-            receiver,
-            rate_per_second,
-            total_deposited: deposit_amount,
-            total_withdrawn: 0,
-            start_time,
-            last_withdrawal_time: start_time,
-            active: true,
-        });
+            PaymentStream {
+                id,
+                sender: caller,
+                receiver,
+                rate_per_second,
+                total_deposited: deposit_amount,
+                total_withdrawn: 0,
+                start_time,
+                last_withdrawal_time: start_time,
+                active: true,
+            },
+        );
         id
     }
 
     /// Withdraw accumulated payments from a stream. Only the receiver can withdraw.
     pub fn withdraw(&mut self, caller: Address, stream_id: u64, current_time: u64) -> u64 {
-        let stream = self.streams.get_mut(&stream_id).expect("DRC79: stream not found");
+        let stream = self
+            .streams
+            .get_mut(&stream_id)
+            .expect("DRC79: stream not found");
         assert!(stream.active, "DRC79: stream not active");
-        assert!(caller == stream.receiver, "DRC79: only receiver can withdraw");
-        assert!(current_time >= stream.last_withdrawal_time, "DRC79: invalid time");
+        assert!(
+            caller == stream.receiver,
+            "DRC79: only receiver can withdraw"
+        );
+        assert!(
+            current_time >= stream.last_withdrawal_time,
+            "DRC79: invalid time"
+        );
 
         let elapsed = current_time - stream.last_withdrawal_time;
-        let accrued = elapsed * stream.rate_per_second;
         let remaining = stream.total_deposited - stream.total_withdrawn;
-        let withdrawable = accrued.min(remaining);
+        let accrued = elapsed
+            .checked_mul(stream.rate_per_second)
+            .unwrap_or(u64::MAX)
+            .min(remaining);
+        let withdrawable = accrued;
 
         if withdrawable > 0 {
             stream.total_withdrawn += withdrawable;
@@ -110,7 +125,10 @@ impl PaymentStreamState {
     /// Top up an existing stream with additional deposit.
     pub fn top_up(&mut self, caller: Address, stream_id: u64, amount: u64) {
         assert!(amount > 0, "DRC79: amount must be positive");
-        let stream = self.streams.get_mut(&stream_id).expect("DRC79: stream not found");
+        let stream = self
+            .streams
+            .get_mut(&stream_id)
+            .expect("DRC79: stream not found");
         assert!(caller == stream.sender, "DRC79: only sender can top up");
 
         let bal = self.balances.get(&caller).copied().unwrap_or(0);
@@ -125,15 +143,21 @@ impl PaymentStreamState {
 
     /// Cancel a stream, returning un-streamed funds to sender.
     pub fn cancel_stream(&mut self, caller: Address, stream_id: u64, current_time: u64) {
-        let stream = self.streams.get_mut(&stream_id).expect("DRC79: stream not found");
+        let stream = self
+            .streams
+            .get_mut(&stream_id)
+            .expect("DRC79: stream not found");
         assert!(caller == stream.sender, "DRC79: only sender can cancel");
         assert!(stream.active, "DRC79: stream not active");
 
         // Calculate what receiver is owed up to now
         let elapsed = current_time.saturating_sub(stream.last_withdrawal_time);
-        let accrued = elapsed * stream.rate_per_second;
         let remaining = stream.total_deposited - stream.total_withdrawn;
-        let owed = accrued.min(remaining);
+        let accrued = elapsed
+            .checked_mul(stream.rate_per_second)
+            .unwrap_or(u64::MAX)
+            .min(remaining);
+        let owed = accrued;
 
         // Pay receiver what they're owed
         if owed > 0 {
@@ -152,11 +176,17 @@ impl PaymentStreamState {
 
     /// Check stream balance without withdrawing.
     pub fn stream_balance(&self, stream_id: u64, current_time: u64) -> StreamBalance {
-        let stream = self.streams.get(&stream_id).expect("DRC79: stream not found");
+        let stream = self
+            .streams
+            .get(&stream_id)
+            .expect("DRC79: stream not found");
         let elapsed = current_time.saturating_sub(stream.last_withdrawal_time);
-        let accrued = elapsed * stream.rate_per_second;
         let remaining = stream.total_deposited - stream.total_withdrawn;
-        let withdrawable = accrued.min(remaining);
+        let accrued = elapsed
+            .checked_mul(stream.rate_per_second)
+            .unwrap_or(u64::MAX)
+            .min(remaining);
+        let withdrawable = accrued;
 
         StreamBalance {
             withdrawable,
@@ -166,7 +196,8 @@ impl PaymentStreamState {
     }
 
     pub fn active_streams_of(&self, addr: &Address) -> Vec<&PaymentStream> {
-        self.streams.values()
+        self.streams
+            .values()
             .filter(|s| s.active && (&s.sender == addr || &s.receiver == addr))
             .collect()
     }
@@ -177,19 +208,40 @@ impl PaymentStreamState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateStreamArgs { receiver: Address, rate_per_second: u64, deposit_amount: u64, start_time: u64 }
+struct CreateStreamArgs {
+    receiver: Address,
+    rate_per_second: u64,
+    deposit_amount: u64,
+    start_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct WithdrawArgs { stream_id: u64, current_time: u64 }
+struct WithdrawArgs {
+    stream_id: u64,
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TopUpArgs { stream_id: u64, amount: u64 }
+struct TopUpArgs {
+    stream_id: u64,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CancelArgs { stream_id: u64, current_time: u64 }
+struct CancelArgs {
+    stream_id: u64,
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct BalanceArgs { stream_id: u64, current_time: u64 }
+struct BalanceArgs {
+    stream_id: u64,
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArgs { addr: Address }
+struct AddrArgs {
+    addr: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<PaymentStreamState>,
@@ -212,7 +264,13 @@ pub fn dispatch(
         "create_stream" => {
             let s = state.as_mut().expect("DRC79: not initialised");
             let a: CreateStreamArgs = serde_json::from_slice(args).expect("DRC79: bad args");
-            let id = s.create_stream(caller, a.receiver, a.rate_per_second, a.deposit_amount, a.start_time);
+            let id = s.create_stream(
+                caller,
+                a.receiver,
+                a.rate_per_second,
+                a.deposit_amount,
+                a.start_time,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "withdraw" => {
@@ -257,7 +315,7 @@ mod tests {
 
     const OWNER: Address = [0u8; 32];
     const ALICE: Address = [1u8; 32]; // sender
-    const BOB: Address = [2u8; 32];   // receiver
+    const BOB: Address = [2u8; 32]; // receiver
 
     fn setup() -> (PaymentStreamState, u64) {
         let mut s = PaymentStreamState::new(OWNER);

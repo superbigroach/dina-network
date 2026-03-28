@@ -102,6 +102,11 @@ fn ordered_pair(a: &str, b: &str) -> (String, String) {
     }
 }
 
+/// Minimum liquidity burned on first deposit to prevent inflation attack (Uniswap V2 pattern).
+const MINIMUM_LIQUIDITY: u64 = 1000;
+/// Dead address that receives the burned minimum liquidity tokens.
+const DEAD_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+
 /// Integer square root (Babylonian method).
 fn isqrt(n: u128) -> u64 {
     if n == 0 {
@@ -185,19 +190,31 @@ impl DexState {
     ) -> DexEvent {
         let pool = self.pools.get_mut(&pool_id).expect("DEX: pool not found");
         assert!(!pool.paused, "DEX: pool is paused");
-        assert!(amount_a > 0 && amount_b > 0, "DEX: amounts must be positive");
+        assert!(
+            amount_a > 0 && amount_b > 0,
+            "DEX: amounts must be positive"
+        );
 
         let lp_tokens = if pool.total_lp_tokens == 0 {
-            // First deposit — LP tokens = sqrt(amount_a * amount_b)
-            let minted = isqrt(amount_a as u128 * amount_b as u128);
-            assert!(minted > 0, "DEX: insufficient initial liquidity");
-            minted
+            // First deposit — LP tokens = sqrt(amount_a * amount_b) - MINIMUM_LIQUIDITY
+            // MINIMUM_LIQUIDITY is permanently locked to a dead address to prevent
+            // the Uniswap V2 inflation attack.
+            let total_minted = isqrt(amount_a as u128 * amount_b as u128);
+            assert!(
+                total_minted > MINIMUM_LIQUIDITY,
+                "DEX: insufficient initial liquidity (must exceed MINIMUM_LIQUIDITY)"
+            );
+            // Lock MINIMUM_LIQUIDITY to dead address
+            pool.total_lp_tokens += MINIMUM_LIQUIDITY;
+            *pool
+                .lp_balances
+                .entry(DEAD_ADDRESS.to_string())
+                .or_insert(0) += MINIMUM_LIQUIDITY;
+            total_minted - MINIMUM_LIQUIDITY
         } else {
             // Subsequent deposits — mint proportional to the smaller ratio
-            let lp_a = (amount_a as u128 * pool.total_lp_tokens as u128)
-                / pool.reserve_a as u128;
-            let lp_b = (amount_b as u128 * pool.total_lp_tokens as u128)
-                / pool.reserve_b as u128;
+            let lp_a = (amount_a as u128 * pool.total_lp_tokens as u128) / pool.reserve_a as u128;
+            let lp_b = (amount_b as u128 * pool.total_lp_tokens as u128) / pool.reserve_b as u128;
             std::cmp::min(lp_a, lp_b) as u64
         };
 
@@ -209,10 +226,7 @@ impl DexState {
         pool.reserve_a += amount_a;
         pool.reserve_b += amount_b;
         pool.total_lp_tokens += lp_tokens;
-        *pool
-            .lp_balances
-            .entry(provider.to_string())
-            .or_insert(0) += lp_tokens;
+        *pool.lp_balances.entry(provider.to_string()).or_insert(0) += lp_tokens;
 
         DexEvent::LiquidityAdded {
             pool_id,
@@ -235,11 +249,7 @@ impl DexState {
         assert!(!pool.paused, "DEX: pool is paused");
         assert!(lp_amount > 0, "DEX: lp_amount must be positive");
 
-        let provider_balance = pool
-            .lp_balances
-            .get(provider)
-            .copied()
-            .unwrap_or(0);
+        let provider_balance = pool.lp_balances.get(provider).copied().unwrap_or(0);
         assert!(
             provider_balance >= lp_amount,
             "DEX: insufficient LP balance ({provider_balance} < {lp_amount})"
@@ -315,7 +325,8 @@ impl DexState {
         );
 
         let numerator = reserve_in as u128 * output_amount as u128 * 10_000;
-        let denominator = (reserve_out as u128 - output_amount as u128) * (10_000 - fee_bps) as u128;
+        let denominator =
+            (reserve_out as u128 - output_amount as u128) * (10_000 - fee_bps) as u128;
         let input = (numerator / denominator) as u64 + 1; // round up
 
         let total_fee = (input as u128 * fee_bps as u128) / 10_000;
@@ -346,8 +357,7 @@ impl DexState {
         let pool = self.pools.get(&pool_id).expect("DEX: pool not found");
         assert!(!pool.paused, "DEX: pool is paused");
 
-        let (reserve_in, reserve_out, a_is_input) =
-            Self::resolve_reserves(pool, input_token);
+        let (reserve_in, reserve_out, a_is_input) = Self::resolve_reserves(pool, input_token);
         let (output_amount, _fee, protocol_fee) =
             self.compute_swap(reserve_in, reserve_out, input_amount, pool.fee_bps);
 
@@ -368,13 +378,14 @@ impl DexState {
             .entry(input_token.to_string())
             .or_insert(0) += protocol_fee;
 
-        // Update reserves
+        // Update reserves — subtract protocol_fee from input so it is not
+        // double-counted in pool reserves (it is tracked separately).
         let pool = self.pools.get_mut(&pool_id).unwrap();
         if a_is_input {
-            pool.reserve_a += input_amount;
+            pool.reserve_a += input_amount - protocol_fee;
             pool.reserve_b -= output_amount;
         } else {
-            pool.reserve_b += input_amount;
+            pool.reserve_b += input_amount - protocol_fee;
             pool.reserve_a -= output_amount;
         }
         pool.cumulative_volume += input_amount;
@@ -424,18 +435,15 @@ impl DexState {
         };
 
         // Accumulate protocol fees
-        *self
-            .protocol_fees
-            .entry(input_token.clone())
-            .or_insert(0) += protocol_fee;
+        *self.protocol_fees.entry(input_token.clone()).or_insert(0) += protocol_fee;
 
-        // Update reserves
+        // Update reserves — subtract protocol_fee from input to avoid double-counting.
         let pool = self.pools.get_mut(&pool_id).unwrap();
         if a_is_input {
-            pool.reserve_a += input_amount;
+            pool.reserve_a += input_amount - protocol_fee;
             pool.reserve_b -= output_amount;
         } else {
-            pool.reserve_b += input_amount;
+            pool.reserve_b += input_amount - protocol_fee;
             pool.reserve_a -= output_amount;
         }
         pool.cumulative_volume += input_amount;
@@ -452,15 +460,9 @@ impl DexState {
 
     // -- Quotes (read-only) -------------------------------------------------
 
-    pub fn get_quote(
-        &self,
-        pool_id: u64,
-        input_token: &str,
-        input_amount: u64,
-    ) -> Quote {
+    pub fn get_quote(&self, pool_id: u64, input_token: &str, input_amount: u64) -> Quote {
         let pool = self.pools.get(&pool_id).expect("DEX: pool not found");
-        let (reserve_in, reserve_out, a_is_input) =
-            Self::resolve_reserves(pool, input_token);
+        let (reserve_in, reserve_out, a_is_input) = Self::resolve_reserves(pool, input_token);
         let (output_amount, fee_amount, _protocol_fee) =
             self.compute_swap(reserve_in, reserve_out, input_amount, pool.fee_bps);
 
@@ -471,8 +473,7 @@ impl DexState {
         };
 
         // Price impact = 1 - (output / ideal_output)  in bps
-        let ideal_output =
-            (input_amount as u128 * reserve_out as u128 / reserve_in as u128) as u64;
+        let ideal_output = (input_amount as u128 * reserve_out as u128 / reserve_in as u128) as u64;
         let impact_bps = if ideal_output > 0 {
             ((ideal_output - output_amount) as u128 * 10_000 / ideal_output as u128) as u64
         } else {
@@ -534,8 +535,7 @@ impl DexState {
                 min_output
             };
 
-            let evt =
-                self.swap_exact_in(pool_id, trader, &current_token, current_amount, hop_min);
+            let evt = self.swap_exact_in(pool_id, trader, &current_token, current_amount, hop_min);
             if let DexEvent::Swap {
                 ref output_token,
                 output_amount,
@@ -572,8 +572,7 @@ impl DexState {
         if let Some(&pool_id) = self.pool_lookup.get(&direct_key) {
             let pool = self.pools.get(&pool_id).unwrap();
             if !pool.paused && pool.reserve_a > 0 && pool.reserve_b > 0 {
-                let (reserve_in, reserve_out, _) =
-                    Self::resolve_reserves(pool, input_token);
+                let (reserve_in, reserve_out, _) = Self::resolve_reserves(pool, input_token);
                 let (out, _, _) =
                     self.compute_swap(reserve_in, reserve_out, input_amount, pool.fee_bps);
                 if out > best_output {
@@ -613,20 +612,16 @@ impl DexState {
                 }
 
                 // Simulate first hop
-                let (r_in1, r_out1, _) =
-                    Self::resolve_reserves(pool1, input_token);
-                let (mid_out, _, _) =
-                    self.compute_swap(r_in1, r_out1, input_amount, pool1.fee_bps);
+                let (r_in1, r_out1, _) = Self::resolve_reserves(pool1, input_token);
+                let (mid_out, _, _) = self.compute_swap(r_in1, r_out1, input_amount, pool1.fee_bps);
 
                 if mid_out == 0 {
                     continue;
                 }
 
                 // Simulate second hop
-                let (r_in2, r_out2, _) =
-                    Self::resolve_reserves(pool2, intermediate);
-                let (final_out, _, _) =
-                    self.compute_swap(r_in2, r_out2, mid_out, pool2.fee_bps);
+                let (r_in2, r_out2, _) = Self::resolve_reserves(pool2, intermediate);
+                let (final_out, _, _) = self.compute_swap(r_in2, r_out2, mid_out, pool2.fee_bps);
 
                 if final_out > best_output {
                     best_output = final_out;
@@ -649,11 +644,7 @@ impl DexState {
 
     pub fn collect_protocol_fees(&mut self, caller: &str, token: &str) -> DexEvent {
         assert!(caller == self.owner, "DEX: not owner");
-        let amount = self
-            .protocol_fees
-            .get(token)
-            .copied()
-            .unwrap_or(0);
+        let amount = self.protocol_fees.get(token).copied().unwrap_or(0);
         assert!(amount > 0, "DEX: no fees to collect");
         self.protocol_fees.insert(token.to_string(), 0);
 
@@ -727,21 +718,27 @@ mod tests {
         dex.create_pool("ETH", "USDC"); // reversed order, same pair
     }
 
-    // 3. Add first liquidity
+    // 3. Add first liquidity (with MINIMUM_LIQUIDITY burned)
     #[test]
     fn test_add_first_liquidity() {
         let mut dex = setup();
         dex.create_pool("USDC", "ETH");
         let evt = dex.add_liquidity(1, "alice", 10_000, 5_000, 0);
         if let DexEvent::LiquidityAdded { lp_tokens, .. } = &evt {
-            // sqrt(10000 * 5000) = sqrt(50_000_000) ≈ 7071
-            assert_eq!(*lp_tokens, isqrt(10_000u128 * 5_000));
+            // sqrt(10000 * 5000) = 7071, minus MINIMUM_LIQUIDITY (1000) = 6071
+            let expected = isqrt(10_000u128 * 5_000) - MINIMUM_LIQUIDITY;
+            assert_eq!(*lp_tokens, expected);
         } else {
             panic!("expected LiquidityAdded");
         }
         let pool = dex.get_pool(1).unwrap();
         assert_eq!(pool.reserve_a, 10_000);
         assert_eq!(pool.reserve_b, 5_000);
+        // Dead address should hold MINIMUM_LIQUIDITY
+        assert_eq!(
+            pool.lp_balances.get(DEAD_ADDRESS).copied().unwrap_or(0),
+            MINIMUM_LIQUIDITY
+        );
     }
 
     // 4. Add subsequent liquidity (proportional)
@@ -825,9 +822,7 @@ mod tests {
         let half = alice_lp / 2;
         let evt = dex.remove_liquidity(1, "alice", half, 0, 0);
         if let DexEvent::LiquidityRemoved {
-            amount_a,
-            amount_b,
-            ..
+            amount_a, amount_b, ..
         } = &evt
         {
             assert!(*amount_a > 0);
@@ -882,7 +877,12 @@ mod tests {
         assert_eq!(events.len(), 2);
 
         // Final output should be SOL
-        if let DexEvent::Swap { output_token, output_amount, .. } = &events[1] {
+        if let DexEvent::Swap {
+            output_token,
+            output_amount,
+            ..
+        } = &events[1]
+        {
             assert_eq!(output_token, "SOL");
             assert!(*output_amount > 0);
         }

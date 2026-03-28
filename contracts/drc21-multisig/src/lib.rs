@@ -7,6 +7,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub type Address = [u8; 32];
 
+/// Governance actions that require multisig approval before execution.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum GovernanceAction {
+    AddOwner { new_owner: Address },
+    RemoveOwner { owner: Address },
+    ChangeThreshold { new_threshold: u64 },
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PendingTx {
     pub id: u64,
@@ -110,40 +118,102 @@ impl MultisigState {
         self.pending_txs.get(&tx_id).unwrap()
     }
 
-    /// Add a new owner (requires multisig approval via a separate tx in practice,
-    /// but here we allow any owner to call for simplicity in the contract layer).
-    pub fn add_owner(&mut self, caller: Address, new_owner: Address) {
+    // -- Governance operations (require multisig approval) -------------------
+
+    /// Internal: create a governance proposal that must reach threshold approvals
+    /// before the action is executed. The caller auto-approves. Returns the tx id.
+    fn submit_governance_proposal(&mut self, caller: Address, action_data: Vec<u8>) -> u64 {
         self.require_owner(&caller);
-        assert!(
-            !self.owners.contains(&new_owner),
-            "DRC21: address is already an owner"
-        );
-        self.owners.insert(new_owner);
+        let id = self.nonce;
+        self.nonce += 1;
+
+        let mut approvals = BTreeSet::new();
+        approvals.insert(caller);
+
+        let tx = PendingTx {
+            id,
+            to: [0u8; 32], // governance target (self)
+            amount: 0,
+            data: action_data,
+            approvals,
+            executed: false,
+        };
+        self.pending_txs.insert(id, tx);
+        id
     }
 
-    /// Remove an owner.
-    pub fn remove_owner(&mut self, caller: Address, owner: Address) {
+    /// Execute a governance transaction if threshold is met. Decodes and applies
+    /// the governance action stored in `data`.
+    pub fn execute_governance(&mut self, caller: Address, tx_id: u64) {
         self.require_owner(&caller);
+        let tx = self
+            .pending_txs
+            .get(&tx_id)
+            .expect("DRC21: transaction not found");
+        assert!(!tx.executed, "DRC21: transaction already executed");
         assert!(
-            self.owners.contains(&owner),
-            "DRC21: address is not an owner"
+            tx.approvals.len() as u64 >= self.threshold,
+            "DRC21: not enough approvals ({} of {} required)",
+            tx.approvals.len(),
+            self.threshold
         );
-        assert!(
-            self.owners.len() as u64 > self.threshold,
-            "DRC21: cannot remove owner — would go below threshold"
-        );
-        self.owners.remove(&owner);
+
+        // Parse the governance action from data
+        let action: GovernanceAction =
+            serde_json::from_slice(&tx.data).expect("DRC21: invalid governance action");
+
+        // Mark as executed before applying to prevent re-entrancy
+        self.pending_txs.get_mut(&tx_id).unwrap().executed = true;
+
+        match action {
+            GovernanceAction::AddOwner { new_owner } => {
+                assert!(
+                    !self.owners.contains(&new_owner),
+                    "DRC21: address is already an owner"
+                );
+                self.owners.insert(new_owner);
+            }
+            GovernanceAction::RemoveOwner { owner } => {
+                assert!(
+                    self.owners.contains(&owner),
+                    "DRC21: address is not an owner"
+                );
+                assert!(
+                    self.owners.len() as u64 > self.threshold,
+                    "DRC21: cannot remove owner — would go below threshold"
+                );
+                self.owners.remove(&owner);
+            }
+            GovernanceAction::ChangeThreshold { new_threshold } => {
+                assert!(
+                    new_threshold > 0 && new_threshold <= self.owners.len() as u64,
+                    "DRC21: invalid threshold ({new_threshold} for {} owners)",
+                    self.owners.len()
+                );
+                self.threshold = new_threshold;
+            }
+        }
     }
 
-    /// Change the approval threshold.
-    pub fn change_threshold(&mut self, caller: Address, new_threshold: u64) {
-        self.require_owner(&caller);
-        assert!(
-            new_threshold > 0 && new_threshold <= self.owners.len() as u64,
-            "DRC21: invalid threshold ({new_threshold} for {} owners)",
-            self.owners.len()
-        );
-        self.threshold = new_threshold;
+    /// Propose adding a new owner. Returns proposal tx id.
+    pub fn add_owner(&mut self, caller: Address, new_owner: Address) -> u64 {
+        let action = GovernanceAction::AddOwner { new_owner };
+        let data = serde_json::to_vec(&action).unwrap();
+        self.submit_governance_proposal(caller, data)
+    }
+
+    /// Propose removing an owner. Returns proposal tx id.
+    pub fn remove_owner(&mut self, caller: Address, owner: Address) -> u64 {
+        let action = GovernanceAction::RemoveOwner { owner };
+        let data = serde_json::to_vec(&action).unwrap();
+        self.submit_governance_proposal(caller, data)
+    }
+
+    /// Propose changing the approval threshold. Returns proposal tx id.
+    pub fn change_threshold(&mut self, caller: Address, new_threshold: u64) -> u64 {
+        let action = GovernanceAction::ChangeThreshold { new_threshold };
+        let data = serde_json::to_vec(&action).unwrap();
+        self.submit_governance_proposal(caller, data)
     }
 }
 
@@ -218,8 +288,7 @@ pub fn dispatch(
 
         "approve" => {
             let s = state.as_mut().expect("DRC21: not initialised");
-            let a: ApproveArgs =
-                serde_json::from_slice(args).expect("DRC21: bad approve args");
+            let a: ApproveArgs = serde_json::from_slice(args).expect("DRC21: bad approve args");
             s.approve(caller, a.tx_id);
             serde_json::to_vec("ok").unwrap()
         }
@@ -234,25 +303,32 @@ pub fn dispatch(
 
         "add_owner" => {
             let s = state.as_mut().expect("DRC21: not initialised");
-            let a: AddOwnerArgs =
-                serde_json::from_slice(args).expect("DRC21: bad add_owner args");
-            s.add_owner(caller, a.new_owner);
-            serde_json::to_vec("ok").unwrap()
+            let a: AddOwnerArgs = serde_json::from_slice(args).expect("DRC21: bad add_owner args");
+            let tx_id = s.add_owner(caller, a.new_owner);
+            serde_json::to_vec(&tx_id).unwrap()
         }
 
         "remove_owner" => {
             let s = state.as_mut().expect("DRC21: not initialised");
             let a: RemoveOwnerArgs =
                 serde_json::from_slice(args).expect("DRC21: bad remove_owner args");
-            s.remove_owner(caller, a.owner);
-            serde_json::to_vec("ok").unwrap()
+            let tx_id = s.remove_owner(caller, a.owner);
+            serde_json::to_vec(&tx_id).unwrap()
         }
 
         "change_threshold" => {
             let s = state.as_mut().expect("DRC21: not initialised");
             let a: ChangeThresholdArgs =
                 serde_json::from_slice(args).expect("DRC21: bad change_threshold args");
-            s.change_threshold(caller, a.new_threshold);
+            let tx_id = s.change_threshold(caller, a.new_threshold);
+            serde_json::to_vec(&tx_id).unwrap()
+        }
+
+        "execute_governance" => {
+            let s = state.as_mut().expect("DRC21: not initialised");
+            let a: ExecuteTransactionArgs =
+                serde_json::from_slice(args).expect("DRC21: bad execute_governance args");
+            s.execute_governance(caller, a.tx_id);
             serde_json::to_vec("ok").unwrap()
         }
 
@@ -371,18 +447,54 @@ mod tests {
     }
 
     #[test]
-    fn test_add_and_remove_owner() {
+    fn test_add_and_remove_owner_requires_multisig() {
         let mut state = init_2of3();
 
-        // Add Dave
+        // Alice proposes adding Dave — returns a governance tx id
         let add_args = serde_json::to_vec(&AddOwnerArgs { new_owner: DAVE }).unwrap();
-        dispatch(&mut state, "add_owner", &add_args, ALICE);
+        let result = dispatch(&mut state, "add_owner", &add_args, ALICE);
+        let gov_tx_id: u64 = serde_json::from_slice(&result).unwrap();
+
+        // Not yet added — only 1 approval (Alice auto-approves)
+        assert_eq!(state.as_ref().unwrap().owners.len(), 3);
+
+        // Bob approves the governance proposal
+        let approve_args = serde_json::to_vec(&ApproveArgs { tx_id: gov_tx_id }).unwrap();
+        dispatch(&mut state, "approve", &approve_args, BOB);
+
+        // Execute the governance action (now 2 of 2 required)
+        let exec_args = serde_json::to_vec(&ExecuteTransactionArgs { tx_id: gov_tx_id }).unwrap();
+        dispatch(&mut state, "execute_governance", &exec_args, ALICE);
         assert_eq!(state.as_ref().unwrap().owners.len(), 4);
 
-        // Remove Dave (4 owners > threshold 2, so allowed)
+        // Now propose removing Dave (4 owners > threshold 2, so allowed)
         let rm_args = serde_json::to_vec(&RemoveOwnerArgs { owner: DAVE }).unwrap();
-        dispatch(&mut state, "remove_owner", &rm_args, ALICE);
+        let result = dispatch(&mut state, "remove_owner", &rm_args, ALICE);
+        let rm_tx_id: u64 = serde_json::from_slice(&result).unwrap();
+
+        // Bob approves
+        let approve_args2 = serde_json::to_vec(&ApproveArgs { tx_id: rm_tx_id }).unwrap();
+        dispatch(&mut state, "approve", &approve_args2, BOB);
+
+        // Execute
+        let exec_args2 = serde_json::to_vec(&ExecuteTransactionArgs { tx_id: rm_tx_id }).unwrap();
+        dispatch(&mut state, "execute_governance", &exec_args2, ALICE);
         assert_eq!(state.as_ref().unwrap().owners.len(), 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "DRC21: not enough approvals")]
+    fn test_governance_requires_threshold_approvals() {
+        let mut state = init_2of3();
+
+        // Alice proposes adding Dave (auto-approves = 1 approval)
+        let add_args = serde_json::to_vec(&AddOwnerArgs { new_owner: DAVE }).unwrap();
+        let result = dispatch(&mut state, "add_owner", &add_args, ALICE);
+        let gov_tx_id: u64 = serde_json::from_slice(&result).unwrap();
+
+        // Try to execute without enough approvals (need 2, have 1)
+        let exec_args = serde_json::to_vec(&ExecuteTransactionArgs { tx_id: gov_tx_id }).unwrap();
+        dispatch(&mut state, "execute_governance", &exec_args, ALICE);
     }
 
     #[test]
@@ -396,16 +508,36 @@ mod tests {
         .unwrap();
         dispatch(&mut state, "init", &args, ALICE);
 
-        // 2 owners, threshold 2 => cannot remove
+        // Propose removing BOB
         let rm_args = serde_json::to_vec(&RemoveOwnerArgs { owner: BOB }).unwrap();
-        dispatch(&mut state, "remove_owner", &rm_args, ALICE);
+        let result = dispatch(&mut state, "remove_owner", &rm_args, ALICE);
+        let tx_id: u64 = serde_json::from_slice(&result).unwrap();
+
+        // Bob approves his own removal
+        let approve_args = serde_json::to_vec(&ApproveArgs { tx_id }).unwrap();
+        dispatch(&mut state, "approve", &approve_args, BOB);
+
+        // Execute — should panic (2 owners, threshold 2, cannot remove)
+        let exec_args = serde_json::to_vec(&ExecuteTransactionArgs { tx_id }).unwrap();
+        dispatch(&mut state, "execute_governance", &exec_args, ALICE);
     }
 
     #[test]
-    fn test_change_threshold() {
+    fn test_change_threshold_requires_multisig() {
         let mut state = init_2of3();
+
+        // Alice proposes changing threshold to 3
         let args = serde_json::to_vec(&ChangeThresholdArgs { new_threshold: 3 }).unwrap();
-        dispatch(&mut state, "change_threshold", &args, ALICE);
+        let result = dispatch(&mut state, "change_threshold", &args, ALICE);
+        let tx_id: u64 = serde_json::from_slice(&result).unwrap();
+
+        // Bob approves
+        let approve_args = serde_json::to_vec(&ApproveArgs { tx_id }).unwrap();
+        dispatch(&mut state, "approve", &approve_args, BOB);
+
+        // Execute
+        let exec_args = serde_json::to_vec(&ExecuteTransactionArgs { tx_id }).unwrap();
+        dispatch(&mut state, "execute_governance", &exec_args, ALICE);
         assert_eq!(state.as_ref().unwrap().threshold, 3);
     }
 
@@ -413,8 +545,16 @@ mod tests {
     #[should_panic(expected = "DRC21: invalid threshold")]
     fn test_invalid_threshold_fails() {
         let mut state = init_2of3();
+
         let args = serde_json::to_vec(&ChangeThresholdArgs { new_threshold: 4 }).unwrap();
-        dispatch(&mut state, "change_threshold", &args, ALICE);
+        let result = dispatch(&mut state, "change_threshold", &args, ALICE);
+        let tx_id: u64 = serde_json::from_slice(&result).unwrap();
+
+        let approve_args = serde_json::to_vec(&ApproveArgs { tx_id }).unwrap();
+        dispatch(&mut state, "approve", &approve_args, BOB);
+
+        let exec_args = serde_json::to_vec(&ExecuteTransactionArgs { tx_id }).unwrap();
+        dispatch(&mut state, "execute_governance", &exec_args, ALICE);
     }
 
     #[test]

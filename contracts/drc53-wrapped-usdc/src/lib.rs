@@ -42,7 +42,10 @@ impl WrappedUsdcState {
     }
 
     pub fn allowance(&self, owner: &Address, spender: &Address) -> u64 {
-        self.allowances.get(&(*owner, *spender)).copied().unwrap_or(0)
+        self.allowances
+            .get(&(*owner, *spender))
+            .copied()
+            .unwrap_or(0)
     }
 
     // -- Mutations -----------------------------------------------------------
@@ -52,9 +55,17 @@ impl WrappedUsdcState {
         assert!(amount > 0, "DRC53: wrap amount must be positive");
         // In production, the runtime verifies the native USDC transfer.
         let bal = self.balance_of(&caller);
+        assert!(bal.checked_add(amount).is_some(), "DRC53: balance overflow");
         self.balances.insert(caller, bal + amount);
-        self.total_supply += amount;
+        self.total_supply = self
+            .total_supply
+            .checked_add(amount)
+            .expect("DRC53: total_supply overflow");
         let dep = self.native_deposits.get(&caller).copied().unwrap_or(0);
+        assert!(
+            dep.checked_add(amount).is_some(),
+            "DRC53: native_deposits overflow"
+        );
         self.native_deposits.insert(caller, dep + amount);
     }
 
@@ -64,7 +75,10 @@ impl WrappedUsdcState {
         let bal = self.balance_of(&caller);
         assert!(bal >= amount, "DRC53: insufficient wUSDC balance");
         self.balances.insert(caller, bal - amount);
-        self.total_supply -= amount;
+        self.total_supply = self
+            .total_supply
+            .checked_sub(amount)
+            .expect("DRC53: total_supply underflow");
         // In production, the runtime sends native USDC back.
     }
 
@@ -74,6 +88,10 @@ impl WrappedUsdcState {
         assert!(from_bal >= amount, "DRC53: insufficient balance");
         self.balances.insert(caller, from_bal - amount);
         let to_bal = self.balance_of(&to);
+        assert!(
+            to_bal.checked_add(amount).is_some(),
+            "DRC53: balance overflow"
+        );
         self.balances.insert(to, to_bal + amount);
     }
 
@@ -81,13 +99,7 @@ impl WrappedUsdcState {
         self.allowances.insert((caller, spender), amount);
     }
 
-    pub fn transfer_from(
-        &mut self,
-        caller: Address,
-        from: Address,
-        to: Address,
-        amount: u64,
-    ) {
+    pub fn transfer_from(&mut self, caller: Address, from: Address, to: Address, amount: u64) {
         assert!(amount > 0, "DRC53: transfer amount must be positive");
         let allowed = self.allowance(&from, &caller);
         assert!(allowed >= amount, "DRC53: allowance exceeded");
@@ -96,6 +108,10 @@ impl WrappedUsdcState {
         self.allowances.insert((from, caller), allowed - amount);
         self.balances.insert(from, from_bal - amount);
         let to_bal = self.balance_of(&to);
+        assert!(
+            to_bal.checked_add(amount).is_some(),
+            "DRC53: balance overflow"
+        );
         self.balances.insert(to, to_bal + amount);
     }
 }
@@ -105,17 +121,34 @@ impl WrappedUsdcState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AmountArg { amount: u64 }
+struct AmountArg {
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { to: Address, amount: u64 }
+struct TransferArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ApproveArgs { spender: Address, amount: u64 }
+struct ApproveArgs {
+    spender: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferFromArgs { from: Address, to: Address, amount: u64 }
+struct TransferFromArgs {
+    from: Address,
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AllowanceArgs { owner: Address, spender: Address }
+struct AllowanceArgs {
+    owner: Address,
+    spender: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<WrappedUsdcState>,
@@ -197,7 +230,9 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<WrappedUsdcState> {
         let mut state = None;
@@ -232,7 +267,11 @@ mod tests {
         let mut state = setup();
         let wrap = serde_json::to_vec(&AmountArg { amount: 1000 }).unwrap();
         dispatch(&mut state, "wrap", &wrap, addr(2));
-        let xfer = serde_json::to_vec(&TransferArgs { to: addr(3), amount: 400 }).unwrap();
+        let xfer = serde_json::to_vec(&TransferArgs {
+            to: addr(3),
+            amount: 400,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &xfer, addr(2));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(2)), 600);
@@ -245,11 +284,18 @@ mod tests {
         let mut state = setup();
         let wrap = serde_json::to_vec(&AmountArg { amount: 1000 }).unwrap();
         dispatch(&mut state, "wrap", &wrap, addr(2));
-        let approve = serde_json::to_vec(&ApproveArgs { spender: addr(3), amount: 500 }).unwrap();
+        let approve = serde_json::to_vec(&ApproveArgs {
+            spender: addr(3),
+            amount: 500,
+        })
+        .unwrap();
         dispatch(&mut state, "approve", &approve, addr(2));
         let xfer = serde_json::to_vec(&TransferFromArgs {
-            from: addr(2), to: addr(4), amount: 300,
-        }).unwrap();
+            from: addr(2),
+            to: addr(4),
+            amount: 300,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_from", &xfer, addr(3));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(4)), 300);

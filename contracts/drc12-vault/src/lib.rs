@@ -7,6 +7,12 @@ use std::collections::BTreeMap;
 
 type Address = [u8; 32];
 
+/// Minimum shares burned to dead address on first deposit to prevent inflation attack.
+const MINIMUM_SHARES: u64 = 1000;
+
+/// Dead address where minimum shares are burned.
+const DEAD_ADDRESS: Address = [0xDE; 32];
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultState {
     pub total_shares: u64,
@@ -67,8 +73,27 @@ impl VaultState {
         let shares_minted = self.convert_to_shares(amount);
         assert!(shares_minted > 0, "DRC12: zero shares minted");
 
+        // On first deposit, burn MINIMUM_SHARES to dead address to prevent inflation attack
+        let is_first_deposit = self.total_shares == 0;
+
         self.total_assets += amount;
         self.total_shares += shares_minted;
+
+        if is_first_deposit {
+            assert!(
+                shares_minted > MINIMUM_SHARES,
+                "DRC12: first deposit too small, must mint more than {} shares",
+                MINIMUM_SHARES
+            );
+            let dead_current = self.balance_of(&DEAD_ADDRESS);
+            self.shares
+                .insert(DEAD_ADDRESS, dead_current + MINIMUM_SHARES);
+            let receiver_shares = shares_minted - MINIMUM_SHARES;
+            let current = self.balance_of(&receiver);
+            self.shares.insert(receiver, current + receiver_shares);
+            self.deposit_timestamps.insert(receiver, timestamp);
+            return receiver_shares;
+        }
 
         let current = self.balance_of(&receiver);
         self.shares.insert(receiver, current + shares_minted);
@@ -168,16 +193,14 @@ pub fn dispatch(
 
         "deposit" => {
             let s = state.as_mut().expect("DRC12: not initialised");
-            let a: DepositArgs =
-                serde_json::from_slice(args).expect("DRC12: bad deposit args");
+            let a: DepositArgs = serde_json::from_slice(args).expect("DRC12: bad deposit args");
             let minted = s.deposit(a.amount, a.receiver, a.timestamp);
             serde_json::to_vec(&minted).unwrap()
         }
 
         "withdraw" => {
             let s = state.as_mut().expect("DRC12: not initialised");
-            let a: WithdrawArgs =
-                serde_json::from_slice(args).expect("DRC12: bad withdraw args");
+            let a: WithdrawArgs = serde_json::from_slice(args).expect("DRC12: bad withdraw args");
             let burned = s.withdraw(a.amount, a.receiver, a.owner, caller);
             serde_json::to_vec(&burned).unwrap()
         }
@@ -217,15 +240,13 @@ pub fn dispatch(
 
         "balance_of" => {
             let s = state.as_ref().expect("DRC12: not initialised");
-            let a: OwnerArgs =
-                serde_json::from_slice(args).expect("DRC12: bad balance_of args");
+            let a: OwnerArgs = serde_json::from_slice(args).expect("DRC12: bad balance_of args");
             serde_json::to_vec(&s.balance_of(&a.owner)).unwrap()
         }
 
         "add_yield" => {
             let s = state.as_mut().expect("DRC12: not initialised");
-            let a: AmountArgs =
-                serde_json::from_slice(args).expect("DRC12: bad add_yield args");
+            let a: AmountArgs = serde_json::from_slice(args).expect("DRC12: bad add_yield args");
             s.add_yield(caller, a.amount);
             serde_json::to_vec("ok").unwrap()
         }

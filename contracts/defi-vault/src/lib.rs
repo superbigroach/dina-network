@@ -114,7 +114,10 @@ impl VaultState {
 
         // M-6: First deposit requires minimum 1000 micro-USDC to prevent dust/donation attacks.
         if self.total_shares == 0 {
-            assert!(amount >= 1000, "Vault: minimum first deposit is 1000 micro-USDC");
+            assert!(
+                amount >= 1000,
+                "Vault: minimum first deposit is 1000 micro-USDC"
+            );
         }
 
         let shares_minted = self.convert_to_shares(amount);
@@ -302,32 +305,28 @@ pub fn dispatch(
 
         "deposit" => {
             let s = state.as_mut().expect("Vault: not initialised");
-            let a: AmountArgs =
-                serde_json::from_slice(args).expect("Vault: bad deposit args");
+            let a: AmountArgs = serde_json::from_slice(args).expect("Vault: bad deposit args");
             let minted = s.deposit(caller, a.amount);
             serde_json::to_vec(&minted).unwrap()
         }
 
         "withdraw" => {
             let s = state.as_mut().expect("Vault: not initialised");
-            let a: SharesArgs =
-                serde_json::from_slice(args).expect("Vault: bad withdraw args");
+            let a: SharesArgs = serde_json::from_slice(args).expect("Vault: bad withdraw args");
             let assets = s.withdraw(caller, a.shares);
             serde_json::to_vec(&assets).unwrap()
         }
 
         "harvest" => {
             let s = state.as_mut().expect("Vault: not initialised");
-            let a: HarvestArgs =
-                serde_json::from_slice(args).expect("Vault: bad harvest args");
+            let a: HarvestArgs = serde_json::from_slice(args).expect("Vault: bad harvest args");
             s.harvest(caller, a.yield_amount, a.timestamp);
             serde_json::to_vec("ok").unwrap()
         }
 
         "add_yield" => {
             let s = state.as_mut().expect("Vault: not initialised");
-            let a: AmountArgs =
-                serde_json::from_slice(args).expect("Vault: bad add_yield args");
+            let a: AmountArgs = serde_json::from_slice(args).expect("Vault: bad add_yield args");
             s.add_yield(caller, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -417,7 +416,7 @@ mod tests {
     fn test_create_vault_and_first_deposit() {
         let mut vault = make_vault();
         let shares = vault.deposit(addr(1), 1_000_000); // 1 USDC
-        // First deposit: 1:1 shares
+                                                        // First deposit: 1:1 shares
         assert_eq!(shares, 1_000_000);
         assert_eq!(vault.total_assets, 1_000_000);
         assert_eq!(vault.total_shares, 1_000_000);

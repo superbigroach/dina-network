@@ -38,6 +38,8 @@ pub struct BridgeState {
     pub total_released: u64,
     pub total_refunded: u64,
     pub balances: BTreeMap<Address, u64>,
+    /// Accumulated balance of released funds available for relayer withdrawal.
+    pub relayer_balance: u64,
 }
 
 impl BridgeState {
@@ -51,6 +53,7 @@ impl BridgeState {
             total_released: 0,
             total_refunded: 0,
             balances: BTreeMap::new(),
+            relayer_balance: 0,
         }
     }
 
@@ -70,9 +73,18 @@ impl BridgeState {
         timeout: u64,
     ) -> u64 {
         assert!(amount > 0, "DRC60: amount must be positive");
-        assert!(!destination_chain.is_empty(), "DRC60: destination chain required");
-        assert!(!destination_address.is_empty(), "DRC60: destination address required");
-        assert!(timeout > lock_time, "DRC60: timeout must be after lock time");
+        assert!(
+            !destination_chain.is_empty(),
+            "DRC60: destination chain required"
+        );
+        assert!(
+            !destination_address.is_empty(),
+            "DRC60: destination address required"
+        );
+        assert!(
+            timeout > lock_time,
+            "DRC60: timeout must be after lock time"
+        );
 
         let balance = self.balances.get(&caller).copied().unwrap_or(0);
         assert!(balance >= amount, "DRC60: insufficient balance");
@@ -80,39 +92,64 @@ impl BridgeState {
 
         let id = self.next_lock_id;
         self.next_lock_id += 1;
-        self.locks.insert(id, BridgeLock {
+        self.locks.insert(
             id,
-            sender: caller,
-            amount,
-            destination_chain,
-            destination_address,
-            lock_time,
-            release_time: 0,
-            timeout,
-            status: BridgeStatus::Locked,
-            proof: None,
-        });
+            BridgeLock {
+                id,
+                sender: caller,
+                amount,
+                destination_chain,
+                destination_address,
+                lock_time,
+                release_time: 0,
+                timeout,
+                status: BridgeStatus::Locked,
+                proof: None,
+            },
+        );
         self.total_locked += amount;
         id
     }
 
     /// Relayer confirms the cross-chain transfer and releases escrowed funds.
     pub fn release(&mut self, caller: Address, lock_id: u64, proof: Vec<u8>, current_time: u64) {
-        assert!(caller == self.relayer || caller == self.owner, "DRC60: only relayer/owner can release");
+        assert!(
+            caller == self.relayer || caller == self.owner,
+            "DRC60: only relayer/owner can release"
+        );
         let lock = self.locks.get_mut(&lock_id).expect("DRC60: lock not found");
-        assert!(lock.status == BridgeStatus::Locked, "DRC60: not in locked state");
+        assert!(
+            lock.status == BridgeStatus::Locked,
+            "DRC60: not in locked state"
+        );
         assert!(!proof.is_empty(), "DRC60: proof required");
 
         lock.status = BridgeStatus::Released;
         lock.release_time = current_time;
         lock.proof = Some(proof);
         self.total_released += lock.amount;
+        self.relayer_balance += lock.amount;
+    }
+
+    /// Relayer withdraws accumulated released funds.
+    pub fn withdraw_released(&mut self, caller: Address) -> u64 {
+        assert!(
+            caller == self.relayer || caller == self.owner,
+            "DRC60: only relayer/owner can withdraw released funds"
+        );
+        let amount = self.relayer_balance;
+        assert!(amount > 0, "DRC60: no released funds to withdraw");
+        self.relayer_balance = 0;
+        amount
     }
 
     /// Sender can reclaim funds after timeout if not released.
     pub fn refund(&mut self, caller: Address, lock_id: u64, current_time: u64) {
         let lock = self.locks.get_mut(&lock_id).expect("DRC60: lock not found");
-        assert!(lock.status == BridgeStatus::Locked, "DRC60: not in locked state");
+        assert!(
+            lock.status == BridgeStatus::Locked,
+            "DRC60: not in locked state"
+        );
         assert!(caller == lock.sender, "DRC60: only sender can refund");
         assert!(current_time >= lock.timeout, "DRC60: timeout not reached");
 
@@ -124,14 +161,16 @@ impl BridgeState {
     }
 
     pub fn locked_amount(&self) -> u64 {
-        self.locks.values()
+        self.locks
+            .values()
             .filter(|l| l.status == BridgeStatus::Locked)
             .map(|l| l.amount)
             .sum()
     }
 
     pub fn pending_releases(&self) -> Vec<&BridgeLock> {
-        self.locks.values()
+        self.locks
+            .values()
             .filter(|l| l.status == BridgeStatus::Locked)
             .collect()
     }
@@ -150,25 +189,46 @@ impl BridgeState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { relayer: Address }
+struct InitArgs {
+    relayer: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct LockArgs { amount: u64, destination_chain: String, destination_address: String, lock_time: u64, timeout: u64 }
+struct LockArgs {
+    amount: u64,
+    destination_chain: String,
+    destination_address: String,
+    lock_time: u64,
+    timeout: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ReleaseArgs { lock_id: u64, proof: Vec<u8>, current_time: u64 }
+struct ReleaseArgs {
+    lock_id: u64,
+    proof: Vec<u8>,
+    current_time: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RefundArgs { lock_id: u64, current_time: u64 }
+struct RefundArgs {
+    lock_id: u64,
+    current_time: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct LockIdArgs { lock_id: u64 }
+struct LockIdArgs {
+    lock_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArgs { addr: Address }
+struct AddrArgs {
+    addr: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<BridgeState>,
@@ -192,7 +252,14 @@ pub fn dispatch(
         "lock" => {
             let s = state.as_mut().expect("DRC60: not initialised");
             let a: LockArgs = serde_json::from_slice(args).expect("DRC60: bad args");
-            let id = s.lock(caller, a.amount, a.destination_chain, a.destination_address, a.lock_time, a.timeout);
+            let id = s.lock(
+                caller,
+                a.amount,
+                a.destination_chain,
+                a.destination_address,
+                a.lock_time,
+                a.timeout,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "release" => {
@@ -224,6 +291,11 @@ pub fn dispatch(
             let s = state.as_ref().expect("DRC60: not initialised");
             let a: AddrArgs = serde_json::from_slice(args).expect("DRC60: bad args");
             serde_json::to_vec(&s.balance_of(&a.addr)).unwrap()
+        }
+        "withdraw_released" => {
+            let s = state.as_mut().expect("DRC60: not initialised");
+            let amount = s.withdraw_released(caller);
+            serde_json::to_vec(&amount).unwrap()
         }
         _ => panic!("DRC60: unknown method '{method}'"),
     }

@@ -100,13 +100,11 @@ impl ProxyState {
 
     // -- Upgrade lifecycle ---------------------------------------------------
 
-    pub fn propose_upgrade(
-        &mut self,
-        caller: &str,
-        new_code: Vec<u8>,
-        current_time: u64,
-    ) {
-        assert!(caller == self.admin, "DRC16: only admin can propose upgrade");
+    pub fn propose_upgrade(&mut self, caller: &str, new_code: Vec<u8>, current_time: u64) {
+        assert!(
+            caller == self.admin,
+            "DRC16: only admin can propose upgrade"
+        );
         assert!(
             self.pending_upgrade.is_none(),
             "DRC16: upgrade already pending — cancel first"
@@ -124,7 +122,10 @@ impl ProxyState {
 
     pub fn execute_upgrade(&mut self, caller: &str, current_time: u64) {
         // M-5: Only admin can execute an upgrade.
-        assert!(caller == self.admin, "DRC16: only admin can execute upgrade");
+        assert!(
+            caller == self.admin,
+            "DRC16: only admin can execute upgrade"
+        );
         let pending = self
             .pending_upgrade
             .take()
@@ -162,10 +163,7 @@ impl ProxyState {
     // -- Admin ---------------------------------------------------------------
 
     pub fn transfer_admin(&mut self, caller: &str, new_admin: String) {
-        assert!(
-            caller == self.admin,
-            "DRC16: only admin can transfer admin"
-        );
+        assert!(caller == self.admin, "DRC16: only admin can transfer admin");
         assert!(!new_admin.is_empty(), "DRC16: new admin cannot be empty");
         self.admin = new_admin;
     }
@@ -185,17 +183,12 @@ impl ProxyState {
     }
 }
 
-/// Compute a hex-encoded hash for the code.
-/// L-2: TODO — Currently uses a djb2-variant (non-cryptographic). Should be replaced
-/// with SHA-256 (from the sha2 crate) before mainnet to prevent hash collisions
-/// that could make upgrade history misleading. Not adding sha2 dependency here
-/// to keep the contract lightweight; will address when sha2 is added to Cargo.toml.
+/// Compute a hex-encoded SHA-256 hash for the code.
 fn compute_hash(data: &[u8]) -> String {
-    let mut hash: u64 = 5381;
-    for &b in data {
-        hash = hash.wrapping_mul(33).wrapping_add(b as u64);
-    }
-    format!("{:016x}", hash)
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(data);
+    // Encode full 32-byte hash as 64-char hex string
+    hash.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 // ---------------------------------------------------------------------------

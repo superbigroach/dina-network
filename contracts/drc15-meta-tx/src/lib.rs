@@ -1,4 +1,6 @@
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 // ---------------------------------------------------------------------------
@@ -87,11 +89,7 @@ impl MetaTxRegistry {
     /// Verify a forward request and execute it (increment nonce).
     /// The caller must be a trusted forwarder.
     /// Returns true if verification passed and the request was "executed".
-    pub fn verify_and_execute(
-        &mut self,
-        caller: Address,
-        request: ForwardRequest,
-    ) -> bool {
+    pub fn verify_and_execute(&mut self, caller: Address, request: ForwardRequest) -> bool {
         // Caller must be a trusted forwarder
         assert!(
             self.is_trusted_forwarder(&caller),
@@ -106,13 +104,27 @@ impl MetaTxRegistry {
             request.nonce
         );
 
-        // Verify signature is present (non-empty).
-        // In production, cryptographic verification would happen here using
-        // ed25519 or similar. The contract validates the signature is at
-        // least 64 bytes (the standard ed25519 signature length).
+        // Verify Ed25519 signature over SHA-256(from || to || value || data || nonce)
         assert!(
             request.signature.len() >= 64,
             "DRC15: signature must be at least 64 bytes"
+        );
+        let mut hasher = Sha256::new();
+        hasher.update(request.from);
+        hasher.update(request.to);
+        hasher.update(request.value.to_le_bytes());
+        hasher.update(&request.data);
+        hasher.update(request.nonce.to_le_bytes());
+        let message_hash = hasher.finalize();
+
+        let vk = VerifyingKey::from_bytes(&request.from).expect("DRC15: invalid signer pubkey");
+        let sig_bytes: [u8; 64] = request.signature[..64]
+            .try_into()
+            .expect("DRC15: signature too short");
+        let sig = Signature::from_bytes(&sig_bytes);
+        assert!(
+            vk.verify(&message_hash, &sig).is_ok(),
+            "DRC15: invalid signature"
         );
 
         // Increment nonce to prevent replay
@@ -182,8 +194,7 @@ pub fn dispatch(
 
         "get_nonce" => {
             let s = state.as_ref().expect("DRC15: not initialised");
-            let a: AddressArg =
-                serde_json::from_slice(args).expect("DRC15: bad get_nonce args");
+            let a: AddressArg = serde_json::from_slice(args).expect("DRC15: bad get_nonce args");
             serde_json::to_vec(&s.get_nonce(&a.addr)).unwrap()
         }
 

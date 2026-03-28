@@ -1,3 +1,4 @@
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -82,13 +83,19 @@ impl PermitRegistry {
         // Build the permit digest
         let digest = self.build_permit_digest(&owner, &spender, amount, nonce, deadline);
 
-        // Verify signature: in the on-chain runtime this would call an
-        // ed25519-verify host function.  For now we accept SHA-256(digest)
-        // as a valid "signature" so the contract is fully testable without
-        // a crypto host import.
-        let expected_sig = Sha256::digest(digest);
+        // Verify Ed25519 signature over the permit digest.
+        // The owner's address (32 bytes) is their Ed25519 public key.
         assert!(
-            signature_bytes == expected_sig.as_slice(),
+            signature_bytes.len() >= 64,
+            "DRC4: signature must be at least 64 bytes"
+        );
+        let vk = VerifyingKey::from_bytes(&owner).expect("DRC4: invalid owner pubkey");
+        let sig_bytes: [u8; 64] = signature_bytes[..64]
+            .try_into()
+            .expect("DRC4: signature too short");
+        let sig = Signature::from_bytes(&sig_bytes);
+        assert!(
+            vk.verify(&digest, &sig).is_ok(),
             "DRC4: invalid permit signature"
         );
 
@@ -179,8 +186,7 @@ pub fn dispatch(
         }
         "allowance" => {
             let s = state.as_ref().expect("DRC4: not initialised");
-            let a: AllowanceArgs =
-                serde_json::from_slice(args).expect("DRC4: bad allowance args");
+            let a: AllowanceArgs = serde_json::from_slice(args).expect("DRC4: bad allowance args");
             serde_json::to_vec(&s.allowance(&a.owner, &a.spender)).unwrap()
         }
 

@@ -21,6 +21,8 @@ pub struct StakingPoolState {
     pub rewards_per_share: u128,
     /// Tracks reward debt per user for correct reward accounting
     pub reward_debt: BTreeMap<Address, u128>,
+    /// Pending rewards credited during unstake, available for claim.
+    pub pending_reward_balance: BTreeMap<Address, u64>,
 }
 
 impl StakingPoolState {
@@ -33,6 +35,7 @@ impl StakingPoolState {
             shares: BTreeMap::new(),
             rewards_per_share: 0,
             reward_debt: BTreeMap::new(),
+            pending_reward_balance: BTreeMap::new(),
         }
     }
 
@@ -45,7 +48,10 @@ impl StakingPoolState {
         let new_shares = if self.total_staked == 0 || self.total_shares == 0 {
             amount
         } else {
-            ((amount as u128) * (self.total_shares as u128) / (self.total_staked as u128)) as u64
+            u64::try_from(
+                (amount as u128) * (self.total_shares as u128) / (self.total_staked as u128),
+            )
+            .expect("DRC25: shares overflow")
         };
         assert!(new_shares > 0, "DRC25: stake too small, zero shares minted");
 
@@ -74,13 +80,20 @@ impl StakingPoolState {
         );
 
         // Calculate token amount proportional to shares
-        let amount =
-            ((share_count as u128) * (self.total_staked as u128) / (self.total_shares as u128))
-                as u64;
+        let amount = ((share_count as u128) * (self.total_staked as u128)
+            / (self.total_shares as u128)) as u64;
 
-        // Settle pending rewards before removing shares
-        let pending = self.pending_rewards_internal(caller);
-        let _ = pending; // In a real contract this would be credited
+        // Credit pending rewards to the user's claimable balance before removing shares.
+        let pending = self.pending_rewards_internal(caller) as u64;
+        if pending > 0 {
+            let existing = self
+                .pending_reward_balance
+                .get(&caller)
+                .copied()
+                .unwrap_or(0);
+            self.pending_reward_balance
+                .insert(caller, existing + pending);
+        }
 
         self.shares.insert(caller, user_shares - share_count);
         if user_shares == share_count {
@@ -112,24 +125,41 @@ impl StakingPoolState {
             "DRC25: no shares outstanding to receive rewards"
         );
 
-        self.rewards_per_share +=
-            (reward_amount as u128) * PRECISION / (self.total_shares as u128);
-        self.total_staked += reward_amount;
+        self.rewards_per_share += (reward_amount as u128) * PRECISION / (self.total_shares as u128);
+        self.total_staked = self
+            .total_staked
+            .checked_add(reward_amount)
+            .expect("DRC25: total_staked overflow");
     }
 
     /// Claim pending rewards for the caller. Returns amount claimed.
+    /// Includes both actively accruing rewards and any rewards credited during unstake.
     pub fn claim_rewards(&mut self, caller: Address) -> u64 {
-        let pending = self.pending_rewards_internal(caller);
-        assert!(pending > 0, "DRC25: no rewards to claim");
+        let accruing = self.pending_rewards_internal(caller) as u64;
+        let buffered = self
+            .pending_reward_balance
+            .get(&caller)
+            .copied()
+            .unwrap_or(0);
+        let total = accruing + buffered;
+        assert!(total > 0, "DRC25: no rewards to claim");
 
         // Reset debt to current level
         let user_shares = self.shares.get(&caller).copied().unwrap_or(0);
-        self.reward_debt.insert(
-            caller,
-            (user_shares as u128) * self.rewards_per_share / PRECISION,
-        );
+        if user_shares > 0 {
+            self.reward_debt.insert(
+                caller,
+                (user_shares as u128) * self.rewards_per_share / PRECISION,
+            );
+        }
 
-        pending as u64
+        // Clear buffered rewards
+        self.pending_reward_balance.remove(&caller);
+
+        // Deduct claimed rewards from total_staked
+        self.total_staked = self.total_staked.saturating_sub(total);
+
+        total
     }
 
     pub fn balance_of(&self, account: &Address) -> u64 {
@@ -141,7 +171,13 @@ impl StakingPoolState {
     }
 
     pub fn pending_rewards(&self, account: &Address) -> u64 {
-        self.pending_rewards_internal(*account) as u64
+        let accruing = self.pending_rewards_internal(*account) as u64;
+        let buffered = self
+            .pending_reward_balance
+            .get(account)
+            .copied()
+            .unwrap_or(0);
+        accruing + buffered
     }
 
     fn pending_rewards_internal(&self, account: Address) -> u128 {
@@ -226,8 +262,7 @@ pub fn dispatch(
 
         "balance_of" => {
             let s = state.as_ref().expect("DRC25: not initialised");
-            let a: AccountArgs =
-                serde_json::from_slice(args).expect("DRC25: bad balance_of args");
+            let a: AccountArgs = serde_json::from_slice(args).expect("DRC25: bad balance_of args");
             serde_json::to_vec(&s.balance_of(&a.account)).unwrap()
         }
 
@@ -257,7 +292,10 @@ mod tests {
 
     fn init_pool() -> Option<StakingPoolState> {
         let mut state = None;
-        let args = serde_json::to_vec(&InitArgs { validator: VALIDATOR }).unwrap();
+        let args = serde_json::to_vec(&InitArgs {
+            validator: VALIDATOR,
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, OWNER);
         state
     }
@@ -357,7 +395,10 @@ mod tests {
         dispatch(&mut state, "stake", &stake1, ALICE);
 
         // Distribute 1000 rewards (total_staked becomes 2000, shares still 1000)
-        let dist = serde_json::to_vec(&DistributeArgs { reward_amount: 1000 }).unwrap();
+        let dist = serde_json::to_vec(&DistributeArgs {
+            reward_amount: 1000,
+        })
+        .unwrap();
         dispatch(&mut state, "distribute_rewards", &dist, OWNER);
 
         // Bob stakes 2000 — should get 1000 shares (2000 * 1000 / 2000)
