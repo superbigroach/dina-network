@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { signOut } from '@/lib/firebase';
@@ -10,7 +10,7 @@ import { YieldDisplay } from '@/components/YieldDisplay';
 import { TransactionList } from '@/components/TransactionList';
 import { CurrencyList } from '@/components/CurrencyList';
 import { MOCK_WALLETS, MOCK_CURRENCIES, MOCK_TRANSACTIONS, CHAIN_ID } from '@/lib/constants';
-import { getHealth } from '@/lib/api';
+import { getHealth, getBalanceRest, fundFromFaucet } from '@/lib/api';
 import Link from 'next/link';
 
 interface NetworkStatus {
@@ -23,6 +23,12 @@ export default function DashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
+  // Testnet wallet state
+  const [dinaAddress, setDinaAddress] = useState<string | null>(null);
+  const [realBalance, setRealBalance] = useState<number | null>(null);
+  const [balanceLastUpdate, setBalanceLastUpdate] = useState<number>(Math.floor(Date.now() / 1000));
+  const [funding, setFunding] = useState(false);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/');
@@ -33,12 +39,14 @@ export default function DashboardPage() {
     await signOut();
     router.push('/');
   }
+
   const [network, setNetwork] = useState<NetworkStatus>({
     connected: false,
     height: 0,
     status: 'connecting',
   });
 
+  // Fetch network status
   useEffect(() => {
     let cancelled = false;
 
@@ -67,13 +75,95 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Initialize testnet wallet — generate address, fund from faucet if empty, fetch balance
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initWallet() {
+      // Load or generate a testnet address
+      let address = localStorage.getItem('dina_address');
+      if (!address) {
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        address = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('dina_address', address);
+      }
+      if (cancelled) return;
+      setDinaAddress(address);
+
+      try {
+        // Check current balance
+        let balance = await getBalanceRest(address);
+
+        // Auto-fund from faucet if balance is zero
+        if (balance === 0 || balance === undefined) {
+          await fundFromFaucet(address);
+          balance = await getBalanceRest(address);
+        }
+
+        if (!cancelled) {
+          setRealBalance(balance || 0);
+          setBalanceLastUpdate(Math.floor(Date.now() / 1000));
+        }
+      } catch {
+        // Faucet or balance fetch failed — fall back to mock data
+        if (!cancelled) {
+          setRealBalance(null);
+        }
+      }
+    }
+
+    initWallet();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Refresh balance periodically
+  useEffect(() => {
+    if (!dinaAddress) return;
+    const interval = setInterval(async () => {
+      try {
+        const balance = await getBalanceRest(dinaAddress);
+        setRealBalance(balance || 0);
+        setBalanceLastUpdate(Math.floor(Date.now() / 1000));
+      } catch {
+        // ignore — keep last known balance
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [dinaAddress]);
+
+  // Fund wallet handler
+  const handleFundWallet = useCallback(async () => {
+    if (!dinaAddress) return;
+    setFunding(true);
+    try {
+      await fundFromFaucet(dinaAddress);
+      const balance = await getBalanceRest(dinaAddress);
+      setRealBalance(balance || 0);
+      setBalanceLastUpdate(Math.floor(Date.now() / 1000));
+    } catch {
+      // faucet failed — do nothing
+    } finally {
+      setFunding(false);
+    }
+  }, [dinaAddress]);
+
+  // Use real balance when available, fall back to mock data
+  const hasRealBalance = realBalance !== null && realBalance > 0;
   const activeWallets = MOCK_WALLETS.filter((w) => w.isSetUp && w.balance > 0);
-  const totalBalance = activeWallets.reduce((sum, w) => sum + w.balance, 0);
-  const weightedYieldBps =
-    totalBalance > 0
-      ? Math.round(activeWallets.reduce((sum, w) => sum + (w.balance / totalBalance) * w.yieldRateBps, 0))
+  const mockTotal = activeWallets.reduce((sum, w) => sum + w.balance, 0);
+  const totalBalance = hasRealBalance ? realBalance : mockTotal;
+
+  const yieldBps = 450; // 4.5% APY
+  const weightedYieldBps = hasRealBalance
+    ? yieldBps
+    : totalBalance > 0
+      ? Math.round(activeWallets.reduce((sum, w) => sum + (w.balance / mockTotal) * w.yieldRateBps, 0))
       : 0;
-  const earliestUpdate = Math.min(...activeWallets.map((w) => w.lastYieldUpdate));
+
+  const earliestUpdate = hasRealBalance
+    ? balanceLastUpdate
+    : Math.min(...activeWallets.map((w) => w.lastYieldUpdate));
 
   if (loading || !user) {
     return (
@@ -106,7 +196,9 @@ export default function DashboardPage() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Hero: Total Balance */}
         <div className="text-center mb-8">
-          <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Total Balance</p>
+          <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">
+            {hasRealBalance ? 'Testnet Balance' : 'Total Balance'}
+          </p>
           <BalanceStream
             baseBalance={totalBalance}
             yieldRateBps={weightedYieldBps}
@@ -115,8 +207,37 @@ export default function DashboardPage() {
             className="text-white"
           />
           <p className="mt-2 text-sm text-emerald-400">
-            Earning {(weightedYieldBps / 100).toFixed(2)}% APY across all wallets
+            Earning {(weightedYieldBps / 100).toFixed(2)}% APY
+            {hasRealBalance ? ' on testnet' : ' across all wallets'}
           </p>
+          {dinaAddress && (
+            <p className="mt-1 text-xs text-slate-600 font-mono truncate max-w-md mx-auto">
+              {dinaAddress}
+            </p>
+          )}
+        </div>
+
+        {/* Fund Wallet Button */}
+        <div className="flex justify-center mb-6">
+          <button
+            onClick={handleFundWallet}
+            disabled={funding || !dinaAddress}
+            className="px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold transition-colors flex items-center gap-2"
+          >
+            {funding ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Funding...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Get 1,000 Test USDC
+              </>
+            )}
+          </button>
         </div>
 
         {/* Yield Stats */}

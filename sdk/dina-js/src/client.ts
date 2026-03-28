@@ -132,21 +132,23 @@ export class DinaClient {
 
   /** Get the USDC balance of an address in micro-units. */
   async getBalance(address: Address): Promise<bigint> {
-    const result = await this.rpc<string>('dina_getBalance', [address]);
-    return BigInt(result);
+    const result = await this.rpc<string | number>('dina_getBalance', [address]);
+    // The server may return a string or a number — normalize to BigInt safely.
+    return BigInt(typeof result === 'number' ? Math.trunc(result) : result);
   }
 
   /** Get full account info including nonce. */
   async getAccount(address: Address): Promise<Account> {
     const raw = await this.rpc<{
       address: string;
-      balance: string;
-      nonce: number;
+      balance: string | number;
+      nonce: string | number;
     }>('dina_getAccount', [address]);
     return {
       address: raw.address,
-      balance: BigInt(raw.balance),
-      nonce: raw.nonce,
+      // Balance may arrive as a string or number depending on the node version.
+      balance: BigInt(typeof raw.balance === 'number' ? Math.trunc(raw.balance) : raw.balance),
+      nonce: typeof raw.nonce === 'string' ? parseInt(raw.nonce, 10) : raw.nonce,
     };
   }
 
@@ -167,12 +169,12 @@ export class DinaClient {
       blockHeight: number;
       success: boolean;
       gasUsed: number;
-      feePaid: string;
+      feePaid: string | number;
       error?: string;
     }>('dina_getTransaction', [hash]);
     return {
       ...raw,
-      feePaid: BigInt(raw.feePaid),
+      feePaid: BigInt(typeof raw.feePaid === 'number' ? Math.trunc(raw.feePaid) : raw.feePaid),
     };
   }
 
@@ -200,29 +202,43 @@ export class DinaClient {
    * Returns the transaction hash.
    */
   async transfer(wallet: DinaWallet, params: TransferParams): Promise<Hash> {
-    if (params.amount <= 0n) {
+    // Normalize amount to BigInt in case the caller passes a number by mistake.
+    const amount: bigint = typeof params.amount === 'number'
+      ? BigInt(Math.trunc(params.amount as unknown as number))
+      : BigInt(params.amount);
+
+    if (amount <= 0n) {
       throw new Error('Transfer amount must be positive');
     }
-    if (params.amount > 18_446_744_073_709_551_615n) {
+    if (amount > 18_446_744_073_709_551_615n) {
       throw new Error('Amount exceeds u64 max');
     }
     if (params.to === wallet.address) {
       throw new Error('Cannot transfer to self');
     }
     const account = await this.getAccount(wallet.address);
+    const nonce: number = typeof account.nonce === 'number'
+      ? account.nonce
+      : Number(account.nonce);
+
+    // Build the canonical payload for signing using the normalized BigInt amount.
+    const normalizedParams: TransferParams = { ...params, amount };
     const txPayload = this.buildTransferPayload(
       wallet.address,
-      params,
-      account.nonce
+      normalizedParams,
+      nonce
     );
     const signature = wallet.sign(txPayload);
+
+    // Serialize — BigInt values are converted to strings to avoid
+    // "TypeError: Do not know how to serialize a BigInt".
     const signedTx = JSON.stringify({
       type: 'transfer',
       from: wallet.address,
       to: params.to,
-      amount: params.amount.toString(),
+      amount: amount.toString(),
       memo: params.memo ?? '',
-      nonce: account.nonce,
+      nonce,
       signature,
     });
     return this.sendTransaction(signedTx);
@@ -277,7 +293,7 @@ export class DinaClient {
       method: params.method,
       args: params.args,
       usdcAttached: (params.usdcAttached ?? 0n).toString(),
-      nonce: account.nonce,
+      nonce: typeof account.nonce === 'number' ? account.nonce : Number(account.nonce),
       signature,
     });
     return this.sendTransaction(signedTx);
@@ -332,11 +348,12 @@ export class DinaClient {
 
   /** Estimate the gas cost for a transaction type. */
   async estimateGas(txType: string, params: unknown): Promise<bigint> {
-    const result = await this.rpc<{ gas_estimate: string }>('dina_estimateGas', [
+    const result = await this.rpc<{ gas_estimate: string | number }>('dina_estimateGas', [
       txType,
       params,
     ]);
-    return BigInt(result.gas_estimate);
+    const v = result.gas_estimate;
+    return BigInt(typeof v === 'number' ? Math.trunc(v) : v);
   }
 
   /**
