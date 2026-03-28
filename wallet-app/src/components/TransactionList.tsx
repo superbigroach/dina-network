@@ -28,6 +28,12 @@ export function TransactionList({ transactions }: Props) {
         <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Recent Activity</h3>
       </div>
       <div className="divide-y divide-slate-800">
+        {transactions.length === 0 && (
+          <div className="px-4 py-8 text-center">
+            <p className="text-sm text-slate-500">No transactions yet</p>
+            <p className="text-xs text-slate-600 mt-1">Use the faucet to get test USDC</p>
+          </div>
+        )}
         {transactions.map((tx) => {
           const cfg = typeConfig[tx.type];
           return (

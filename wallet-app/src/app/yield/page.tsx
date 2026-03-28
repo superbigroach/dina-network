@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { Navbar } from '@/components/Navbar';
 import { YieldCard } from '@/components/YieldCard';
 import { formatUsdc } from '@/lib/yield';
 import { MOCK_YIELD_POSITIONS, MOCK_RATE_STATS } from '@/lib/constants';
+import { getBalanceRest } from '@/lib/api';
+import Link from 'next/link';
 
 export default function YieldPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [realBalance, setRealBalance] = useState<number>(0);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -18,23 +21,14 @@ export default function YieldPage() {
     }
   }, [user, loading, router]);
 
-  // Aggregate totals
-  const totalPendingUsdc = MOCK_YIELD_POSITIONS.reduce(
-    (sum, p) => sum + p.pendingYieldUsdc,
-    0,
-  );
-  const totalClaimedUsdc = MOCK_YIELD_POSITIONS.reduce(
-    (sum, p) => sum + p.totalClaimedUsdc,
-    0,
-  );
-  const totalEarnedUsdc = totalPendingUsdc + totalClaimedUsdc;
-  const totalBackingUsdc = MOCK_YIELD_POSITIONS.reduce(
-    (sum, p) => sum + p.usdcBacking,
-    0,
-  );
+  // Fetch real testnet balance
+  useEffect(() => {
+    const address = typeof window !== 'undefined' ? localStorage.getItem('dina_address') : null;
+    if (!address) return;
+    getBalanceRest(address).then(b => setRealBalance(b || 0)).catch(() => {});
+  }, []);
 
-  // Weighted average APY across all positions (all at 4.5%)
-  const blendedApy = 4.5;
+  const estimatedAnnualYield = Math.floor((realBalance * 450) / 10_000);
 
   if (loading || !user) {
     return (
@@ -52,64 +46,76 @@ export default function YieldPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white mb-1">Your Yield</h1>
           <p className="text-sm text-slate-400">
-            Earn yield on every currency. Claim in local currency or USDC.
+            Your USDC on Dina earns 4.5% APY from US Treasury bill yield.
           </p>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">
-              Total Earned
-            </p>
-            <p className="text-lg font-bold text-white tabular-nums">
-              {formatUsdc(totalEarnedUsdc)}
-            </p>
-            <p className="text-[10px] text-slate-500">all time</p>
+        {/* Real balance + yield estimate */}
+        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-emerald-950/20 border border-emerald-800/30 p-6 mb-8">
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+            How Dina Yield Works
+          </p>
+          <p className="text-sm text-slate-300 leading-relaxed mb-4">
+            When you hold USDC on Dina, it earns 4.5% APY backed by US Treasury bills.
+            When you hold other currencies, yield accrues in USDC and converts at the
+            live market rate when you claim.
+          </p>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="rounded-xl bg-slate-800/50 p-4">
+              <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">
+                Current Testnet Balance
+              </p>
+              <p className="text-lg font-bold text-white tabular-nums">
+                {formatUsdc(realBalance)}
+              </p>
+              <p className="text-[10px] text-slate-500">USDC (streaming...)</p>
+            </div>
+            <div className="rounded-xl bg-slate-800/50 p-4">
+              <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">
+                Estimated Annual Yield
+              </p>
+              <p className="text-lg font-bold text-emerald-400 tabular-nums">
+                {formatUsdc(estimatedAnnualYield)}
+              </p>
+              <p className="text-[10px] text-slate-500">at 4.50% APY</p>
+            </div>
           </div>
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">
-              Unclaimed
+
+          <div className="rounded-lg bg-amber-900/20 border border-amber-800/30 px-4 py-3">
+            <p className="text-xs text-amber-300 font-medium mb-1">Testnet Preview</p>
+            <p className="text-xs text-amber-200/70 leading-relaxed">
+              Yield claiming will be available when the YieldVault contract is deployed to testnet.
+              The balance counter on your dashboard streams an estimate of accrued yield in real time.
             </p>
-            <p className="text-lg font-bold text-emerald-400 tabular-nums">
-              {formatUsdc(totalPendingUsdc)}
-            </p>
-            <p className="text-[10px] text-slate-500">across {MOCK_YIELD_POSITIONS.length} currencies</p>
           </div>
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">
-              Total Backing
-            </p>
-            <p className="text-lg font-bold text-white tabular-nums">
-              {formatUsdc(totalBackingUsdc)}
-            </p>
-            <p className="text-[10px] text-slate-500">USDC locked</p>
-          </div>
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">
-              Blended APY
-            </p>
-            <p className="text-lg font-bold text-emerald-400 tabular-nums">
-              {blendedApy.toFixed(2)}%
-            </p>
-            <p className="text-[10px] text-slate-500">weighted avg</p>
+
+          <div className="mt-4 flex justify-center">
+            <Link
+              href="/dashboard"
+              className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm transition-colors"
+            >
+              Get Test USDC from Faucet
+            </Link>
           </div>
         </div>
 
-        {/* Claim all button */}
-        {totalPendingUsdc > 0 && (
-          <div className="mb-6 flex justify-center">
-            <button className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors text-sm">
-              Claim All Yield ({formatUsdc(totalPendingUsdc)})
-            </button>
+        {/* Rate analytics section — simulated data preview */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+              Rate Analytics Preview
+            </h2>
+            <span className="text-[10px] text-slate-600 bg-slate-800 px-2 py-0.5 rounded-full">
+              Simulated data
+            </span>
           </div>
-        )}
+          <p className="text-xs text-slate-600 mt-1 mb-4">
+            Rate data shown is simulated. Live Pyth oracle feed will be connected on mainnet.
+          </p>
+        </div>
 
-        {/* Per-currency yield cards */}
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-            By Currency
-          </h2>
           {MOCK_YIELD_POSITIONS.map((position) => (
             <YieldCard
               key={position.currency}
@@ -119,16 +125,13 @@ export default function YieldPage() {
           ))}
         </div>
 
-        {/* Empty state hint */}
-        {MOCK_YIELD_POSITIONS.length > 0 && (
-          <div className="mt-8 text-center">
-            <p className="text-xs text-slate-600">
-              Yield accrues in real-time on all currency balances backed by USDC.
-              <br />
-              Rates update every 5 minutes from oracle feeds.
-            </p>
-          </div>
-        )}
+        <div className="mt-8 text-center">
+          <p className="text-xs text-slate-600">
+            The yield positions above are simulated to preview what the UI will look like on mainnet.
+            <br />
+            Rates will update every 5 minutes from Pyth oracle feeds when connected.
+          </p>
+        </div>
       </main>
     </div>
   );

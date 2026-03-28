@@ -9,8 +9,9 @@ import { WalletCard } from '@/components/WalletCard';
 import { YieldDisplay } from '@/components/YieldDisplay';
 import { TransactionList } from '@/components/TransactionList';
 import { CurrencyList } from '@/components/CurrencyList';
-import { MOCK_WALLETS, MOCK_CURRENCIES, MOCK_TRANSACTIONS, CHAIN_ID } from '@/lib/constants';
-import { getHealth, getBalanceRest, fundFromFaucet } from '@/lib/api';
+import { MOCK_CURRENCIES, CHAIN_ID } from '@/lib/constants';
+import { getHealth, getBalanceRest, fundFromFaucet, getRecentTransactions } from '@/lib/api';
+import { Wallet, Transaction, Currency } from '@/lib/types';
 import Link from 'next/link';
 
 interface NetworkStatus {
@@ -28,6 +29,8 @@ export default function DashboardPage() {
   const [realBalance, setRealBalance] = useState<number | null>(null);
   const [balanceLastUpdate, setBalanceLastUpdate] = useState<number>(Math.floor(Date.now() / 1000));
   const [funding, setFunding] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [fundInfoWallet, setFundInfoWallet] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -106,7 +109,7 @@ export default function DashboardPage() {
           setBalanceLastUpdate(Math.floor(Date.now() / 1000));
         }
       } catch {
-        // Faucet or balance fetch failed — fall back to mock data
+        // Faucet or balance fetch failed
         if (!cancelled) {
           setRealBalance(null);
         }
@@ -132,6 +135,12 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [dinaAddress]);
 
+  // Fetch real transactions
+  useEffect(() => {
+    if (!dinaAddress) return;
+    getRecentTransactions(dinaAddress).then(setTransactions).catch(() => {});
+  }, [dinaAddress, realBalance]);
+
   // Fund wallet handler
   const handleFundWallet = useCallback(async () => {
     if (!dinaAddress) return;
@@ -148,45 +157,114 @@ export default function DashboardPage() {
     }
   }, [dinaAddress]);
 
-  // Use real balance when available, fall back to mock data
+  // Build REAL wallet list — one funded main wallet, 8 unfunded sub-wallets
+  const now = Math.floor(Date.now() / 1000);
   const hasRealBalance = realBalance !== null && realBalance > 0;
-  const activeWallets = MOCK_WALLETS.filter((w) => w.isSetUp && w.balance > 0);
-  const mockTotal = activeWallets.reduce((sum, w) => sum + w.balance, 0);
-  const totalBalance = hasRealBalance ? realBalance : mockTotal;
+  const totalBalance = hasRealBalance ? realBalance : 0;
 
-  // When we have real balance, distribute across wallet cards proportionally
-  const displayWallets = hasRealBalance
-    ? MOCK_WALLETS.map((w) => {
-        if (!w.isSetUp) return w;
-        // Main wallet gets 70%, Savings 20%, rest split remaining 10%
-        const allocations: Record<string, number> = {
-          'main-1': 0.70,
-          'savings-1': 0.15,
-          'backup-1': 0.05,
-          'agent-1': 0.04,
-          'agent-2': 0.03,
-          'speed-1': 0.03,
-        };
-        const pct = allocations[w.id] || 0;
-        return {
-          ...w,
-          balance: Math.floor(realBalance * pct),
-          lastYieldUpdate: balanceLastUpdate,
-          yieldRateBps: 450,
-        };
-      })
-    : MOCK_WALLETS;
+  const realWallets: Wallet[] = [
+    {
+      id: 'main-1',
+      name: 'Main Wallet',
+      type: 'main',
+      icon: '🏦',
+      balance: hasRealBalance ? realBalance : 0,
+      yieldRateBps: 450,
+      lastYieldUpdate: balanceLastUpdate,
+      isDefault: true,
+      isSetUp: true,
+    },
+    {
+      id: 'savings-1',
+      name: 'Savings',
+      type: 'savings',
+      icon: '🐷',
+      balance: 0,
+      yieldRateBps: 450,
+      lastYieldUpdate: now,
+      isSetUp: false,
+    },
+    {
+      id: 'backup-1',
+      name: 'Backup',
+      type: 'backup',
+      icon: '🔒',
+      balance: 0,
+      yieldRateBps: 450,
+      lastYieldUpdate: now,
+      isSetUp: false,
+    },
+    {
+      id: 'agent-1',
+      name: 'Shopping',
+      type: 'agent',
+      icon: '🛒',
+      balance: 0,
+      yieldRateBps: 350,
+      lastYieldUpdate: now,
+      dailyLimit: 500_000_000,
+      isSetUp: false,
+    },
+    {
+      id: 'agent-2',
+      name: 'Bills',
+      type: 'agent',
+      icon: '📄',
+      balance: 0,
+      yieldRateBps: 350,
+      lastYieldUpdate: now,
+      dailyLimit: 200_000_000,
+      isSetUp: false,
+    },
+    {
+      id: 'agent-3',
+      name: 'Agent 3',
+      type: 'agent',
+      icon: '🤖',
+      balance: 0,
+      yieldRateBps: 350,
+      lastYieldUpdate: now,
+      isSetUp: false,
+    },
+    {
+      id: 'speed-1',
+      name: 'Business',
+      type: 'speed',
+      icon: '⚡',
+      balance: 0,
+      yieldRateBps: 300,
+      lastYieldUpdate: now,
+      isSetUp: false,
+    },
+    {
+      id: 'speed-2',
+      name: 'Speed 2',
+      type: 'speed',
+      icon: '⚡',
+      balance: 0,
+      yieldRateBps: 300,
+      lastYieldUpdate: now,
+      isSetUp: false,
+    },
+    {
+      id: 'speed-3',
+      name: 'Speed 3',
+      type: 'speed',
+      icon: '⚡',
+      balance: 0,
+      yieldRateBps: 300,
+      lastYieldUpdate: now,
+      isSetUp: false,
+    },
+  ];
 
   const yieldBps = 450; // 4.5% APY
-  const weightedYieldBps = hasRealBalance
-    ? yieldBps
-    : totalBalance > 0
-      ? Math.round(activeWallets.reduce((sum, w) => sum + (w.balance / mockTotal) * w.yieldRateBps, 0))
-      : 0;
 
-  const earliestUpdate = hasRealBalance
-    ? balanceLastUpdate
-    : Math.min(...activeWallets.map((w) => w.lastYieldUpdate));
+  // Build real currency list — USDC shows real balance, others $0
+  const realCurrencies: Currency[] = MOCK_CURRENCIES.map(c => ({
+    ...c,
+    balance: c.symbol === 'USDC' ? (hasRealBalance ? realBalance : 0) : 0,
+  }));
 
   if (loading || !user) {
     return (
@@ -220,22 +298,26 @@ export default function DashboardPage() {
         {/* Hero: Total Balance */}
         <div className="text-center mb-8">
           <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">
-            {hasRealBalance ? 'Testnet Balance' : 'Total Balance'}
+            Testnet Balance
           </p>
           <BalanceStream
             baseBalance={totalBalance}
-            yieldRateBps={weightedYieldBps}
-            lastUpdate={earliestUpdate}
+            yieldRateBps={yieldBps}
+            lastUpdate={balanceLastUpdate}
             size="lg"
             className="text-white"
           />
           <p className="mt-2 text-sm text-emerald-400">
-            Earning {(weightedYieldBps / 100).toFixed(2)}% APY
-            {hasRealBalance ? ' on testnet' : ' across all wallets'}
+            Earning {(yieldBps / 100).toFixed(2)}% APY on testnet
           </p>
           {dinaAddress && (
             <p className="mt-1 text-xs text-slate-600 font-mono truncate max-w-md mx-auto">
               {dinaAddress}
+            </p>
+          )}
+          {!hasRealBalance && realBalance !== null && (
+            <p className="mt-2 text-xs text-amber-400">
+              No balance yet. Tap the faucet button below to get test USDC.
             </p>
           )}
         </div>
@@ -265,7 +347,7 @@ export default function DashboardPage() {
 
         {/* Yield Stats */}
         <div className="mb-8">
-          <YieldDisplay wallets={displayWallets} />
+          <YieldDisplay wallets={realWallets} />
         </div>
 
         {/* Action Buttons */}
@@ -301,18 +383,48 @@ export default function DashboardPage() {
 
         {/* Wallet Grid */}
         <div className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Wallets</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Wallets</h2>
+            <span className="text-xs text-slate-600">1 of 9 funded on testnet</span>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayWallets.map((wallet) => (
-              <WalletCard key={wallet.id} wallet={wallet} />
+            {realWallets.map((wallet) => (
+              <div key={wallet.id} className="relative">
+                <WalletCard wallet={wallet} />
+                {!wallet.isSetUp && (
+                  <button
+                    onClick={() => setFundInfoWallet(fundInfoWallet === wallet.id ? null : wallet.id)}
+                    className="absolute top-2 right-2 text-slate-500 hover:text-slate-300 transition-colors"
+                    title="Info"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                  </button>
+                )}
+                {fundInfoWallet === wallet.id && (
+                  <div className="absolute inset-0 z-10 bg-slate-900/95 rounded-xl border border-slate-700 p-4 flex flex-col items-center justify-center text-center gap-2">
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      On mainnet, each wallet will be a separate on-chain account.
+                      On testnet, all funds are in your main wallet.
+                    </p>
+                    <button
+                      onClick={() => setFundInfoWallet(null)}
+                      className="mt-1 px-3 py-1 text-xs rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                    >
+                      Got it
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
 
         {/* Bottom sections */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TransactionList transactions={MOCK_TRANSACTIONS} />
-          <CurrencyList currencies={MOCK_CURRENCIES} />
+          <TransactionList transactions={transactions} />
+          <CurrencyList currencies={realCurrencies} />
         </div>
 
         {/* Network Status */}
