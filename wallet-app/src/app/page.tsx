@@ -22,13 +22,10 @@ export default function LandingPage() {
     setSigningIn(true);
     try {
       await signInWithGoogle();
-      router.push('/dashboard');
+      // signInWithRedirect navigates away — no need to router.push
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
-      if (!message.includes('popup-closed')) {
-        setError(message);
-      }
-    } finally {
+      setError(message);
       setSigningIn(false);
     }
   }
