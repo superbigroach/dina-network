@@ -1,81 +1,31 @@
-// Testnet proxy via allorigins to avoid mixed content (HTTPS→HTTP) blocking.
-// In production, the RPC would be on HTTPS behind a proper domain.
-const TESTNET_IP = '35.184.213.248';
-const REST_PORT = '8080';
-const RPC_PORT = '8545';
-
-// Use allorigins.win as a CORS+HTTPS proxy for the testnet
-// This wraps the HTTP testnet in HTTPS so browsers don't block it
-function proxyUrl(url: string): string {
-  return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-}
-
-const REST_DIRECT = `http://${TESTNET_IP}:${REST_PORT}`;
-const RPC_DIRECT = `http://${TESTNET_IP}:${RPC_PORT}`;
+// HTTPS proxy to testnet (Cloud Run → nginx → validator)
+// Solves mixed content blocking (HTTPS page → HTTP testnet)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://dina-testnet-proxy-290142209974.us-central1.run.app';
 
 let nextId = 1;
 
-async function fetchWithFallback(url: string, options?: RequestInit): Promise<Response> {
-  // Try direct first (works on localhost / non-HTTPS contexts)
-  try {
-    const res = await fetch(url, { ...options, signal: AbortSignal.timeout(5000) });
-    if (res.ok) return res;
-  } catch {
-    // Direct failed (likely mixed content block) — try proxy
-  }
-
-  // Use HTTPS proxy
-  if (options?.method === 'POST') {
-    // For POST requests, allorigins doesn't work well. Use corsproxy.io instead.
-    const proxyRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {
-      ...options,
-      signal: AbortSignal.timeout(10000),
-    });
-    return proxyRes;
-  }
-
-  const proxied = proxyUrl(url);
-  return fetch(proxied, { signal: AbortSignal.timeout(10000) });
-}
-
 export async function rpc(method: string, params: unknown[] = []): Promise<unknown> {
-  const body = JSON.stringify({
-    jsonrpc: '2.0',
-    id: nextId++,
-    method,
-    params,
-  });
-
-  const res = await fetchWithFallback(RPC_DIRECT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  });
-
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message);
-  return json.result;
+  // RPC goes through the same proxy (port 8080 on validator serves both REST and RPC is on 8545)
+  // For now, use REST endpoints which go through the proxy on 8080
+  throw new Error('Use REST endpoints via proxy');
 }
 
 export async function rest(path: string, options?: RequestInit): Promise<unknown> {
-  const url = `${REST_DIRECT}${path}`;
-  const res = await fetchWithFallback(url, options);
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
 
 export async function getBalance(address: string): Promise<number> {
-  try {
-    const result = await rpc('dina_getBalance', [address]);
-    return typeof result === 'string' ? parseInt(result, 10) : (result as number);
-  } catch {
-    const data = (await rest(`/v1/balance/${address}`)) as { balance?: number };
-    return data.balance ?? 0;
-  }
+  const data = (await rest(`/v1/balance/${address}`)) as { balance?: number };
+  return data.balance ?? 0;
 }
 
 export async function getBalanceRest(address: string): Promise<number> {
-  const data = (await rest(`/v1/balance/${address}`)) as { balance?: number };
-  return data.balance ?? 0;
+  return getBalance(address);
 }
 
 export async function fundFromFaucet(address: string): Promise<void> {
@@ -87,7 +37,7 @@ export async function getHealth(): Promise<{ height: number; status: string }> {
 }
 
 export async function getNetworkInfo(): Promise<unknown> {
-  return rpc('dina_networkInfo');
+  return rest('/health');
 }
 
 export interface RecentTransaction {
@@ -103,20 +53,18 @@ export interface RecentTransaction {
 
 export async function getRecentTransactions(address: string): Promise<RecentTransaction[]> {
   try {
-    const res = await fetchWithFallback(`${REST_DIRECT}/v1/transactions/${address}`);
+    const res = await fetch(`${API_BASE}/v1/transactions/${address}`, {
+      signal: AbortSignal.timeout(5000),
+    });
     if (res.ok) {
       const data = await res.json();
-      if (data.transactions && data.transactions.length > 0) {
-        return data.transactions;
-      }
+      if (data.transactions?.length > 0) return data.transactions;
     }
-  } catch {
-    // endpoint may not exist
-  }
+  } catch {}
 
+  // No transaction endpoint yet — show faucet funding if balance > 0
   try {
-    const balData = (await rest(`/v1/balance/${address}`)) as { balance?: number };
-    const bal = balData.balance ?? 0;
+    const bal = await getBalance(address);
     if (bal > 0) {
       return [{
         id: 'faucet-' + address.slice(0, 8),
@@ -129,9 +77,7 @@ export async function getRecentTransactions(address: string): Promise<RecentTran
         wallet: 'Main Wallet',
       }];
     }
-  } catch {
-    // balance fetch failed
-  }
+  } catch {}
 
   return [];
 }
@@ -141,19 +87,15 @@ export async function submitTransfer(
   to: string,
   amount: number,
 ): Promise<{ txHash?: string; success: boolean }> {
+  // Testnet demo — real transfers need Ed25519 signing
   try {
-    const result = await rpc('dina_sendTransaction', [
-      JSON.stringify({
-        type: 'transfer',
-        from,
-        to,
-        amount: amount.toString(),
-        nonce: 0,
-        signature: '0'.repeat(128),
-      }),
-    ]);
-    return { txHash: result as string, success: true };
-  } catch {
+    await rest(`/v1/transfer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to, amount }),
+    });
     return { success: true };
+  } catch {
+    return { success: true }; // optimistic for demo
   }
 }
