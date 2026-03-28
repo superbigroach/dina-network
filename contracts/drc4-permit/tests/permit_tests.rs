@@ -10,17 +10,33 @@ fn init() -> Option<PermitRegistry> {
     let args = serde_json::to_vec(&serde_json::json!({
         "token_contract": addr(100),
         "chain_id": 1u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "init", &args, addr(1));
     state
 }
 
-fn make_signature(state: &PermitRegistry, owner: &[u8; 32], spender: &[u8; 32], amount: u64, nonce: u64, deadline: u64) -> Vec<u8> {
+fn make_signature(
+    state: &PermitRegistry,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    amount: u64,
+    nonce: u64,
+    deadline: u64,
+) -> Vec<u8> {
     let digest = state.build_permit_digest(owner, spender, amount, nonce, deadline);
     Sha256::digest(digest).to_vec()
 }
 
-fn do_permit(state: &mut Option<PermitRegistry>, owner: [u8; 32], spender: [u8; 32], amount: u64, deadline: u64, current_time: u64, sig: Vec<u8>) {
+fn do_permit(
+    state: &mut Option<PermitRegistry>,
+    owner: [u8; 32],
+    spender: [u8; 32],
+    amount: u64,
+    deadline: u64,
+    current_time: u64,
+    sig: Vec<u8>,
+) {
     let args = serde_json::to_vec(&serde_json::json!({
         "owner": owner,
         "spender": spender,
@@ -28,7 +44,8 @@ fn do_permit(state: &mut Option<PermitRegistry>, owner: [u8; 32], spender: [u8; 
         "deadline": deadline,
         "current_time": current_time,
         "signature_bytes": sig
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "permit", &args, addr(1));
 }
 
@@ -42,7 +59,8 @@ fn permit_with_valid_signature_sets_allowance() {
     let sig = make_signature(state.as_ref().unwrap(), &owner, &spender, 500, 0, 2000);
     do_permit(&mut state, owner, spender, 500, 2000, 1000, sig);
 
-    let args = serde_json::to_vec(&serde_json::json!({"owner": owner, "spender": spender})).unwrap();
+    let args =
+        serde_json::to_vec(&serde_json::json!({"owner": owner, "spender": spender})).unwrap();
     let result = dispatch(&mut state, "allowance", &args, addr(1));
     let allowance: u64 = serde_json::from_slice(&result).unwrap();
     assert_eq!(allowance, 500);

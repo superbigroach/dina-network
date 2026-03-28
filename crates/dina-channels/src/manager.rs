@@ -44,10 +44,7 @@ impl ChannelManager {
         let id = channel.channel_id;
         self.channels.insert(id, channel);
 
-        info!(
-            channel_id = hex::encode(id),
-            "channel opened in manager"
-        );
+        info!(channel_id = hex::encode(id), "channel opened in manager");
 
         id
     }

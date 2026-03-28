@@ -117,7 +117,12 @@ impl DataMarketplace {
         listing_id
     }
 
-    pub fn purchase(&mut self, caller: Address, listing_id: ListingId, timestamp: u64) -> PurchaseId {
+    pub fn purchase(
+        &mut self,
+        caller: Address,
+        listing_id: ListingId,
+        timestamp: u64,
+    ) -> PurchaseId {
         let listing = self
             .listings
             .get(&listing_id)
@@ -147,7 +152,12 @@ impl DataMarketplace {
         purchase_id
     }
 
-    pub fn deliver(&mut self, caller: Address, purchase_id: PurchaseId, _encrypted_data_hash: [u8; 32]) {
+    pub fn deliver(
+        &mut self,
+        caller: Address,
+        purchase_id: PurchaseId,
+        _encrypted_data_hash: [u8; 32],
+    ) {
         let purchase = self
             .purchases
             .get_mut(&purchase_id)
@@ -156,10 +166,7 @@ impl DataMarketplace {
             .listings
             .get(&purchase.listing_id)
             .expect("DRC106: listing does not exist");
-        assert!(
-            caller == listing.seller,
-            "DRC106: only seller can deliver"
-        );
+        assert!(caller == listing.seller, "DRC106: only seller can deliver");
         assert!(!purchase.delivered, "DRC106: already delivered");
         purchase.delivered = true;
     }
@@ -181,27 +188,15 @@ impl DataMarketplace {
         self.escrow.remove(&purchase_id);
     }
 
-    pub fn rate(
-        &mut self,
-        caller: Address,
-        purchase_id: PurchaseId,
-        score: u8,
-        review: String,
-    ) {
+    pub fn rate(&mut self, caller: Address, purchase_id: PurchaseId, score: u8, review: String) {
         assert!((1..=5).contains(&score), "DRC106: rating must be 1-5");
         let purchase = self
             .purchases
             .get_mut(&purchase_id)
             .expect("DRC106: purchase does not exist");
-        assert!(
-            caller == purchase.buyer,
-            "DRC106: only buyer can rate"
-        );
+        assert!(caller == purchase.buyer, "DRC106: only buyer can rate");
         assert!(purchase.confirmed, "DRC106: must confirm receipt first");
-        assert!(
-            purchase.rating.is_none(),
-            "DRC106: already rated"
-        );
+        assert!(purchase.rating.is_none(), "DRC106: already rated");
         purchase.rating = Some(score);
 
         let rating = Rating {
@@ -220,10 +215,7 @@ impl DataMarketplace {
             .listings
             .get_mut(&listing_id)
             .expect("DRC106: listing does not exist");
-        assert!(
-            caller == listing.seller,
-            "DRC106: only seller can delist"
-        );
+        assert!(caller == listing.seller, "DRC106: only seller can delist");
         listing.active = false;
     }
 }
@@ -295,22 +287,19 @@ pub fn dispatch(
         // -- Mutations -------------------------------------------------------
         "list_data" => {
             let s = state.as_mut().expect("DRC106: not initialised");
-            let a: ListDataArgs =
-                serde_json::from_slice(args).expect("DRC106: bad list_data args");
+            let a: ListDataArgs = serde_json::from_slice(args).expect("DRC106: bad list_data args");
             let id = s.list_data(caller, a.listing);
             serde_json::to_vec(&id).unwrap()
         }
         "purchase" => {
             let s = state.as_mut().expect("DRC106: not initialised");
-            let a: PurchaseArgs =
-                serde_json::from_slice(args).expect("DRC106: bad purchase args");
+            let a: PurchaseArgs = serde_json::from_slice(args).expect("DRC106: bad purchase args");
             let id = s.purchase(caller, a.listing_id, a.timestamp);
             serde_json::to_vec(&id).unwrap()
         }
         "deliver" => {
             let s = state.as_mut().expect("DRC106: not initialised");
-            let a: DeliverArgs =
-                serde_json::from_slice(args).expect("DRC106: bad deliver args");
+            let a: DeliverArgs = serde_json::from_slice(args).expect("DRC106: bad deliver args");
             s.deliver(caller, a.purchase_id, a.encrypted_data_hash);
             serde_json::to_vec("ok").unwrap()
         }
@@ -329,8 +318,7 @@ pub fn dispatch(
         }
         "delist" => {
             let s = state.as_mut().expect("DRC106: not initialised");
-            let a: DelistArgs =
-                serde_json::from_slice(args).expect("DRC106: bad delist args");
+            let a: DelistArgs = serde_json::from_slice(args).expect("DRC106: bad delist args");
             s.delist(caller, a.listing_id);
             serde_json::to_vec("ok").unwrap()
         }

@@ -193,7 +193,13 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC34: not initialised");
             let a: ListEnergyArgs =
                 serde_json::from_slice(args).expect("DRC34: bad list_energy args");
-            let id = s.list_energy(caller, a.kwh_available, a.price_per_kwh, a.location, a.valid_until);
+            let id = s.list_energy(
+                caller,
+                a.kwh_available,
+                a.price_per_kwh,
+                a.location,
+                a.valid_until,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "buy_energy" => {
@@ -222,8 +228,7 @@ pub fn dispatch(
         }
         "get_offer" => {
             let s = state.as_ref().expect("DRC34: not initialised");
-            let a: GetOfferArgs =
-                serde_json::from_slice(args).expect("DRC34: bad get_offer args");
+            let a: GetOfferArgs = serde_json::from_slice(args).expect("DRC34: bad get_offer args");
             serde_json::to_vec(&s.get_offer(a.id)).unwrap()
         }
         _ => panic!("DRC34: unknown method '{method}'"),

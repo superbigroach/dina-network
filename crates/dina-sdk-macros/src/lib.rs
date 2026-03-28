@@ -1,9 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    parse_macro_input, ItemImpl, ItemStruct, ImplItem, FnArg, ReturnType,
-    Pat,
-};
+use syn::{parse_macro_input, FnArg, ImplItem, ItemImpl, ItemStruct, Pat, ReturnType};
 
 /// Attribute macro for contract structs.
 ///
@@ -212,12 +209,16 @@ pub fn dina_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let has_return = !matches!(method.sig.output, ReturnType::Default);
 
             // Determine if method takes &mut self, &self, or no self
-            let takes_mut_self = method.sig.inputs.iter().any(|arg| {
-                matches!(arg, FnArg::Receiver(r) if r.mutability.is_some())
-            });
-            let takes_self = method.sig.inputs.iter().any(|arg| {
-                matches!(arg, FnArg::Receiver(_))
-            });
+            let takes_mut_self = method
+                .sig
+                .inputs
+                .iter()
+                .any(|arg| matches!(arg, FnArg::Receiver(r) if r.mutability.is_some()));
+            let takes_self = method
+                .sig
+                .inputs
+                .iter()
+                .any(|arg| matches!(arg, FnArg::Receiver(_)));
 
             // Build the dispatch arm
             let deserialize_params = if param_names.is_empty() {
@@ -266,9 +267,12 @@ pub fn dina_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     // Build method registry for introspection
-    let registry_entries = method_names.iter().zip(method_kinds.iter()).map(|(name, kind)| {
-        quote! { (#name, #kind) }
-    });
+    let registry_entries = method_names
+        .iter()
+        .zip(method_kinds.iter())
+        .map(|(name, kind)| {
+            quote! { (#name, #kind) }
+        });
 
     let dispatch_fn = quote! {
         impl #self_ty {

@@ -73,7 +73,10 @@ impl WarrantyState {
         coverage_type: CoverageType,
         max_claims: u32,
     ) -> WarrantyId {
-        assert!(expiry_date > purchase_date, "DRC40: expiry must be after purchase");
+        assert!(
+            expiry_date > purchase_date,
+            "DRC40: expiry must be after purchase"
+        );
         assert!(max_claims > 0, "DRC40: max_claims must be positive");
         let id = self.next_warranty_id;
         self.next_warranty_id += 1;
@@ -100,7 +103,10 @@ impl WarrantyState {
         description: String,
         filed_at: u64,
     ) -> ClaimId {
-        let warranty = self.warranties.get(&warranty_id).expect("DRC40: warranty not found");
+        let warranty = self
+            .warranties
+            .get(&warranty_id)
+            .expect("DRC40: warranty not found");
         assert!(warranty.active, "DRC40: warranty is inactive");
         assert!(filed_at <= warranty.expiry_date, "DRC40: warranty expired");
         assert!(
@@ -128,32 +134,40 @@ impl WarrantyState {
         claim_id
     }
 
-    pub fn approve_claim(
-        &mut self,
-        caller: Address,
-        claim_id: ClaimId,
-        resolution: String,
-    ) {
+    pub fn approve_claim(&mut self, caller: Address, claim_id: ClaimId, resolution: String) {
         let claim = self.claims.get(&claim_id).expect("DRC40: claim not found");
-        let warranty = self.warranties.get(&claim.warranty_id).expect("DRC40: warranty not found");
-        assert!(warranty.manufacturer == caller, "DRC40: only manufacturer can approve");
-        assert!(claim.status == ClaimStatus::Pending, "DRC40: claim not pending");
+        let warranty = self
+            .warranties
+            .get(&claim.warranty_id)
+            .expect("DRC40: warranty not found");
+        assert!(
+            warranty.manufacturer == caller,
+            "DRC40: only manufacturer can approve"
+        );
+        assert!(
+            claim.status == ClaimStatus::Pending,
+            "DRC40: claim not pending"
+        );
 
         let claim = self.claims.get_mut(&claim_id).unwrap();
         claim.status = ClaimStatus::Approved;
         claim.resolution = Some(resolution);
     }
 
-    pub fn reject_claim(
-        &mut self,
-        caller: Address,
-        claim_id: ClaimId,
-        reason: String,
-    ) {
+    pub fn reject_claim(&mut self, caller: Address, claim_id: ClaimId, reason: String) {
         let claim = self.claims.get(&claim_id).expect("DRC40: claim not found");
-        let warranty = self.warranties.get(&claim.warranty_id).expect("DRC40: warranty not found");
-        assert!(warranty.manufacturer == caller, "DRC40: only manufacturer can reject");
-        assert!(claim.status == ClaimStatus::Pending, "DRC40: claim not pending");
+        let warranty = self
+            .warranties
+            .get(&claim.warranty_id)
+            .expect("DRC40: warranty not found");
+        assert!(
+            warranty.manufacturer == caller,
+            "DRC40: only manufacturer can reject"
+        );
+        assert!(
+            claim.status == ClaimStatus::Pending,
+            "DRC40: claim not pending"
+        );
 
         let claim = self.claims.get_mut(&claim_id).unwrap();
         claim.status = ClaimStatus::Rejected;
@@ -161,18 +175,24 @@ impl WarrantyState {
     }
 
     pub fn check_warranty(&self, warranty_id: WarrantyId) -> &Warranty {
-        self.warranties.get(&warranty_id).expect("DRC40: warranty not found")
+        self.warranties
+            .get(&warranty_id)
+            .expect("DRC40: warranty not found")
     }
 
-    pub fn extend_warranty(
-        &mut self,
-        caller: Address,
-        warranty_id: WarrantyId,
-        new_expiry: u64,
-    ) {
-        let warranty = self.warranties.get(&warranty_id).expect("DRC40: warranty not found");
-        assert!(warranty.manufacturer == caller, "DRC40: only manufacturer can extend");
-        assert!(new_expiry > warranty.expiry_date, "DRC40: new expiry must be later");
+    pub fn extend_warranty(&mut self, caller: Address, warranty_id: WarrantyId, new_expiry: u64) {
+        let warranty = self
+            .warranties
+            .get(&warranty_id)
+            .expect("DRC40: warranty not found");
+        assert!(
+            warranty.manufacturer == caller,
+            "DRC40: only manufacturer can extend"
+        );
+        assert!(
+            new_expiry > warranty.expiry_date,
+            "DRC40: new expiry must be later"
+        );
 
         let warranty = self.warranties.get_mut(&warranty_id).unwrap();
         warranty.expiry_date = new_expiry;

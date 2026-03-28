@@ -85,8 +85,7 @@ fn join_channel() {
     let result = dispatch(&mut state, "create_channel", &create_args, alice);
     let channel_id: u64 = serde_json::from_slice(&result).unwrap();
 
-    let join_args =
-        serde_json::to_vec(&serde_json::json!({ "channel_id": channel_id })).unwrap();
+    let join_args = serde_json::to_vec(&serde_json::json!({ "channel_id": channel_id })).unwrap();
     dispatch(&mut state, "join_channel", &join_args, charlie);
 
     let s = state.as_ref().unwrap();
@@ -107,8 +106,7 @@ fn cannot_join_twice() {
     let result = dispatch(&mut state, "create_channel", &create_args, alice);
     let channel_id: u64 = serde_json::from_slice(&result).unwrap();
 
-    let join_args =
-        serde_json::to_vec(&serde_json::json!({ "channel_id": channel_id })).unwrap();
+    let join_args = serde_json::to_vec(&serde_json::json!({ "channel_id": channel_id })).unwrap();
     dispatch(&mut state, "join_channel", &join_args, alice);
 }
 

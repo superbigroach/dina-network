@@ -1,6 +1,6 @@
 use chacha20poly1305::{
-    XChaCha20Poly1305, XNonce,
     aead::{Aead, KeyInit},
+    XChaCha20Poly1305, XNonce,
 };
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};

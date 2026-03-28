@@ -87,17 +87,20 @@ impl DataNFTState {
         assert!(size_bytes > 0, "DRC56: data must have nonzero size");
         let id = self.next_id;
         self.next_id += 1;
-        self.data_nfts.insert(id, DataNFT {
+        self.data_nfts.insert(
             id,
-            owner: caller,
-            data_hash,
-            encryption_key_hash,
-            size_bytes,
-            description,
-            license,
-            access_count: 0,
-            created_at,
-        });
+            DataNFT {
+                id,
+                owner: caller,
+                data_hash,
+                encryption_key_hash,
+                size_bytes,
+                description,
+                license,
+                access_count: 0,
+                created_at,
+            },
+        );
         id
     }
 
@@ -126,30 +129,52 @@ impl DataNFTState {
     pub fn revoke_access(&mut self, caller: Address, nft_id: u64, grantee: Address) {
         let nft = self.data_nfts.get(&nft_id).expect("DRC56: NFT not found");
         assert!(caller == nft.owner, "DRC56: only owner can revoke access");
-        let grant = self.access_grants.get_mut(&(nft_id, grantee)).expect("DRC56: grant not found");
+        let grant = self
+            .access_grants
+            .get_mut(&(nft_id, grantee))
+            .expect("DRC56: grant not found");
         grant.revoked = true;
     }
 
     pub fn transfer(&mut self, caller: Address, nft_id: u64, new_owner: Address) {
-        let nft = self.data_nfts.get_mut(&nft_id).expect("DRC56: NFT not found");
+        let nft = self
+            .data_nfts
+            .get_mut(&nft_id)
+            .expect("DRC56: NFT not found");
         assert!(caller == nft.owner, "DRC56: only owner can transfer");
         nft.owner = new_owner;
     }
 
     pub fn has_access(&self, nft_id: u64, account: Address, current_time: u64) -> bool {
         let nft = self.data_nfts.get(&nft_id);
-        if nft.is_none() { return false; }
+        if nft.is_none() {
+            return false;
+        }
         let nft = nft.unwrap();
-        if account == nft.owner { return true; }
+        if account == nft.owner {
+            return true;
+        }
         if let Some(grant) = self.access_grants.get(&(nft_id, account)) {
             return !grant.revoked && current_time <= grant.expires_at;
         }
         false
     }
 
-    pub fn record_access(&mut self, nft_id: u64, accessor: Address, access_type: AccessType, timestamp: u64) {
-        assert!(self.has_access(nft_id, accessor, timestamp), "DRC56: no access");
-        let nft = self.data_nfts.get_mut(&nft_id).expect("DRC56: NFT not found");
+    pub fn record_access(
+        &mut self,
+        nft_id: u64,
+        accessor: Address,
+        access_type: AccessType,
+        timestamp: u64,
+    ) {
+        assert!(
+            self.has_access(nft_id, accessor, timestamp),
+            "DRC56: no access"
+        );
+        let nft = self
+            .data_nfts
+            .get_mut(&nft_id)
+            .expect("DRC56: NFT not found");
         nft.access_count += 1;
         self.access_log.push(AccessLogEntry {
             nft_id,
@@ -160,7 +185,10 @@ impl DataNFTState {
     }
 
     pub fn access_log_for(&self, nft_id: u64) -> Vec<&AccessLogEntry> {
-        self.access_log.iter().filter(|e| e.nft_id == nft_id).collect()
+        self.access_log
+            .iter()
+            .filter(|e| e.nft_id == nft_id)
+            .collect()
     }
 }
 
@@ -170,27 +198,54 @@ impl DataNFTState {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct MintArgs {
-    data_hash: [u8; 32], encryption_key_hash: [u8; 32],
-    size_bytes: u64, description: String, license: License, created_at: u64,
+    data_hash: [u8; 32],
+    encryption_key_hash: [u8; 32],
+    size_bytes: u64,
+    description: String,
+    license: License,
+    created_at: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct GrantAccessArgs { nft_id: u64, grantee: Address, access_type: AccessType, expires_at: u64, granted_at: u64 }
+struct GrantAccessArgs {
+    nft_id: u64,
+    grantee: Address,
+    access_type: AccessType,
+    expires_at: u64,
+    granted_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RevokeAccessArgs { nft_id: u64, grantee: Address }
+struct RevokeAccessArgs {
+    nft_id: u64,
+    grantee: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { nft_id: u64, new_owner: Address }
+struct TransferArgs {
+    nft_id: u64,
+    new_owner: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct HasAccessArgs { nft_id: u64, account: Address, current_time: u64 }
+struct HasAccessArgs {
+    nft_id: u64,
+    account: Address,
+    current_time: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RecordAccessArgs { nft_id: u64, accessor: Address, access_type: AccessType, timestamp: u64 }
+struct RecordAccessArgs {
+    nft_id: u64,
+    accessor: Address,
+    access_type: AccessType,
+    timestamp: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct NftIdArgs { nft_id: u64 }
+struct NftIdArgs {
+    nft_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<DataNFTState>,
@@ -207,13 +262,28 @@ pub fn dispatch(
         "mint_data_nft" => {
             let s = state.as_mut().expect("DRC56: not initialised");
             let a: MintArgs = serde_json::from_slice(args).expect("DRC56: bad args");
-            let id = s.mint_data_nft(caller, a.data_hash, a.encryption_key_hash, a.size_bytes, a.description, a.license, a.created_at);
+            let id = s.mint_data_nft(
+                caller,
+                a.data_hash,
+                a.encryption_key_hash,
+                a.size_bytes,
+                a.description,
+                a.license,
+                a.created_at,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "grant_access" => {
             let s = state.as_mut().expect("DRC56: not initialised");
             let a: GrantAccessArgs = serde_json::from_slice(args).expect("DRC56: bad args");
-            s.grant_access(caller, a.nft_id, a.grantee, a.access_type, a.expires_at, a.granted_at);
+            s.grant_access(
+                caller,
+                a.nft_id,
+                a.grantee,
+                a.access_type,
+                a.expires_at,
+                a.granted_at,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "revoke_access" => {
@@ -270,7 +340,15 @@ mod tests {
     #[test]
     fn test_mint_and_query() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 1_000_000, "Test dataset".into(), License::OpenData, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            1_000_000,
+            "Test dataset".into(),
+            License::OpenData,
+            100,
+        );
         assert_eq!(id, 1);
         let nft = s.data_nfts.get(&id).unwrap();
         assert_eq!(nft.size_bytes, 1_000_000);
@@ -280,7 +358,15 @@ mod tests {
     #[test]
     fn test_grant_and_check_access() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 5000, "My data".into(), License::ResearchOnly, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            5000,
+            "My data".into(),
+            License::ResearchOnly,
+            100,
+        );
         assert!(!s.has_access(id, USER_A, 200));
         s.grant_access(OWNER, id, USER_A, AccessType::View, 500, 200);
         assert!(s.has_access(id, USER_A, 200));
@@ -291,7 +377,15 @@ mod tests {
     #[test]
     fn test_revoke_access() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 5000, "Data".into(), License::Commercial, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            5000,
+            "Data".into(),
+            License::Commercial,
+            100,
+        );
         s.grant_access(OWNER, id, USER_A, AccessType::Download, 9999, 200);
         assert!(s.has_access(id, USER_A, 300));
         s.revoke_access(OWNER, id, USER_A);
@@ -301,7 +395,15 @@ mod tests {
     #[test]
     fn test_transfer_ownership() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 5000, "Data".into(), License::Exclusive, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            5000,
+            "Data".into(),
+            License::Exclusive,
+            100,
+        );
         assert!(s.has_access(id, OWNER, 200));
         s.transfer(OWNER, id, USER_B);
         assert!(s.has_access(id, USER_B, 200));
@@ -312,7 +414,15 @@ mod tests {
     #[test]
     fn test_access_log_recording() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 5000, "Data".into(), License::OpenData, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            5000,
+            "Data".into(),
+            License::OpenData,
+            100,
+        );
         s.grant_access(OWNER, id, USER_A, AccessType::Compute, 9999, 200);
         s.record_access(id, USER_A, AccessType::Compute, 300);
         s.record_access(id, USER_A, AccessType::Compute, 400);
@@ -325,14 +435,30 @@ mod tests {
     #[should_panic(expected = "only owner can grant")]
     fn test_non_owner_cannot_grant() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 5000, "Data".into(), License::OpenData, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            5000,
+            "Data".into(),
+            License::OpenData,
+            100,
+        );
         s.grant_access(USER_A, id, USER_B, AccessType::View, 9999, 200);
     }
 
     #[test]
     fn test_owner_always_has_access() {
         let mut s = setup();
-        let id = s.mint_data_nft(OWNER, DATA_HASH, KEY_HASH, 5000, "Data".into(), License::OpenData, 100);
+        let id = s.mint_data_nft(
+            OWNER,
+            DATA_HASH,
+            KEY_HASH,
+            5000,
+            "Data".into(),
+            License::OpenData,
+            100,
+        );
         assert!(s.has_access(id, OWNER, 999999));
     }
 }

@@ -166,9 +166,7 @@ impl AlertManager {
         match condition {
             AlertCondition::BlockTimeTooSlow { max_ms } => {
                 // Check the histogram for block time observations exceeding max_ms
-                if let Some(MetricValue::Histogram(obs)) =
-                    metrics.get("dina_block_time_seconds")
-                {
+                if let Some(MetricValue::Histogram(obs)) = metrics.get("dina_block_time_seconds") {
                     let max_secs = *max_ms as f64 / 1000.0;
                     // Alert if the latest observation exceeds threshold
                     obs.last().is_some_and(|&v| v > max_secs)
@@ -213,9 +211,7 @@ impl AlertManager {
     fn format_message(&self, condition: &AlertCondition, metrics: &PrometheusMetrics) -> String {
         match condition {
             AlertCondition::BlockTimeTooSlow { max_ms } => {
-                if let Some(MetricValue::Histogram(obs)) =
-                    metrics.get("dina_block_time_seconds")
-                {
+                if let Some(MetricValue::Histogram(obs)) = metrics.get("dina_block_time_seconds") {
                     let last = obs.last().copied().unwrap_or(0.0);
                     format!(
                         "Block processing time {:.0}ms exceeds {}ms threshold",
@@ -239,10 +235,7 @@ impl AlertManager {
                 )
             }
             AlertCondition::ConsensusStalled { max_seconds } => {
-                format!(
-                    "No new block in over {} seconds",
-                    max_seconds
-                )
+                format!("No new block in over {} seconds", max_seconds)
             }
             AlertCondition::DiskUsageHigh { threshold_pct } => {
                 let usage = metrics.get_gauge("dina_disk_usage_pct");
@@ -260,10 +253,7 @@ impl AlertManager {
 
     /// Return all currently active (unresolved) alerts.
     pub fn active_alerts(&self) -> Vec<&Alert> {
-        self.active_alerts
-            .iter()
-            .filter(|a| !a.resolved)
-            .collect()
+        self.active_alerts.iter().filter(|a| !a.resolved).collect()
     }
 
     /// Resolve all alerts for a given rule name.
@@ -314,7 +304,10 @@ mod tests {
         let metrics = make_metrics_with_peers(5.0);
         let alerts = am.evaluate(&metrics);
         // Only peer-related rules should be checked; peers are healthy
-        let peer_alerts: Vec<_> = alerts.iter().filter(|a| a.rule_name == "low_peers").collect();
+        let peer_alerts: Vec<_> = alerts
+            .iter()
+            .filter(|a| a.rule_name == "low_peers")
+            .collect();
         assert!(peer_alerts.is_empty());
     }
 

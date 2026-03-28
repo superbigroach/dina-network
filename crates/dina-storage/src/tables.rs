@@ -20,8 +20,7 @@ pub const CONTRACT_STORAGE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("contract_storage");
 
 /// Device identity records keyed by device address.
-pub const DEVICE_REGISTRY: TableDefinition<&[u8], &[u8]> =
-    TableDefinition::new("device_registry");
+pub const DEVICE_REGISTRY: TableDefinition<&[u8], &[u8]> = TableDefinition::new("device_registry");
 
 /// Global key-value metadata (e.g., schema version, latest block height).
 pub const STATE_METADATA: TableDefinition<&str, &[u8]> = TableDefinition::new("state_metadata");

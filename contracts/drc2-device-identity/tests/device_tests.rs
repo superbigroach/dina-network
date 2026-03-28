@@ -22,7 +22,12 @@ fn default_metadata() -> DeviceMetadata {
     }
 }
 
-fn register(state: &mut Option<DeviceRegistryState>, owner: [u8; 32], device_id: [u8; 32], pubkey: [u8; 32]) {
+fn register(
+    state: &mut Option<DeviceRegistryState>,
+    owner: [u8; 32],
+    device_id: [u8; 32],
+    pubkey: [u8; 32],
+) {
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": device_id,
         "public_key": pubkey,
@@ -36,7 +41,8 @@ fn register(state: &mut Option<DeviceRegistryState>, owner: [u8; 32], device_id:
             "custom": {}
         },
         "timestamp": 1000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "register_device", &args, owner);
 }
 

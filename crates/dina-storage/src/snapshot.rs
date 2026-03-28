@@ -110,7 +110,10 @@ impl SnapshotManager {
                 }
             }
         }
-        debug!(count = self.snapshots.len(), "Discovered existing snapshots");
+        debug!(
+            count = self.snapshots.len(),
+            "Discovered existing snapshots"
+        );
     }
 
     /// Read just the SnapshotInfo header from a snapshot file without loading
@@ -233,8 +236,8 @@ impl SnapshotManager {
         };
 
         // Serialize to compute checksum and size.
-        let data =
-            bincode::serialize(&snapshot).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let data = bincode::serialize(&snapshot)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let checksum = sha256_hash(&data);
         let file_size = data.len() as u64;
 
@@ -242,8 +245,8 @@ impl SnapshotManager {
         snapshot.info.file_size_bytes = file_size;
 
         // Re-serialize with final info.
-        let final_data =
-            bincode::serialize(&snapshot).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let final_data = bincode::serialize(&snapshot)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
 
         // Write to disk.
         let path = self.snapshot_path(height);
@@ -271,8 +274,8 @@ impl SnapshotManager {
         let data = fs::read(&path).map_err(|e| {
             StorageError::Serialization(format!("failed to read snapshot at height {height}: {e}"))
         })?;
-        let snapshot: Snapshot = bincode::deserialize(&data)
-            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let snapshot: Snapshot =
+            bincode::deserialize(&data).map_err(|e| StorageError::Serialization(e.to_string()))?;
         Ok(snapshot)
     }
 
@@ -307,7 +310,11 @@ impl SnapshotManager {
             deleted += 1;
         }
 
-        info!(deleted, remaining = self.snapshots.len(), "Old snapshots cleaned up");
+        info!(
+            deleted,
+            remaining = self.snapshots.len(),
+            "Old snapshots cleaned up"
+        );
         deleted
     }
 
@@ -327,11 +334,15 @@ impl SnapshotManager {
 
     /// Restore state from a snapshot into the database, overwriting existing data.
     pub fn restore_from_snapshot(&self, snapshot: Snapshot, db: &DinaDB) -> StorageResult<()> {
-        let write_txn = db.inner().begin_write().map_err(StorageError::Transaction)?;
+        let write_txn = db
+            .inner()
+            .begin_write()
+            .map_err(StorageError::Transaction)?;
         {
             // Restore accounts.
-            let mut accounts_table =
-                write_txn.open_table(ACCOUNTS).map_err(StorageError::Table)?;
+            let mut accounts_table = write_txn
+                .open_table(ACCOUNTS)
+                .map_err(StorageError::Table)?;
             for (addr, account) in &snapshot.accounts {
                 let bytes = bincode::serialize(account)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
@@ -584,7 +595,10 @@ mod tests {
             let mut addr_bytes = [0u8; 32];
             addr_bytes[0..8].copy_from_slice(&i.to_le_bytes());
             let addr = Address(addr_bytes);
-            let account = db2.get_account(addr).unwrap().expect("account missing after restore");
+            let account = db2
+                .get_account(addr)
+                .unwrap()
+                .expect("account missing after restore");
             assert_eq!(account.balance, i * 100);
         }
     }

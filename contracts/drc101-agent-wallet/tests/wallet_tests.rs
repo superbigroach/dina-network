@@ -121,14 +121,26 @@ fn execute_transfer_exceeding_daily_limit_fails() {
 
     // First transfer: 800 (under daily limit of 1000)
     wallet.execute_transfer(
-        owner, recipient, 800, 100_000, 1, 1,
-        "first".to_string(), None,
+        owner,
+        recipient,
+        800,
+        100_000,
+        1,
+        1,
+        "first".to_string(),
+        None,
     );
 
     // Second transfer: 300, total would be 1100 > 1000 daily limit
     wallet.execute_transfer(
-        owner, recipient, 300, 100_001, 1, 1,
-        "second".to_string(), None,
+        owner,
+        recipient,
+        300,
+        100_001,
+        1,
+        1,
+        "second".to_string(),
+        None,
     );
 }
 
@@ -157,8 +169,14 @@ fn frozen_wallet_rejects_transfer() {
 
     wallet.emergency_stop(owner);
     wallet.execute_transfer(
-        owner, recipient, 100, 100_000, 1, 1,
-        "should fail".to_string(), None,
+        owner,
+        recipient,
+        100,
+        100_000,
+        1,
+        1,
+        "should fail".to_string(),
+        None,
     );
 }
 
@@ -181,8 +199,14 @@ fn resume_unfreezes_wallet() {
 
     // Can transfer again after resume
     wallet.execute_transfer(
-        owner, recipient, 100, 100_000, 1, 1,
-        "after resume".to_string(), None,
+        owner,
+        recipient,
+        100,
+        100_000,
+        1,
+        1,
+        "after resume".to_string(),
+        None,
     );
     assert_eq!(wallet.balance, 900);
 }
@@ -228,8 +252,14 @@ fn approved_counterparty_enforcement_works() {
 
     // Transfer to approved counterparty succeeds
     wallet.execute_transfer(
-        owner, approved, 100, 100_000, 1, 1,
-        "approved".to_string(), None,
+        owner,
+        approved,
+        100,
+        100_000,
+        1,
+        1,
+        "approved".to_string(),
+        None,
     );
     assert_eq!(wallet.balance, 4900);
 }
@@ -248,8 +278,14 @@ fn unapproved_counterparty_rejected() {
 
     // Transfer to unapproved counterparty should fail
     wallet.execute_transfer(
-        owner, unapproved, 100, 100_000, 1, 1,
-        "should fail".to_string(), None,
+        owner,
+        unapproved,
+        100,
+        100_000,
+        1,
+        1,
+        "should fail".to_string(),
+        None,
     );
 }
 
@@ -261,9 +297,6 @@ fn empty_counterparty_list_allows_any_recipient() {
     wallet.deposit(5000);
 
     // No approved counterparties = no restriction
-    wallet.execute_transfer(
-        owner, anyone, 100, 100_000, 1, 1,
-        "open".to_string(), None,
-    );
+    wallet.execute_transfer(owner, anyone, 100, 100_000, 1, 1, "open".to_string(), None);
     assert_eq!(wallet.balance, 4900);
 }

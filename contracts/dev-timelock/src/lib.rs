@@ -11,7 +11,7 @@ pub struct QueuedOperation {
     pub method: String,
     pub args: Vec<u8>,
     pub value: u64,
-    pub eta: u64,          // earliest execution time
+    pub eta: u64, // earliest execution time
     pub queued_at: u64,
     pub executed: bool,
     pub cancelled: bool,
@@ -175,16 +175,14 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "Timelock: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("Timelock: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("Timelock: bad init args");
             *state = Some(TimelockState::new(a.admin, a.min_delay));
             serde_json::to_vec("ok").unwrap()
         }
 
         "queue_operation" => {
             let s = state.as_mut().expect("Timelock: not initialised");
-            let a: QueueArgs =
-                serde_json::from_slice(args).expect("Timelock: bad queue args");
+            let a: QueueArgs = serde_json::from_slice(args).expect("Timelock: bad queue args");
             let op_id = s.queue_operation(
                 caller,
                 a.target,
@@ -199,16 +197,14 @@ pub fn dispatch(
 
         "execute_operation" => {
             let s = state.as_mut().expect("Timelock: not initialised");
-            let a: ExecuteArgs =
-                serde_json::from_slice(args).expect("Timelock: bad execute args");
+            let a: ExecuteArgs = serde_json::from_slice(args).expect("Timelock: bad execute args");
             let op = s.execute_operation(caller, &a.op_id, a.current_time);
             serde_json::to_vec(op).unwrap()
         }
 
         "cancel_operation" => {
             let s = state.as_mut().expect("Timelock: not initialised");
-            let a: CancelArgs =
-                serde_json::from_slice(args).expect("Timelock: bad cancel args");
+            let a: CancelArgs = serde_json::from_slice(args).expect("Timelock: bad cancel args");
             s.cancel_operation(caller, &a.op_id);
             serde_json::to_vec("ok").unwrap()
         }

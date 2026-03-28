@@ -177,9 +177,8 @@ impl HealthCheck for ConsensusHealthCheck {
     fn check(&self) -> HealthStatus {
         let (is_running, last_block_ts) = (self.state_fn)();
         if !is_running {
-            return HealthStatus::unhealthy("Consensus is not running").with_details(
-                serde_json::json!({ "running": false }),
-            );
+            return HealthStatus::unhealthy("Consensus is not running")
+                .with_details(serde_json::json!({ "running": false }));
         }
 
         let now = chrono::Utc::now().timestamp() as u64;
@@ -214,10 +213,7 @@ pub struct NetworkHealthCheck {
 }
 
 impl NetworkHealthCheck {
-    pub fn new(
-        peer_count_fn: impl Fn() -> u64 + Send + Sync + 'static,
-        min_peers: u64,
-    ) -> Self {
+    pub fn new(peer_count_fn: impl Fn() -> u64 + Send + Sync + 'static, min_peers: u64) -> Self {
         Self {
             peer_count_fn: Box::new(peer_count_fn),
             min_peers,
@@ -241,9 +237,7 @@ impl HealthCheck for NetworkHealthCheck {
                 "Only {} peers connected (min {})",
                 count, self.min_peers
             ))
-            .with_details(
-                serde_json::json!({ "peer_count": count, "min_peers": self.min_peers }),
-            )
+            .with_details(serde_json::json!({ "peer_count": count, "min_peers": self.min_peers }))
         }
     }
 }
@@ -403,8 +397,7 @@ mod tests {
 
     #[test]
     fn test_health_status_with_details() {
-        let status = HealthStatus::healthy("ok")
-            .with_details(serde_json::json!({"key": "value"}));
+        let status = HealthStatus::healthy("ok").with_details(serde_json::json!({"key": "value"}));
         assert!(status.details.is_object());
         assert_eq!(status.details["key"], "value");
     }

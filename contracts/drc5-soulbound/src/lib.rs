@@ -63,10 +63,7 @@ impl CredentialRegistry {
             caller == self.owner,
             "DRC5: only owner can add authorized issuers"
         );
-        let issuers = self
-            .authorized_issuers
-            .entry(credential_type)
-            .or_default();
+        let issuers = self.authorized_issuers.entry(credential_type).or_default();
         if !issuers.contains(&issuer) {
             issuers.push(issuer);
         }
@@ -108,10 +105,7 @@ impl CredentialRegistry {
         };
 
         self.credentials.insert(id, credential);
-        self.holder_creds
-            .entry(holder)
-            .or_default()
-            .push(id);
+        self.holder_creds.entry(holder).or_default().push(id);
 
         id
     }

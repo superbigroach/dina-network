@@ -17,7 +17,7 @@ use libp2p::{gossipsub, identify, kad, mdns, noise, tcp, yamux, Multiaddr, PeerI
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::discovery::{self, DiscoveryConfig, DiscoveryState, add_bootstrap_peers};
+use crate::discovery::{self, add_bootstrap_peers, DiscoveryConfig, DiscoveryState};
 use crate::gossip::{self, DinaGossip};
 use crate::message::{BlockPayload, NetworkMessage, TransactionPayload, Vote};
 use crate::peer::{PeerManager, PeerManagerConfig};
@@ -192,9 +192,7 @@ impl DinaNode {
                 yamux::Config::default,
             )?
             .with_behaviour(|_key| Ok::<_, Box<dyn std::error::Error + Send + Sync>>(behaviour))?
-            .with_swarm_config(|cfg| {
-                cfg.with_idle_connection_timeout(Duration::from_secs(120))
-            })
+            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(120)))
             .build();
 
         let (command_tx, command_rx) = mpsc::channel(256);
@@ -277,55 +275,45 @@ impl DinaNode {
     async fn handle_swarm_event(&mut self, event: SwarmEvent<DinaBehaviourEvent>) {
         match event {
             // --- Connection events ---
-            SwarmEvent::ConnectionEstablished {
-                peer_id,
-                ..
-            } => {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 info!(%peer_id, "connection established");
                 self.peer_manager.on_connected(peer_id);
                 let _ = self.event_tx.try_send(NodeEvent::PeerConnected(peer_id));
             }
 
-            SwarmEvent::ConnectionClosed {
-                peer_id,
-                ..
-            } => {
+            SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 debug!(%peer_id, "connection closed");
                 self.peer_manager.on_disconnected(&peer_id);
                 let _ = self.event_tx.try_send(NodeEvent::PeerDisconnected(peer_id));
             }
 
             // --- GossipSub events ---
-            SwarmEvent::Behaviour(DinaBehaviourEvent::Gossipsub(
-                gossipsub::Event::Message {
-                    propagation_source,
-                    message,
-                    ..
-                },
-            )) => {
-                match DinaGossip::validate_message(&message.data) {
-                    Ok(net_msg) => {
-                        debug!(
-                            source = %propagation_source,
-                            label = net_msg.label(),
-                            "received valid gossip message"
-                        );
-                        self.peer_manager.record_good_message(&propagation_source);
-                        let _ = self.event_tx.try_send(NodeEvent::MessageReceived {
-                            source: propagation_source,
-                            message: net_msg,
-                        });
-                    }
-                    Err(e) => {
-                        warn!(
-                            source = %propagation_source,
-                            error = %e,
-                            "invalid gossip message"
-                        );
-                        self.peer_manager.record_bad_message(&propagation_source);
-                    }
+            SwarmEvent::Behaviour(DinaBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                propagation_source,
+                message,
+                ..
+            })) => match DinaGossip::validate_message(&message.data) {
+                Ok(net_msg) => {
+                    debug!(
+                        source = %propagation_source,
+                        label = net_msg.label(),
+                        "received valid gossip message"
+                    );
+                    self.peer_manager.record_good_message(&propagation_source);
+                    let _ = self.event_tx.try_send(NodeEvent::MessageReceived {
+                        source: propagation_source,
+                        message: net_msg,
+                    });
                 }
-            }
+                Err(e) => {
+                    warn!(
+                        source = %propagation_source,
+                        error = %e,
+                        "invalid gossip message"
+                    );
+                    self.peer_manager.record_bad_message(&propagation_source);
+                }
+            },
 
             SwarmEvent::Behaviour(DinaBehaviourEvent::Gossipsub(
                 gossipsub::Event::Subscribed { peer_id, topic },
@@ -360,9 +348,10 @@ impl DinaNode {
             }
 
             // --- Kademlia events ---
-            SwarmEvent::Behaviour(DinaBehaviourEvent::Kademlia(
-                kad::Event::RoutingUpdated { peer, .. },
-            )) => {
+            SwarmEvent::Behaviour(DinaBehaviourEvent::Kademlia(kad::Event::RoutingUpdated {
+                peer,
+                ..
+            })) => {
                 debug!(%peer, "Kademlia routing table updated");
                 self.discovery_state.on_kademlia_peer_found(peer);
             }
@@ -391,7 +380,10 @@ impl DinaNode {
                 // Add the peer's listen addresses to Kademlia so they can be
                 // discovered by other peers.
                 for addr in &identify_info.listen_addrs {
-                    self.swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                    self.swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .add_address(&peer_id, addr.clone());
                     self.peer_manager.add_address(&peer_id, addr.clone());
                 }
             }
@@ -414,10 +406,7 @@ impl DinaNode {
         match cmd {
             NodeCommand::BroadcastTransaction(tx) => {
                 if let Err(e) =
-                    DinaGossip::publish_transaction(
-                        &mut self.swarm.behaviour_mut().gossipsub,
-                        tx,
-                    )
+                    DinaGossip::publish_transaction(&mut self.swarm.behaviour_mut().gossipsub, tx)
                 {
                     warn!(%e, "failed to broadcast transaction");
                 }

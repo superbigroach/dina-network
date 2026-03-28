@@ -139,11 +139,7 @@ async fn handle_liveness(State(state): State<DashboardState>) -> Response {
 async fn handle_readiness(State(state): State<DashboardState>) -> Response {
     let health = state.health.read().await;
     if health.is_ready() {
-        (
-            StatusCode::OK,
-            Json(serde_json::json!({"status": "ready"})),
-        )
-            .into_response()
+        (StatusCode::OK, Json(serde_json::json!({"status": "ready"}))).into_response()
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -362,11 +358,8 @@ mod tests {
         let health = Arc::new(RwLock::new(HealthChecker::new("2.0.0")));
         let alerts = Arc::new(RwLock::new(AlertManager::new()));
 
-        let dashboard = MonitoringDashboard::from_parts(
-            metrics.clone(),
-            health.clone(),
-            alerts.clone(),
-        );
+        let dashboard =
+            MonitoringDashboard::from_parts(metrics.clone(), health.clone(), alerts.clone());
 
         let app = dashboard.router();
         let response = app.oneshot(get_request("/health")).await.unwrap();

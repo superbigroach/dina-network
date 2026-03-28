@@ -115,11 +115,13 @@ async fn handle_request(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::to_value(ErrorResponse {
-                    success: false,
-                    error: e,
-                })
-                .unwrap()),
+                Json(
+                    serde_json::to_value(ErrorResponse {
+                        success: false,
+                        error: e,
+                    })
+                    .unwrap(),
+                ),
             );
         }
     };
@@ -139,7 +141,10 @@ async fn handle_request(
                 timestamp: req.timestamp,
             };
 
-            (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(response).unwrap()),
+            )
         }
         Err(FaucetError::CooldownActive { remaining_seconds }) => {
             let response = ErrorResponse {
@@ -192,11 +197,13 @@ async fn handle_status(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::to_value(ErrorResponse {
-                    success: false,
-                    error: e,
-                })
-                .unwrap()),
+                Json(
+                    serde_json::to_value(ErrorResponse {
+                        success: false,
+                        error: e,
+                    })
+                    .unwrap(),
+                ),
             );
         }
     };
@@ -217,7 +224,10 @@ async fn handle_status(
         request_count: history.len(),
     };
 
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
 }
 
 /// GET /faucet/stats — Faucet aggregate statistics.
@@ -235,7 +245,10 @@ async fn handle_stats(State(faucet): State<SharedFaucet>) -> impl IntoResponse {
         cooldown_seconds: stats.cooldown_seconds,
     };
 
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
 }
 
 // ---------------------------------------------------------------------------

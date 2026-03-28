@@ -155,7 +155,10 @@ impl SwarmRegistry {
             .swarms
             .get(&swarm_id)
             .expect("DRC104: swarm does not exist");
-        let members = self.members.get(&swarm_id).expect("DRC104: swarm has no members list");
+        let members = self
+            .members
+            .get(&swarm_id)
+            .expect("DRC104: swarm has no members list");
 
         // Verify quorum: count how many signers are actual members
         let valid_signers = signatures
@@ -186,10 +189,7 @@ impl SwarmRegistry {
                 // a cross-contract call; here we just debit the swarm wallet.
             }
             SwarmAction::UpdateConfig(new_config) => {
-                assert!(
-                    new_config.quorum <= 100,
-                    "DRC104: quorum must be <= 100"
-                );
+                assert!(new_config.quorum <= 100, "DRC104: quorum must be <= 100");
                 self.swarms.insert(swarm_id, new_config);
             }
             SwarmAction::AddMember(device_id) => {
@@ -266,20 +266,17 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "get_swarm" => {
             let s = state.as_ref().expect("DRC104: not initialised");
-            let a: SwarmIdArgs =
-                serde_json::from_slice(args).expect("DRC104: bad get_swarm args");
+            let a: SwarmIdArgs = serde_json::from_slice(args).expect("DRC104: bad get_swarm args");
             serde_json::to_vec(s.get_swarm(&a.swarm_id)).unwrap()
         }
         "is_member" => {
             let s = state.as_ref().expect("DRC104: not initialised");
-            let a: IsMemberArgs =
-                serde_json::from_slice(args).expect("DRC104: bad is_member args");
+            let a: IsMemberArgs = serde_json::from_slice(args).expect("DRC104: bad is_member args");
             serde_json::to_vec(&s.is_member(&a.swarm_id, &a.device_id)).unwrap()
         }
         "members" => {
             let s = state.as_ref().expect("DRC104: not initialised");
-            let a: SwarmIdArgs =
-                serde_json::from_slice(args).expect("DRC104: bad members args");
+            let a: SwarmIdArgs = serde_json::from_slice(args).expect("DRC104: bad members args");
             serde_json::to_vec(&s.members(&a.swarm_id)).unwrap()
         }
         "swarm_wallet" => {
@@ -299,8 +296,7 @@ pub fn dispatch(
         }
         "add_member" => {
             let s = state.as_mut().expect("DRC104: not initialised");
-            let a: MemberArgs =
-                serde_json::from_slice(args).expect("DRC104: bad add_member args");
+            let a: MemberArgs = serde_json::from_slice(args).expect("DRC104: bad add_member args");
             s.add_member(caller, a.swarm_id, a.device_id);
             serde_json::to_vec("ok").unwrap()
         }

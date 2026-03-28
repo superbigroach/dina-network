@@ -174,7 +174,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
                 return -1;
             }
             // Consume gas for memory write
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.memory_write);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.memory_write);
             out_ptr
         },
     )?;
@@ -206,7 +206,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
         "env",
         "__host_transfer",
         |mut caller: Caller<'_, WasmHostState>, to_ptr: i32, amount: i64| -> i32 {
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.transfer);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.transfer);
 
             // Reject negative amounts -- a malicious contract could pass a
             // negative i64 which, when cast to u64 via `as`, wraps to a
@@ -249,7 +249,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
         "env",
         "__host_storage_get",
         |mut caller: Caller<'_, WasmHostState>, key_ptr: i32, key_len: i32| -> i64 {
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.storage_read);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.storage_read);
 
             let key = match read_wasm_memory(&mut caller, key_ptr as u32, key_len as u32) {
                 Ok(k) => k,
@@ -292,7 +292,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
          key_len: i32,
          val_ptr: i32,
          val_len: i32| {
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.storage_write);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.storage_write);
 
             let key = match read_wasm_memory(&mut caller, key_ptr as u32, key_len as u32) {
                 Ok(k) => k,
@@ -332,7 +332,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
          name_len: i32,
          data_ptr: i32,
          data_len: i32| {
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.emit_event);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.emit_event);
 
             let event_count = caller.data().events.len() as u32 + 1;
             let limits = caller.data().limits.clone();
@@ -369,7 +369,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
         "env",
         "__host_sha256",
         |mut caller: Caller<'_, WasmHostState>, data_ptr: i32, data_len: i32| -> i32 {
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.sha256);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.sha256);
 
             let data = match read_wasm_memory(&mut caller, data_ptr as u32, data_len as u32) {
                 Ok(d) => d,
@@ -410,7 +410,7 @@ pub fn register_host_functions(linker: &mut Linker<WasmHostState>) -> Result<(),
          msg_len: i32,
          sig_ptr: i32|
          -> i32 {
-            consume_fuel(&mut caller,DEFAULT_GAS_COSTS.ed25519_verify);
+            consume_fuel(&mut caller, DEFAULT_GAS_COSTS.ed25519_verify);
 
             let pubkey_bytes = match read_wasm_memory(&mut caller, pubkey_ptr as u32, 32) {
                 Ok(b) => b,

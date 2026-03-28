@@ -56,7 +56,10 @@ impl EnumerableNftState {
     }
 
     pub fn token_of_owner_by_index(&self, owner: &Address, index: usize) -> u64 {
-        let tokens = self.owner_tokens.get(owner).expect("DRC52: owner has no tokens");
+        let tokens = self
+            .owner_tokens
+            .get(owner)
+            .expect("DRC52: owner has no tokens");
         assert!(index < tokens.len(), "DRC52: owner index out of bounds");
         tokens[index]
     }
@@ -66,7 +69,9 @@ impl EnumerableNftState {
     }
 
     pub fn owner_of(&self, token_id: u64) -> &Address {
-        self.owners.get(&token_id).expect("DRC52: token does not exist")
+        self.owners
+            .get(&token_id)
+            .expect("DRC52: token does not exist")
     }
 
     pub fn balance_of(&self, owner: &Address) -> u64 {
@@ -159,21 +164,41 @@ impl EnumerableNftState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { name: String, symbol: String }
+struct InitArgs {
+    name: String,
+    symbol: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MintArgs { to: Address }
+struct MintArgs {
+    to: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferFromArgs { from: Address, to: Address, token_id: u64 }
+struct TransferFromArgs {
+    from: Address,
+    to: Address,
+    token_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct BurnArgs { token_id: u64 }
+struct BurnArgs {
+    token_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct IndexArg { index: usize }
+struct IndexArg {
+    index: usize,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct OwnerIndexArg { owner: Address, index: usize }
+struct OwnerIndexArg {
+    owner: Address,
+    index: usize,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TokenIdArg { token_id: u64 }
+struct TokenIdArg {
+    token_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<EnumerableNftState>,
@@ -247,13 +272,17 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<EnumerableNftState> {
         let mut state = None;
         let args = serde_json::to_vec(&InitArgs {
-            name: "EnumNFT".into(), symbol: "ENFT".into(),
-        }).unwrap();
+            name: "EnumNFT".into(),
+            symbol: "ENFT".into(),
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, addr(1));
         state
     }
@@ -283,8 +312,11 @@ mod tests {
         dispatch(&mut state, "mint", &mint, addr(1));
 
         let xfer = serde_json::to_vec(&TransferFromArgs {
-            from: addr(2), to: addr(3), token_id: 1,
-        }).unwrap();
+            from: addr(2),
+            to: addr(3),
+            token_id: 1,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_from", &xfer, addr(2));
         let s = state.as_ref().unwrap();
         assert_eq!(*s.owner_of(1), addr(3));

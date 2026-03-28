@@ -62,8 +62,14 @@ impl NftState {
     }
 
     pub fn get_approved(&self, token_id: u64) -> Address {
-        assert!(self.owners.contains_key(&token_id), "DRC6: token does not exist");
-        self.approvals.get(&token_id).copied().unwrap_or(ZERO_ADDRESS)
+        assert!(
+            self.owners.contains_key(&token_id),
+            "DRC6: token does not exist"
+        );
+        self.approvals
+            .get(&token_id)
+            .copied()
+            .unwrap_or(ZERO_ADDRESS)
     }
 
     pub fn is_approved_for_all(&self, owner: &Address, operator: &Address) -> bool {
@@ -92,12 +98,7 @@ impl NftState {
 
     // -- Mutations -----------------------------------------------------------
 
-    pub fn mint(
-        &mut self,
-        caller: Address,
-        to: Address,
-        metadata: TokenMetadata,
-    ) -> u64 {
+    pub fn mint(&mut self, caller: Address, to: Address, metadata: TokenMetadata) -> u64 {
         assert!(caller == self.minter, "DRC6: only minter can mint");
         assert!(to != ZERO_ADDRESS, "DRC6: cannot mint to zero address");
 
@@ -112,13 +113,7 @@ impl NftState {
         token_id
     }
 
-    pub fn transfer_from(
-        &mut self,
-        caller: Address,
-        from: Address,
-        to: Address,
-        token_id: u64,
-    ) {
+    pub fn transfer_from(&mut self, caller: Address, from: Address, to: Address, token_id: u64) {
         assert!(
             self.is_approved_or_owner(&caller, token_id),
             "DRC6: caller is not owner nor approved"
@@ -150,15 +145,9 @@ impl NftState {
         self.approvals.insert(token_id, to);
     }
 
-    pub fn set_approval_for_all(
-        &mut self,
-        caller: Address,
-        operator: Address,
-        approved: bool,
-    ) {
+    pub fn set_approval_for_all(&mut self, caller: Address, operator: Address, approved: bool) {
         assert!(caller != operator, "DRC6: approve to caller");
-        self.operator_approvals
-            .insert((caller, operator), approved);
+        self.operator_approvals.insert((caller, operator), approved);
     }
 
     pub fn burn(&mut self, caller: Address, token_id: u64) {
@@ -265,14 +254,12 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "owner_of" => {
             let s = state.as_ref().expect("DRC6: not initialised");
-            let a: OwnerOfArgs =
-                serde_json::from_slice(args).expect("DRC6: bad owner_of args");
+            let a: OwnerOfArgs = serde_json::from_slice(args).expect("DRC6: bad owner_of args");
             serde_json::to_vec(&s.owner_of(a.token_id)).unwrap()
         }
         "balance_of" => {
             let s = state.as_ref().expect("DRC6: not initialised");
-            let a: BalanceOfArgs =
-                serde_json::from_slice(args).expect("DRC6: bad balance_of args");
+            let a: BalanceOfArgs = serde_json::from_slice(args).expect("DRC6: bad balance_of args");
             serde_json::to_vec(&s.balance_of(&a.owner)).unwrap()
         }
         "get_approved" => {
@@ -314,8 +301,7 @@ pub fn dispatch(
         }
         "approve" => {
             let s = state.as_mut().expect("DRC6: not initialised");
-            let a: ApproveArgs =
-                serde_json::from_slice(args).expect("DRC6: bad approve args");
+            let a: ApproveArgs = serde_json::from_slice(args).expect("DRC6: bad approve args");
             s.approve(caller, a.to, a.token_id);
             serde_json::to_vec("ok").unwrap()
         }

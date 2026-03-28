@@ -54,10 +54,7 @@ impl RoyaltyRegistry {
             .creators
             .get(&token_id)
             .expect("DRC10: no creator registered for token");
-        assert!(
-            caller == *creator,
-            "DRC10: only creator can set royalty"
-        );
+        assert!(caller == *creator, "DRC10: only creator can set royalty");
         self.royalties.insert(
             token_id,
             RoyaltyInfo {

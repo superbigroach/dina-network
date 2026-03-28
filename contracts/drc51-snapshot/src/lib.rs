@@ -50,12 +50,18 @@ impl SnapshotTokenState {
     }
 
     pub fn balance_of_at(&self, account: &Address, snapshot_id: u64) -> u64 {
-        let snap = self.snapshots.get(&snapshot_id).expect("DRC51: snapshot not found");
+        let snap = self
+            .snapshots
+            .get(&snapshot_id)
+            .expect("DRC51: snapshot not found");
         snap.balances.get(account).copied().unwrap_or(0)
     }
 
     pub fn total_supply_at(&self, snapshot_id: u64) -> u64 {
-        let snap = self.snapshots.get(&snapshot_id).expect("DRC51: snapshot not found");
+        let snap = self
+            .snapshots
+            .get(&snapshot_id)
+            .expect("DRC51: snapshot not found");
         snap.total_supply
     }
 
@@ -87,12 +93,15 @@ impl SnapshotTokenState {
         assert!(caller == self.admin, "DRC51: only admin can snapshot");
         self.current_snapshot_id += 1;
         let id = self.current_snapshot_id;
-        self.snapshots.insert(id, Snapshot {
+        self.snapshots.insert(
             id,
-            timestamp,
-            balances: self.balances.clone(),
-            total_supply: self.total_supply,
-        });
+            Snapshot {
+                id,
+                timestamp,
+                balances: self.balances.clone(),
+                total_supply: self.total_supply,
+            },
+        );
         id
     }
 }
@@ -102,19 +111,38 @@ impl SnapshotTokenState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { name: String, symbol: String, decimals: u8 }
+struct InitArgs {
+    name: String,
+    symbol: String,
+    decimals: u8,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { to: Address, amount: u64 }
+struct TransferArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MintArgs { to: Address, amount: u64 }
+struct MintArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct BalanceAtArgs { account: Address, snapshot_id: u64 }
+struct BalanceAtArgs {
+    account: Address,
+    snapshot_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SnapshotIdArg { snapshot_id: u64 }
+struct SnapshotIdArg {
+    snapshot_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SnapshotArgs { timestamp: u64 }
+struct SnapshotArgs {
+    timestamp: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<SnapshotTokenState>,
@@ -126,7 +154,9 @@ pub fn dispatch(
         "init" => {
             assert!(state.is_none(), "DRC51: already initialised");
             let a: InitArgs = serde_json::from_slice(args).expect("DRC51: bad init args");
-            *state = Some(SnapshotTokenState::new(a.name, a.symbol, a.decimals, caller));
+            *state = Some(SnapshotTokenState::new(
+                a.name, a.symbol, a.decimals, caller,
+            ));
             serde_json::to_vec("ok").unwrap()
         }
         "balance_of" => {
@@ -182,17 +212,30 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<SnapshotTokenState> {
         let mut state = None;
         let args = serde_json::to_vec(&InitArgs {
-            name: "SnapToken".into(), symbol: "SNP".into(), decimals: 6,
-        }).unwrap();
+            name: "SnapToken".into(),
+            symbol: "SNP".into(),
+            decimals: 6,
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, addr(1));
         // Mint to addr(1) and addr(2)
-        let m1 = serde_json::to_vec(&MintArgs { to: addr(1), amount: 1000 }).unwrap();
-        let m2 = serde_json::to_vec(&MintArgs { to: addr(2), amount: 500 }).unwrap();
+        let m1 = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            amount: 1000,
+        })
+        .unwrap();
+        let m2 = serde_json::to_vec(&MintArgs {
+            to: addr(2),
+            amount: 500,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &m1, addr(1));
         dispatch(&mut state, "mint", &m2, addr(1));
         state
@@ -220,7 +263,11 @@ mod tests {
         dispatch(&mut state, "snapshot", &snap, addr(1));
 
         // Transfer after snapshot
-        let xfer = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 300 }).unwrap();
+        let xfer = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 300,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &xfer, addr(1));
 
         let s = state.as_ref().unwrap();
@@ -238,7 +285,11 @@ mod tests {
         let s1 = serde_json::to_vec(&SnapshotArgs { timestamp: 1000 }).unwrap();
         dispatch(&mut state, "snapshot", &s1, addr(1));
 
-        let xfer = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 200 }).unwrap();
+        let xfer = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 200,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &xfer, addr(1));
 
         let s2 = serde_json::to_vec(&SnapshotArgs { timestamp: 2000 }).unwrap();

@@ -33,7 +33,7 @@ pub struct InferenceModel {
     pub model_type: ModelType,
     pub price_per_call: u64,
     pub latency_ms: u32,
-    pub accuracy: u32,   // basis points, e.g. 9500 = 95.00%
+    pub accuracy: u32, // basis points, e.g. 9500 = 95.00%
     pub endpoint_hash: [u8; 32],
     pub active: bool,
     pub total_requests: u64,
@@ -97,19 +97,22 @@ impl InferenceState {
 
         let id = self.next_model_id;
         self.next_model_id += 1;
-        self.models.insert(id, InferenceModel {
+        self.models.insert(
             id,
-            provider: caller,
-            name,
-            model_type,
-            price_per_call,
-            latency_ms,
-            accuracy,
-            endpoint_hash,
-            active: true,
-            total_requests: 0,
-            total_earned: 0,
-        });
+            InferenceModel {
+                id,
+                provider: caller,
+                name,
+                model_type,
+                price_per_call,
+                latency_ms,
+                accuracy,
+                endpoint_hash,
+                active: true,
+                total_requests: 0,
+                total_earned: 0,
+            },
+        );
         id
     }
 
@@ -130,17 +133,20 @@ impl InferenceState {
 
         let req_id = self.next_request_id;
         self.next_request_id += 1;
-        self.requests.insert(req_id, InferenceRequest {
-            id: req_id,
-            requester: caller,
-            model_id,
-            input_hash,
-            output_hash: None,
-            cost,
-            status: RequestStatus::Pending,
-            requested_at,
-            completed_at: None,
-        });
+        self.requests.insert(
+            req_id,
+            InferenceRequest {
+                id: req_id,
+                requester: caller,
+                model_id,
+                input_hash,
+                output_hash: None,
+                cost,
+                status: RequestStatus::Pending,
+                requested_at,
+                completed_at: None,
+            },
+        );
         req_id
     }
 
@@ -151,10 +157,22 @@ impl InferenceState {
         output_hash: [u8; 32],
         completed_at: u64,
     ) {
-        let req = self.requests.get_mut(&request_id).expect("DRC61: request not found");
-        assert!(req.status == RequestStatus::Pending, "DRC61: request not pending");
-        let model = self.models.get(&req.model_id).expect("DRC61: model not found");
-        assert!(caller == model.provider, "DRC61: only model provider can submit result");
+        let req = self
+            .requests
+            .get_mut(&request_id)
+            .expect("DRC61: request not found");
+        assert!(
+            req.status == RequestStatus::Pending,
+            "DRC61: request not pending"
+        );
+        let model = self
+            .models
+            .get(&req.model_id)
+            .expect("DRC61: model not found");
+        assert!(
+            caller == model.provider,
+            "DRC61: only model provider can submit result"
+        );
 
         req.output_hash = Some(output_hash);
         req.status = RequestStatus::Completed;
@@ -178,13 +196,15 @@ impl InferenceState {
     }
 
     pub fn models_by_type(&self, model_type: &ModelType) -> Vec<&InferenceModel> {
-        self.models.values()
+        self.models
+            .values()
             .filter(|m| m.active && &m.model_type == model_type)
             .collect()
     }
 
     pub fn provider_earnings(&self, provider: &Address) -> u64 {
-        self.models.values()
+        self.models
+            .values()
             .filter(|m| m.provider == *provider)
             .map(|m| m.total_earned)
             .sum()
@@ -201,30 +221,52 @@ impl InferenceState {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RegisterModelArgs {
-    name: String, model_type: ModelType, price_per_call: u64,
-    latency_ms: u32, accuracy: u32, endpoint_hash: [u8; 32],
+    name: String,
+    model_type: ModelType,
+    price_per_call: u64,
+    latency_ms: u32,
+    accuracy: u32,
+    endpoint_hash: [u8; 32],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RequestInferenceArgs { model_id: u64, input_hash: [u8; 32], requested_at: u64 }
+struct RequestInferenceArgs {
+    model_id: u64,
+    input_hash: [u8; 32],
+    requested_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct SubmitResultArgs { request_id: u64, output_hash: [u8; 32], completed_at: u64 }
+struct SubmitResultArgs {
+    request_id: u64,
+    output_hash: [u8; 32],
+    completed_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RequestIdArgs { request_id: u64 }
+struct RequestIdArgs {
+    request_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ModelTypeArgs { model_type: ModelType }
+struct ModelTypeArgs {
+    model_type: ModelType,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ProviderArgs { provider: Address }
+struct ProviderArgs {
+    provider: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArgs { addr: Address }
+struct AddrArgs {
+    addr: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<InferenceState>,
@@ -247,7 +289,15 @@ pub fn dispatch(
         "register_model" => {
             let s = state.as_mut().expect("DRC61: not initialised");
             let a: RegisterModelArgs = serde_json::from_slice(args).expect("DRC61: bad args");
-            let id = s.register_model(caller, a.name, a.model_type, a.price_per_call, a.latency_ms, a.accuracy, a.endpoint_hash);
+            let id = s.register_model(
+                caller,
+                a.name,
+                a.model_type,
+                a.price_per_call,
+                a.latency_ms,
+                a.accuracy,
+                a.endpoint_hash,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "request_inference" => {
@@ -302,8 +352,13 @@ mod tests {
     fn setup_with_model() -> (InferenceState, u64) {
         let mut s = InferenceState::new(OWNER);
         let model_id = s.register_model(
-            PROVIDER, "GPT-Dina".into(), ModelType::TextGeneration,
-            50, 200, 9500, [0xAB; 32],
+            PROVIDER,
+            "GPT-Dina".into(),
+            ModelType::TextGeneration,
+            50,
+            200,
+            9500,
+            [0xAB; 32],
         );
         s.deposit(CLIENT, 10_000);
         (s, model_id)
@@ -360,9 +415,33 @@ mod tests {
     #[test]
     fn test_models_by_type_filters() {
         let mut s = InferenceState::new(OWNER);
-        s.register_model(PROVIDER, "Text".into(), ModelType::TextGeneration, 10, 100, 9000, [0; 32]);
-        s.register_model(PROVIDER, "Image".into(), ModelType::ImageClassification, 20, 50, 8500, [0; 32]);
-        s.register_model(PROVIDER, "Text2".into(), ModelType::TextGeneration, 15, 80, 9200, [0; 32]);
+        s.register_model(
+            PROVIDER,
+            "Text".into(),
+            ModelType::TextGeneration,
+            10,
+            100,
+            9000,
+            [0; 32],
+        );
+        s.register_model(
+            PROVIDER,
+            "Image".into(),
+            ModelType::ImageClassification,
+            20,
+            50,
+            8500,
+            [0; 32],
+        );
+        s.register_model(
+            PROVIDER,
+            "Text2".into(),
+            ModelType::TextGeneration,
+            15,
+            80,
+            9200,
+            [0; 32],
+        );
         assert_eq!(s.models_by_type(&ModelType::TextGeneration).len(), 2);
         assert_eq!(s.models_by_type(&ModelType::ImageClassification).len(), 1);
         assert_eq!(s.models_by_type(&ModelType::SpeechToText).len(), 0);

@@ -70,10 +70,9 @@ impl McpServer {
     pub async fn start(&self) -> Result<(), McpError> {
         let app = Self::build_router(self.handler.clone());
 
-        let addr: SocketAddr = self
-            .bind_addr
-            .parse()
-            .map_err(|e| McpError::ServerError(format!("invalid bind address '{}': {e}", self.bind_addr)))?;
+        let addr: SocketAddr = self.bind_addr.parse().map_err(|e| {
+            McpError::ServerError(format!("invalid bind address '{}': {e}", self.bind_addr))
+        })?;
 
         info!("MCP server listening on {}", addr);
 
@@ -173,7 +172,10 @@ async fn handle_mcp_request(
 
 /// Handle GET /health for health checks.
 async fn handle_health() -> (StatusCode, Json<serde_json::Value>) {
-    (StatusCode::OK, Json(json!({ "status": "ok", "service": "dina-mcp" })))
+    (
+        StatusCode::OK,
+        Json(json!({ "status": "ok", "service": "dina-mcp" })),
+    )
 }
 
 /// Handle GET /tools to list available MCP tools (convenience endpoint).

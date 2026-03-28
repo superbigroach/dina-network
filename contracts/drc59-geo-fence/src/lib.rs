@@ -68,36 +68,50 @@ impl GeoFenceState {
         restricted: bool,
     ) -> u64 {
         assert!(radius_meters > 0.0, "DRC59: radius must be positive");
-        assert!(center_lat >= -90.0 && center_lat <= 90.0, "DRC59: invalid latitude");
-        assert!(center_lng >= -180.0 && center_lng <= 180.0, "DRC59: invalid longitude");
+        assert!(
+            center_lat >= -90.0 && center_lat <= 90.0,
+            "DRC59: invalid latitude"
+        );
+        assert!(
+            center_lng >= -180.0 && center_lng <= 180.0,
+            "DRC59: invalid longitude"
+        );
         let id = self.next_fence_id;
         self.next_fence_id += 1;
-        self.fences.insert(id, GeoFence {
+        self.fences.insert(
             id,
-            name,
-            owner: caller,
-            center_lat,
-            center_lng,
-            radius_meters,
-            allowed_devices: BTreeSet::new(),
-            restricted,
-        });
+            GeoFence {
+                id,
+                name,
+                owner: caller,
+                center_lat,
+                center_lng,
+                radius_meters,
+                allowed_devices: BTreeSet::new(),
+                restricted,
+            },
+        );
         id
     }
 
     pub fn update_location(&mut self, device: Address, lat: f64, lng: f64, timestamp: u64) {
-        self.device_locations.insert(device, DeviceLocation {
+        self.device_locations.insert(
             device,
-            lat,
-            lng,
-            updated_at: timestamp,
-        });
+            DeviceLocation {
+                device,
+                lat,
+                lng,
+                updated_at: timestamp,
+            },
+        );
     }
 
     pub fn is_within_fence(&self, device: &Address, fence_id: u64) -> bool {
         let fence = self.fences.get(&fence_id).expect("DRC59: fence not found");
         let loc = self.device_locations.get(device);
-        if loc.is_none() { return false; }
+        if loc.is_none() {
+            return false;
+        }
         let loc = loc.unwrap();
         let dist = haversine_meters(fence.center_lat, fence.center_lng, loc.lat, loc.lng);
         dist <= fence.radius_meters
@@ -108,7 +122,9 @@ impl GeoFenceState {
     pub fn check_all_fences(&self, device: &Address) -> Vec<(u64, bool)> {
         let mut results = Vec::new();
         for (fence_id, fence) in &self.fences {
-            if !fence.allowed_devices.contains(device) { continue; }
+            if !fence.allowed_devices.contains(device) {
+                continue;
+            }
             let inside = self.is_within_fence(device, *fence_id);
             let compliant = if fence.restricted { inside } else { !inside };
             results.push((*fence_id, compliant));
@@ -117,14 +133,26 @@ impl GeoFenceState {
     }
 
     pub fn add_device_to_fence(&mut self, caller: Address, fence_id: u64, device: Address) {
-        let fence = self.fences.get_mut(&fence_id).expect("DRC59: fence not found");
-        assert!(caller == fence.owner || caller == self.owner, "DRC59: not authorised");
+        let fence = self
+            .fences
+            .get_mut(&fence_id)
+            .expect("DRC59: fence not found");
+        assert!(
+            caller == fence.owner || caller == self.owner,
+            "DRC59: not authorised"
+        );
         fence.allowed_devices.insert(device);
     }
 
     pub fn remove_device_from_fence(&mut self, caller: Address, fence_id: u64, device: Address) {
-        let fence = self.fences.get_mut(&fence_id).expect("DRC59: fence not found");
-        assert!(caller == fence.owner || caller == self.owner, "DRC59: not authorised");
+        let fence = self
+            .fences
+            .get_mut(&fence_id)
+            .expect("DRC59: fence not found");
+        assert!(
+            caller == fence.owner || caller == self.owner,
+            "DRC59: not authorised"
+        );
         fence.allowed_devices.remove(&device);
     }
 
@@ -142,25 +170,48 @@ impl GeoFenceState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateFenceArgs { name: String, center_lat: f64, center_lng: f64, radius_meters: f64, restricted: bool }
+struct CreateFenceArgs {
+    name: String,
+    center_lat: f64,
+    center_lng: f64,
+    radius_meters: f64,
+    restricted: bool,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct UpdateLocationArgs { device: Address, lat: f64, lng: f64, timestamp: u64 }
+struct UpdateLocationArgs {
+    device: Address,
+    lat: f64,
+    lng: f64,
+    timestamp: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct FenceDeviceArgs { fence_id: u64, device: Address }
+struct FenceDeviceArgs {
+    fence_id: u64,
+    device: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct IsWithinArgs { device: Address, fence_id: u64 }
+struct IsWithinArgs {
+    device: Address,
+    fence_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CheckAllArgs { device: Address }
+struct CheckAllArgs {
+    device: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct FenceIdArgs { fence_id: u64 }
+struct FenceIdArgs {
+    fence_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DeviceArgs { device: Address }
+struct DeviceArgs {
+    device: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<GeoFenceState>,
@@ -177,7 +228,14 @@ pub fn dispatch(
         "create_fence" => {
             let s = state.as_mut().expect("DRC59: not initialised");
             let a: CreateFenceArgs = serde_json::from_slice(args).expect("DRC59: bad args");
-            let id = s.create_fence(caller, a.name, a.center_lat, a.center_lng, a.radius_meters, a.restricted);
+            let id = s.create_fence(
+                caller,
+                a.name,
+                a.center_lat,
+                a.center_lng,
+                a.radius_meters,
+                a.restricted,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "update_location" => {

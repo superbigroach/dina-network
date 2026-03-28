@@ -1,4 +1,4 @@
-use drc17_hooks::{dispatch, TokenWithHooks, HookCall};
+use drc17_hooks::{dispatch, HookCall, TokenWithHooks};
 
 fn addr(seed: u8) -> [u8; 32] {
     [seed; 32]
@@ -8,7 +8,8 @@ fn init() -> Option<TokenWithHooks> {
     let mut state: Option<TokenWithHooks> = None;
     let args = serde_json::to_vec(&serde_json::json!({
         "name": "HookToken", "symbol": "HT", "decimals": 18u8
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "init", &args, addr(1));
     state
 }
@@ -24,7 +25,8 @@ fn send_transfers_tokens() {
     mint(&mut state, addr(2), 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 300u64, "data": []
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "send", &args, addr(2));
 
     let s = state.as_ref().unwrap();
@@ -43,7 +45,8 @@ fn send_with_receive_hook_queues_hook_call() {
 
     let send_args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "data": []
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "send", &send_args, addr(2));
     let hooks: Vec<HookCall> = serde_json::from_slice(&result).unwrap();
     assert_eq!(hooks.len(), 1);
@@ -61,7 +64,8 @@ fn send_with_send_hook_queues_hook_call() {
 
     let send_args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "data": []
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "send", &send_args, addr(2));
     let hooks: Vec<HookCall> = serde_json::from_slice(&result).unwrap();
     assert_eq!(hooks.len(), 1);
@@ -74,7 +78,8 @@ fn send_without_hooks_returns_empty() {
     mint(&mut state, addr(2), 1000);
     let send_args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "data": []
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "send", &send_args, addr(2));
     let hooks: Vec<HookCall> = serde_json::from_slice(&result).unwrap();
     assert_eq!(hooks.len(), 0);
@@ -92,7 +97,8 @@ fn register_both_hooks_queues_two_calls() {
 
     let send_args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "data": []
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "send", &send_args, addr(2));
     let hooks: Vec<HookCall> = serde_json::from_slice(&result).unwrap();
     assert_eq!(hooks.len(), 2);
@@ -105,7 +111,8 @@ fn send_with_insufficient_balance_fails() {
     mint(&mut state, addr(2), 100);
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 200u64, "data": []
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "send", &args, addr(2));
 }
 

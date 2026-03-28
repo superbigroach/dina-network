@@ -30,15 +30,21 @@ fn list_data(state: &mut Option<DataMarketplace>, seller: [u8; 32], price: u64) 
             "dimensions": null,
             "active": true
         }
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "list_data", &args, seller);
     serde_json::from_slice(&result).unwrap()
 }
 
-fn purchase_listing(state: &mut Option<DataMarketplace>, buyer: [u8; 32], listing_id: [u8; 32]) -> [u8; 32] {
+fn purchase_listing(
+    state: &mut Option<DataMarketplace>,
+    buyer: [u8; 32],
+    listing_id: [u8; 32],
+) -> [u8; 32] {
     let args = serde_json::to_vec(&serde_json::json!({
         "listing_id": listing_id, "timestamp": 1000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "purchase", &args, buyer);
     serde_json::from_slice(&result).unwrap()
 }
@@ -58,7 +64,10 @@ fn purchase_creates_escrow() {
     let mut state = init();
     let listing_id = list_data(&mut state, addr(2), 100);
     let purchase_id = purchase_listing(&mut state, addr(3), listing_id);
-    assert_eq!(*state.as_ref().unwrap().escrow.get(&purchase_id).unwrap(), 100);
+    assert_eq!(
+        *state.as_ref().unwrap().escrow.get(&purchase_id).unwrap(),
+        100
+    );
 }
 
 #[test]
@@ -76,9 +85,18 @@ fn deliver_marks_as_delivered() {
     let purchase_id = purchase_listing(&mut state, addr(3), listing_id);
     let args = serde_json::to_vec(&serde_json::json!({
         "purchase_id": purchase_id, "encrypted_data_hash": data_hash()
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "deliver", &args, addr(2));
-    assert!(state.as_ref().unwrap().purchases.get(&purchase_id).unwrap().delivered);
+    assert!(
+        state
+            .as_ref()
+            .unwrap()
+            .purchases
+            .get(&purchase_id)
+            .unwrap()
+            .delivered
+    );
 }
 
 #[test]
@@ -88,9 +106,11 @@ fn confirm_receipt_releases_escrow() {
     let purchase_id = purchase_listing(&mut state, addr(3), listing_id);
     let deliver_args = serde_json::to_vec(&serde_json::json!({
         "purchase_id": purchase_id, "encrypted_data_hash": data_hash()
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "deliver", &deliver_args, addr(2));
-    let confirm_args = serde_json::to_vec(&serde_json::json!({"purchase_id": purchase_id})).unwrap();
+    let confirm_args =
+        serde_json::to_vec(&serde_json::json!({"purchase_id": purchase_id})).unwrap();
     dispatch(&mut state, "confirm_receipt", &confirm_args, addr(3));
     assert!(!state.as_ref().unwrap().escrow.contains_key(&purchase_id));
 }
@@ -100,15 +120,28 @@ fn rate_after_confirm() {
     let mut state = init();
     let listing_id = list_data(&mut state, addr(2), 100);
     let purchase_id = purchase_listing(&mut state, addr(3), listing_id);
-    let del = serde_json::to_vec(&serde_json::json!({"purchase_id": purchase_id, "encrypted_data_hash": data_hash()})).unwrap();
+    let del = serde_json::to_vec(
+        &serde_json::json!({"purchase_id": purchase_id, "encrypted_data_hash": data_hash()}),
+    )
+    .unwrap();
     dispatch(&mut state, "deliver", &del, addr(2));
     let conf = serde_json::to_vec(&serde_json::json!({"purchase_id": purchase_id})).unwrap();
     dispatch(&mut state, "confirm_receipt", &conf, addr(3));
     let rate_args = serde_json::to_vec(&serde_json::json!({
         "purchase_id": purchase_id, "rating": 5u8, "review": "Great data!"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "rate", &rate_args, addr(3));
-    assert_eq!(state.as_ref().unwrap().purchases.get(&purchase_id).unwrap().rating, Some(5));
+    assert_eq!(
+        state
+            .as_ref()
+            .unwrap()
+            .purchases
+            .get(&purchase_id)
+            .unwrap()
+            .rating,
+        Some(5)
+    );
 }
 
 #[test]
@@ -117,13 +150,17 @@ fn rate_out_of_range_fails() {
     let mut state = init();
     let listing_id = list_data(&mut state, addr(2), 100);
     let purchase_id = purchase_listing(&mut state, addr(3), listing_id);
-    let del = serde_json::to_vec(&serde_json::json!({"purchase_id": purchase_id, "encrypted_data_hash": data_hash()})).unwrap();
+    let del = serde_json::to_vec(
+        &serde_json::json!({"purchase_id": purchase_id, "encrypted_data_hash": data_hash()}),
+    )
+    .unwrap();
     dispatch(&mut state, "deliver", &del, addr(2));
     let conf = serde_json::to_vec(&serde_json::json!({"purchase_id": purchase_id})).unwrap();
     dispatch(&mut state, "confirm_receipt", &conf, addr(3));
     let rate_args = serde_json::to_vec(&serde_json::json!({
         "purchase_id": purchase_id, "rating": 10u8, "review": "x"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "rate", &rate_args, addr(3));
 }
 
@@ -133,5 +170,13 @@ fn delist_deactivates_listing() {
     let listing_id = list_data(&mut state, addr(2), 100);
     let args = serde_json::to_vec(&serde_json::json!({"listing_id": listing_id})).unwrap();
     dispatch(&mut state, "delist", &args, addr(2));
-    assert!(!state.as_ref().unwrap().listings.get(&listing_id).unwrap().active);
+    assert!(
+        !state
+            .as_ref()
+            .unwrap()
+            .listings
+            .get(&listing_id)
+            .unwrap()
+            .active
+    );
 }

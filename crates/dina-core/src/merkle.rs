@@ -1,4 +1,6 @@
-use rs_merkle::{algorithms::Sha256 as MerkleSha256, Hasher, MerkleProof, MerkleTree as RsMerkleTree};
+use rs_merkle::{
+    algorithms::Sha256 as MerkleSha256, Hasher, MerkleProof, MerkleTree as RsMerkleTree,
+};
 
 use crate::types::Hash;
 
@@ -160,7 +162,7 @@ mod tests {
 
     #[test]
     fn compute_merkle_root_non_empty() {
-        let data: Vec<&[u8]> = vec!(&[1u8; 32], &[2u8; 32]);
+        let data: Vec<&[u8]> = vec![&[1u8; 32], &[2u8; 32]];
         let root = compute_merkle_root(&data);
         assert_ne!(root, Hash::ZERO);
 

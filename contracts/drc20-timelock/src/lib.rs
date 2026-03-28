@@ -171,16 +171,14 @@ pub fn dispatch(
 
         "schedule" => {
             let s = state.as_mut().expect("DRC20: not initialised");
-            let a: ScheduleArgs =
-                serde_json::from_slice(args).expect("DRC20: bad schedule args");
+            let a: ScheduleArgs = serde_json::from_slice(args).expect("DRC20: bad schedule args");
             let id = s.schedule(caller, a.target, a.data, a.value, a.delay, a.current_time);
             serde_json::to_vec(&id).unwrap()
         }
 
         "execute" => {
             let s = state.as_mut().expect("DRC20: not initialised");
-            let a: ExecuteArgs =
-                serde_json::from_slice(args).expect("DRC20: bad execute args");
+            let a: ExecuteArgs = serde_json::from_slice(args).expect("DRC20: bad execute args");
             let op = s.execute(caller, a.id, a.current_time);
             serde_json::to_vec(op).unwrap()
         }
@@ -194,8 +192,7 @@ pub fn dispatch(
 
         "is_ready" => {
             let s = state.as_ref().expect("DRC20: not initialised");
-            let a: IsReadyArgs =
-                serde_json::from_slice(args).expect("DRC20: bad is_ready args");
+            let a: IsReadyArgs = serde_json::from_slice(args).expect("DRC20: bad is_ready args");
             serde_json::to_vec(&s.is_ready(a.id, a.current_time)).unwrap()
         }
 

@@ -133,13 +133,7 @@ impl ServiceAgreementState {
     }
 
     /// Provider marks the agreement as delivered with proof.
-    pub fn deliver(
-        &mut self,
-        caller: [u8; 32],
-        agreement_id: u64,
-        proof: String,
-        timestamp: u64,
-    ) {
+    pub fn deliver(&mut self, caller: [u8; 32], agreement_id: u64, proof: String, timestamp: u64) {
         let agreement = self
             .agreements
             .get_mut(&agreement_id)
@@ -194,12 +188,7 @@ impl ServiceAgreementState {
     }
 
     /// Either party can dispute a Delivered agreement.
-    pub fn dispute(
-        &mut self,
-        caller: [u8; 32],
-        agreement_id: u64,
-        reason: String,
-    ) {
+    pub fn dispute(&mut self, caller: [u8; 32], agreement_id: u64, reason: String) {
         let agreement = self
             .agreements
             .get_mut(&agreement_id)
@@ -368,48 +357,42 @@ pub fn dispatch(
 
         "propose" => {
             let s = state.as_mut().expect("DRC103: not initialised");
-            let a: ProposeArgs =
-                serde_json::from_slice(args).expect("DRC103: bad propose args");
+            let a: ProposeArgs = serde_json::from_slice(args).expect("DRC103: bad propose args");
             let id = s.propose(caller, a.terms, a.timestamp, a.client_balance);
             serde_json::to_vec(&id).unwrap()
         }
 
         "accept" => {
             let s = state.as_mut().expect("DRC103: not initialised");
-            let a: AcceptArgs =
-                serde_json::from_slice(args).expect("DRC103: bad accept args");
+            let a: AcceptArgs = serde_json::from_slice(args).expect("DRC103: bad accept args");
             s.accept(caller, a.agreement_id);
             serde_json::to_vec("ok").unwrap()
         }
 
         "deliver" => {
             let s = state.as_mut().expect("DRC103: not initialised");
-            let a: DeliverArgs =
-                serde_json::from_slice(args).expect("DRC103: bad deliver args");
+            let a: DeliverArgs = serde_json::from_slice(args).expect("DRC103: bad deliver args");
             s.deliver(caller, a.agreement_id, a.proof, a.timestamp);
             serde_json::to_vec("ok").unwrap()
         }
 
         "confirm" => {
             let s = state.as_mut().expect("DRC103: not initialised");
-            let a: ConfirmArgs =
-                serde_json::from_slice(args).expect("DRC103: bad confirm args");
+            let a: ConfirmArgs = serde_json::from_slice(args).expect("DRC103: bad confirm args");
             let (payout, provider) = s.confirm(caller, a.agreement_id, a.timestamp);
             serde_json::to_vec(&ConfirmResult { payout, provider }).unwrap()
         }
 
         "dispute" => {
             let s = state.as_mut().expect("DRC103: not initialised");
-            let a: DisputeArgs =
-                serde_json::from_slice(args).expect("DRC103: bad dispute args");
+            let a: DisputeArgs = serde_json::from_slice(args).expect("DRC103: bad dispute args");
             s.dispute(caller, a.agreement_id, a.reason);
             serde_json::to_vec("ok").unwrap()
         }
 
         "cancel" => {
             let s = state.as_mut().expect("DRC103: not initialised");
-            let a: CancelArgs =
-                serde_json::from_slice(args).expect("DRC103: bad cancel args");
+            let a: CancelArgs = serde_json::from_slice(args).expect("DRC103: bad cancel args");
             let refund = s.cancel(caller, a.agreement_id);
             serde_json::to_vec(&refund).unwrap()
         }

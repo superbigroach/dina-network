@@ -13,7 +13,8 @@ fn init() -> Option<SftState> {
 fn mint(state: &mut Option<SftState>, to: [u8; 32], slot: u64, value: u64) -> u64 {
     let args = serde_json::to_vec(&serde_json::json!({
         "to": to, "slot": slot, "value": value, "metadata": "test"
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "mint", &args, addr(1));
     serde_json::from_slice(&result).unwrap()
 }
@@ -44,7 +45,8 @@ fn transfer_value_same_slot_works() {
     let id2 = mint(&mut state, addr(3), 1, 50);
     let args = serde_json::to_vec(&serde_json::json!({
         "from_token": id1, "to_token": id2, "amount": 30u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_value", &args, addr(2));
 
     let s = state.as_ref().unwrap();
@@ -60,7 +62,8 @@ fn transfer_value_different_slot_fails() {
     let id2 = mint(&mut state, addr(3), 2, 50);
     let args = serde_json::to_vec(&serde_json::json!({
         "from_token": id1, "to_token": id2, "amount": 10u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_value", &args, addr(2));
 }
 
@@ -70,7 +73,8 @@ fn transfer_value_to_creates_new_token() {
     let id1 = mint(&mut state, addr(2), 1, 100);
     let args = serde_json::to_vec(&serde_json::json!({
         "from_token": id1, "to_address": addr(3), "amount": 40u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "transfer_value_to", &args, addr(2));
     let new_id: u64 = serde_json::from_slice(&result).unwrap();
 
@@ -89,7 +93,8 @@ fn transfer_value_exceeding_balance_fails() {
     let id2 = mint(&mut state, addr(3), 1, 50);
     let args = serde_json::to_vec(&serde_json::json!({
         "from_token": id1, "to_token": id2, "amount": 20u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_value", &args, addr(2));
 }
 
@@ -101,7 +106,8 @@ fn transfer_value_by_non_owner_fails() {
     let id2 = mint(&mut state, addr(3), 1, 50);
     let args = serde_json::to_vec(&serde_json::json!({
         "from_token": id1, "to_token": id2, "amount": 10u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_value", &args, addr(99));
 }
 

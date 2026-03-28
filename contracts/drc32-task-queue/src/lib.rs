@@ -210,9 +210,14 @@ pub fn dispatch(
         }
         "post_task" => {
             let s = state.as_mut().expect("DRC32: not initialised");
-            let a: PostTaskArgs =
-                serde_json::from_slice(args).expect("DRC32: bad post_task args");
-            let id = s.post_task(caller, a.description, a.reward, a.deadline, a.required_capabilities);
+            let a: PostTaskArgs = serde_json::from_slice(args).expect("DRC32: bad post_task args");
+            let id = s.post_task(
+                caller,
+                a.description,
+                a.reward,
+                a.deadline,
+                a.required_capabilities,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "claim_task" => {
@@ -249,14 +254,12 @@ pub fn dispatch(
         }
         "my_tasks" => {
             let s = state.as_ref().expect("DRC32: not initialised");
-            let a: MyTasksArgs =
-                serde_json::from_slice(args).expect("DRC32: bad my_tasks args");
+            let a: MyTasksArgs = serde_json::from_slice(args).expect("DRC32: bad my_tasks args");
             serde_json::to_vec(&s.my_tasks(&a.address)).unwrap()
         }
         "get_task" => {
             let s = state.as_ref().expect("DRC32: not initialised");
-            let a: GetTaskArgs =
-                serde_json::from_slice(args).expect("DRC32: bad get_task args");
+            let a: GetTaskArgs = serde_json::from_slice(args).expect("DRC32: bad get_task args");
             serde_json::to_vec(&s.get_task(a.task_id)).unwrap()
         }
         _ => panic!("DRC32: unknown method '{method}'"),

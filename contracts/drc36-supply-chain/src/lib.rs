@@ -81,10 +81,7 @@ impl SupplyChainState {
         location: String,
         timestamp: u64,
     ) {
-        let item = self
-            .items
-            .get_mut(&item_id)
-            .expect("DRC36: item not found");
+        let item = self.items.get_mut(&item_id).expect("DRC36: item not found");
         assert!(
             item.current_holder == caller,
             "DRC36: only current holder can transfer"
@@ -111,10 +108,7 @@ impl SupplyChainState {
         signature: String,
         metadata: String,
     ) {
-        let item = self
-            .items
-            .get_mut(&item_id)
-            .expect("DRC36: item not found");
+        let item = self.items.get_mut(&item_id).expect("DRC36: item not found");
         assert!(
             item.current_holder == caller,
             "DRC36: only current holder can add checkpoints"
@@ -262,8 +256,7 @@ pub fn dispatch(
         }
         "get_item" => {
             let s = state.as_ref().expect("DRC36: not initialised");
-            let a: GetItemArgs =
-                serde_json::from_slice(args).expect("DRC36: bad get_item args");
+            let a: GetItemArgs = serde_json::from_slice(args).expect("DRC36: bad get_item args");
             serde_json::to_vec(&s.get_item(a.id)).unwrap()
         }
         _ => panic!("DRC36: unknown method '{method}'"),

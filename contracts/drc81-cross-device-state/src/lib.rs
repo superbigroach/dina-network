@@ -54,38 +54,46 @@ impl CrossDeviceState {
         }
     }
 
-    pub fn create_sync_group(
-        &mut self,
-        caller: Address,
-        sync_interval: u64,
-    ) -> u64 {
+    pub fn create_sync_group(&mut self, caller: Address, sync_interval: u64) -> u64 {
         assert!(sync_interval > 0, "DRC81: sync interval must be positive");
 
         let id = self.next_group_id;
         self.next_group_id += 1;
-        self.sync_groups.insert(id, SyncGroup {
+        self.sync_groups.insert(
             id,
-            owner: caller,
-            devices: Vec::new(),
-            sync_interval,
-            last_sync: 0,
-            state_hash: [0u8; 32],
-        });
+            SyncGroup {
+                id,
+                owner: caller,
+                devices: Vec::new(),
+                sync_interval,
+                last_sync: 0,
+                state_hash: [0u8; 32],
+            },
+        );
         id
     }
 
     pub fn add_device(&mut self, caller: Address, group_id: u64, device: Address) {
-        let group = self.sync_groups.get_mut(&group_id).expect("DRC81: group not found");
+        let group = self
+            .sync_groups
+            .get_mut(&group_id)
+            .expect("DRC81: group not found");
         assert!(group.owner == caller, "DRC81: only owner can add devices");
-        assert!(!group.devices.contains(&device), "DRC81: device already in group");
+        assert!(
+            !group.devices.contains(&device),
+            "DRC81: device already in group"
+        );
 
         group.devices.push(device);
-        self.device_states.insert((group_id, device), DeviceState {
-            device_id: device,
-            state_hash: [0u8; 32],
-            version: 0,
-            last_updated: 0,
-        });
+        self.device_states.insert(
+            (group_id, device),
+            DeviceState {
+                device_id: device,
+                state_hash: [0u8; 32],
+                version: 0,
+                last_updated: 0,
+            },
+        );
     }
 
     /// Each device reports its current state hash. If all match, sync is clean.
@@ -96,7 +104,10 @@ impl CrossDeviceState {
         group_id: u64,
         device_hashes: Vec<(Address, [u8; 32], u64)>, // (device, hash, timestamp)
     ) -> bool {
-        let group = self.sync_groups.get(&group_id).expect("DRC81: group not found");
+        let group = self
+            .sync_groups
+            .get(&group_id)
+            .expect("DRC81: group not found");
         assert!(group.owner == caller, "DRC81: only owner can trigger sync");
 
         // Update device states
@@ -139,7 +150,10 @@ impl CrossDeviceState {
 
     /// Detect conflicting devices in a sync group (devices with different state hashes).
     pub fn detect_conflict(&self, group_id: u64) -> Vec<(Address, [u8; 32])> {
-        let group = self.sync_groups.get(&group_id).expect("DRC81: group not found");
+        let group = self
+            .sync_groups
+            .get(&group_id)
+            .expect("DRC81: group not found");
         let mut hash_groups: BTreeMap<[u8; 32], Vec<Address>> = BTreeMap::new();
 
         for device in &group.devices {
@@ -154,9 +168,12 @@ impl CrossDeviceState {
         }
 
         // Return all devices with their hashes when conflict exists
-        group.devices.iter()
+        group
+            .devices
+            .iter()
             .filter_map(|d| {
-                self.device_states.get(&(group_id, *d))
+                self.device_states
+                    .get(&(group_id, *d))
                     .map(|ds| (*d, ds.state_hash))
             })
             .collect()
@@ -170,10 +187,17 @@ impl CrossDeviceState {
         winner_device: Address,
         timestamp: u64,
     ) {
-        let group = self.sync_groups.get(&group_id).expect("DRC81: group not found");
-        assert!(group.owner == caller, "DRC81: only owner can resolve conflicts");
+        let group = self
+            .sync_groups
+            .get(&group_id)
+            .expect("DRC81: group not found");
+        assert!(
+            group.owner == caller,
+            "DRC81: only owner can resolve conflicts"
+        );
 
-        let winner_hash = self.device_states
+        let winner_hash = self
+            .device_states
             .get(&(group_id, winner_device))
             .expect("DRC81: winner device not in group")
             .state_hash;
@@ -194,7 +218,8 @@ impl CrossDeviceState {
     }
 
     pub fn sync_history_for(&self, group_id: u64) -> Vec<&SyncEvent> {
-        self.sync_history.iter()
+        self.sync_history
+            .iter()
             .filter(|e| e.group_id == group_id)
             .collect()
     }
@@ -205,15 +230,29 @@ impl CrossDeviceState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateGroupArgs { sync_interval: u64 }
+struct CreateGroupArgs {
+    sync_interval: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddDeviceArgs { group_id: u64, device: Address }
+struct AddDeviceArgs {
+    group_id: u64,
+    device: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SyncArgs { group_id: u64, device_hashes: Vec<(Address, [u8; 32], u64)> }
+struct SyncArgs {
+    group_id: u64,
+    device_hashes: Vec<(Address, [u8; 32], u64)>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct GroupIdArgs { group_id: u64 }
+struct GroupIdArgs {
+    group_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ResolveArgs { group_id: u64, winner_device: Address, timestamp: u64 }
+struct ResolveArgs {
+    group_id: u64,
+    winner_device: Address,
+    timestamp: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<CrossDeviceState>,
@@ -298,11 +337,15 @@ mod tests {
     fn test_sync_state_clean() {
         let (mut s, gid) = setup();
         let hash = [0xAA; 32];
-        let ok = s.sync_state(OWNER, gid, vec![
-            (DEV_1, hash, 1000),
-            (DEV_2, hash, 1000),
-            (DEV_3, hash, 1000),
-        ]);
+        let ok = s.sync_state(
+            OWNER,
+            gid,
+            vec![
+                (DEV_1, hash, 1000),
+                (DEV_2, hash, 1000),
+                (DEV_3, hash, 1000),
+            ],
+        );
         assert!(ok);
         assert_eq!(s.sync_groups.get(&gid).unwrap().state_hash, hash);
     }
@@ -310,22 +353,30 @@ mod tests {
     #[test]
     fn test_sync_state_conflict() {
         let (mut s, gid) = setup();
-        let ok = s.sync_state(OWNER, gid, vec![
-            (DEV_1, [0xAA; 32], 1000),
-            (DEV_2, [0xBB; 32], 1000), // different hash
-            (DEV_3, [0xAA; 32], 1000),
-        ]);
+        let ok = s.sync_state(
+            OWNER,
+            gid,
+            vec![
+                (DEV_1, [0xAA; 32], 1000),
+                (DEV_2, [0xBB; 32], 1000), // different hash
+                (DEV_3, [0xAA; 32], 1000),
+            ],
+        );
         assert!(!ok); // conflict detected
     }
 
     #[test]
     fn test_detect_conflict() {
         let (mut s, gid) = setup();
-        s.sync_state(OWNER, gid, vec![
-            (DEV_1, [0xAA; 32], 1000),
-            (DEV_2, [0xBB; 32], 1000),
-            (DEV_3, [0xAA; 32], 1000),
-        ]);
+        s.sync_state(
+            OWNER,
+            gid,
+            vec![
+                (DEV_1, [0xAA; 32], 1000),
+                (DEV_2, [0xBB; 32], 1000),
+                (DEV_3, [0xAA; 32], 1000),
+            ],
+        );
         let conflicts = s.detect_conflict(gid);
         assert_eq!(conflicts.len(), 3); // all devices listed with their hashes
     }
@@ -333,11 +384,15 @@ mod tests {
     #[test]
     fn test_resolve_conflict() {
         let (mut s, gid) = setup();
-        s.sync_state(OWNER, gid, vec![
-            (DEV_1, [0xAA; 32], 1000),
-            (DEV_2, [0xBB; 32], 1000),
-            (DEV_3, [0xAA; 32], 1000),
-        ]);
+        s.sync_state(
+            OWNER,
+            gid,
+            vec![
+                (DEV_1, [0xAA; 32], 1000),
+                (DEV_2, [0xBB; 32], 1000),
+                (DEV_3, [0xAA; 32], 1000),
+            ],
+        );
 
         s.resolve_conflict(OWNER, gid, DEV_1, 2000);
 
@@ -351,8 +406,24 @@ mod tests {
     fn test_sync_history() {
         let (mut s, gid) = setup();
         let hash = [0xAA; 32];
-        s.sync_state(OWNER, gid, vec![(DEV_1, hash, 1000), (DEV_2, hash, 1000), (DEV_3, hash, 1000)]);
-        s.sync_state(OWNER, gid, vec![(DEV_1, hash, 2000), (DEV_2, hash, 2000), (DEV_3, hash, 2000)]);
+        s.sync_state(
+            OWNER,
+            gid,
+            vec![
+                (DEV_1, hash, 1000),
+                (DEV_2, hash, 1000),
+                (DEV_3, hash, 1000),
+            ],
+        );
+        s.sync_state(
+            OWNER,
+            gid,
+            vec![
+                (DEV_1, hash, 2000),
+                (DEV_2, hash, 2000),
+                (DEV_3, hash, 2000),
+            ],
+        );
 
         let history = s.sync_history_for(gid);
         assert_eq!(history.len(), 2);

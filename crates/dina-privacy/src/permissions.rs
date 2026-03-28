@@ -48,9 +48,7 @@ pub enum KeyPermission {
     ViewOnly,
 
     /// Can only issue commands to specific devices (IoT / robotics use case).
-    DeviceControl {
-        device_ids: Vec<DeviceId>,
-    },
+    DeviceControl { device_ids: Vec<DeviceId> },
 
     /// Temporary key with an expiration timestamp and nested permissions.
     SessionKey {
@@ -181,12 +179,7 @@ impl PermissionSet {
     }
 
     /// Convenience: returns `true` if the key is authorized for the action.
-    pub fn is_authorized(
-        &mut self,
-        pubkey: &[u8; 32],
-        action: &Action,
-        current_time: u64,
-    ) -> bool {
+    pub fn is_authorized(&mut self, pubkey: &[u8; 32], action: &Action, current_time: u64) -> bool {
         self.check_permission(pubkey, action, current_time).is_ok()
     }
 }
@@ -644,7 +637,8 @@ mod tests {
 
         assert!(pset.keys[0].last_used.is_none());
 
-        pset.check_permission(&key, &Action::ViewState, 5000).unwrap();
+        pset.check_permission(&key, &Action::ViewState, 5000)
+            .unwrap();
         assert_eq!(pset.keys[0].last_used, Some(5000));
     }
 
@@ -755,7 +749,9 @@ mod tests {
         pset.add_key(key, "viewer".into(), KeyPermission::ViewOnly, 1000);
 
         // ViewState allowed
-        assert!(pset.check_permission(&key, &Action::ViewState, 1001).is_ok());
+        assert!(pset
+            .check_permission(&key, &Action::ViewState, 1001)
+            .is_ok());
 
         // All write actions blocked
         assert!(pset
@@ -837,7 +833,9 @@ mod tests {
         assert!(matches!(err, PermissionError::DeviceNotAllowed(_)));
 
         // ViewState allowed for device keys
-        assert!(pset.check_permission(&key, &Action::ViewState, 1001).is_ok());
+        assert!(pset
+            .check_permission(&key, &Action::ViewState, 1001)
+            .is_ok());
     }
 
     #[test]
@@ -855,14 +853,22 @@ mod tests {
         );
 
         // Before expiry: Ok
-        assert!(pset.check_permission(&key, &Action::ViewState, 1500).is_ok());
+        assert!(pset
+            .check_permission(&key, &Action::ViewState, 1500)
+            .is_ok());
 
         // After expiry: Err with SessionExpired
         let err = pset
             .check_permission(&key, &Action::ViewState, 2500)
             .unwrap_err();
         assert!(
-            matches!(err, PermissionError::SessionExpired { expired_at: 2000, current_time: 2500 }),
+            matches!(
+                err,
+                PermissionError::SessionExpired {
+                    expired_at: 2000,
+                    current_time: 2500
+                }
+            ),
             "expected SessionExpired, got: {err:?}"
         );
     }
@@ -996,7 +1002,13 @@ mod tests {
             )
             .unwrap_err();
         assert!(
-            matches!(err, PermissionError::AmountExceeded { amount: 200, max: 100 }),
+            matches!(
+                err,
+                PermissionError::AmountExceeded {
+                    amount: 200,
+                    max: 100
+                }
+            ),
             "expected AmountExceeded, got: {err:?}"
         );
     }

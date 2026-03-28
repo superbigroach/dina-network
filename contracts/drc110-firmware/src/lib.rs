@@ -28,20 +28,10 @@ pub struct TrustedFirmware {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum FirmwareStatus {
-    Trusted {
-        version: String,
-        last_attested: u64,
-    },
-    Unknown {
-        firmware_hash: [u8; 32],
-    },
-    Outdated {
-        current: String,
-        latest: String,
-    },
-    Compromised {
-        reason: String,
-    },
+    Trusted { version: String, last_attested: u64 },
+    Unknown { firmware_hash: [u8; 32] },
+    Outdated { current: String, latest: String },
+    Compromised { reason: String },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

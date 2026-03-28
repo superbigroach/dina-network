@@ -81,7 +81,10 @@ mod tests {
         let validators = make_validators(1);
         // Single validator is always leader
         assert_eq!(LeaderSchedule::leader_for(0, 0, &validators), validators[0]);
-        assert_eq!(LeaderSchedule::leader_for(100, 5, &validators), validators[0]);
+        assert_eq!(
+            LeaderSchedule::leader_for(100, 5, &validators),
+            validators[0]
+        );
     }
 
     #[test]

@@ -10,10 +10,10 @@ pub type Address = [u8; 32];
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PriceFeed {
     pub pair: String,
-    pub price: u64,       // 8 decimal places (1.00 = 100_000_000)
+    pub price: u64, // 8 decimal places (1.00 = 100_000_000)
     pub updated_at: u64,
     pub reporter: Address,
-    pub confidence: u64,  // 8 decimal places
+    pub confidence: u64, // 8 decimal places
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -40,8 +40,14 @@ impl OracleState {
     }
 
     pub fn remove_reporter(&mut self, caller: Address, reporter: Address) {
-        assert!(caller == self.owner, "DRC23: only owner can remove reporters");
-        assert!(reporter != self.owner, "DRC23: cannot remove owner as reporter");
+        assert!(
+            caller == self.owner,
+            "DRC23: only owner can remove reporters"
+        );
+        assert!(
+            reporter != self.owner,
+            "DRC23: cannot remove owner as reporter"
+        );
         self.authorized_reporters.remove(&reporter);
     }
 
@@ -135,8 +141,7 @@ pub fn dispatch(
 
         "get_price" => {
             let s = state.as_ref().expect("DRC23: not initialised");
-            let a: GetPriceArgs =
-                serde_json::from_slice(args).expect("DRC23: bad get_price args");
+            let a: GetPriceArgs = serde_json::from_slice(args).expect("DRC23: bad get_price args");
             match s.get_price(&a.pair) {
                 Some(feed) => serde_json::to_vec(feed).unwrap(),
                 None => serde_json::to_vec(&Option::<PriceFeed>::None).unwrap(),

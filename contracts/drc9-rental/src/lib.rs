@@ -101,12 +101,7 @@ impl RentalState {
             || self.is_approved_for_all(&owner, spender)
     }
 
-    pub fn mint(
-        &mut self,
-        caller: Address,
-        to: Address,
-        metadata: TokenMetadata,
-    ) -> u64 {
+    pub fn mint(&mut self, caller: Address, to: Address, metadata: TokenMetadata) -> u64 {
         assert!(caller == self.minter, "DRC9: only minter can mint");
         assert!(to != ZERO_ADDRESS, "DRC9: cannot mint to zero address");
 
@@ -121,13 +116,7 @@ impl RentalState {
         token_id
     }
 
-    pub fn transfer_from(
-        &mut self,
-        caller: Address,
-        from: Address,
-        to: Address,
-        token_id: u64,
-    ) {
+    pub fn transfer_from(&mut self, caller: Address, from: Address, to: Address, token_id: u64) {
         assert!(
             self.is_approved_or_owner(&caller, token_id),
             "DRC9: caller is not owner nor approved"
@@ -159,15 +148,9 @@ impl RentalState {
         self.approvals.insert(token_id, to);
     }
 
-    pub fn set_approval_for_all(
-        &mut self,
-        caller: Address,
-        operator: Address,
-        approved: bool,
-    ) {
+    pub fn set_approval_for_all(&mut self, caller: Address, operator: Address, approved: bool) {
         assert!(caller != operator, "DRC9: approve to caller");
-        self.operator_approvals
-            .insert((caller, operator), approved);
+        self.operator_approvals.insert((caller, operator), approved);
     }
 
     pub fn burn(&mut self, caller: Address, token_id: u64) {
@@ -194,13 +177,7 @@ impl RentalState {
 
     /// Set a user (renter) for a token with an expiry timestamp.
     /// Only the token owner or approved operator can call this.
-    pub fn set_user(
-        &mut self,
-        caller: Address,
-        token_id: u64,
-        user: Address,
-        expiry: u64,
-    ) {
+    pub fn set_user(&mut self, caller: Address, token_id: u64, user: Address, expiry: u64) {
         assert!(
             self.is_approved_or_owner(&caller, token_id),
             "DRC9: caller is not owner nor approved"
@@ -341,14 +318,12 @@ pub fn dispatch(
         // -- DRC-6 Queries ---------------------------------------------------
         "owner_of" => {
             let s = state.as_ref().expect("DRC9: not initialised");
-            let a: OwnerOfArgs =
-                serde_json::from_slice(args).expect("DRC9: bad owner_of args");
+            let a: OwnerOfArgs = serde_json::from_slice(args).expect("DRC9: bad owner_of args");
             serde_json::to_vec(&s.owner_of(a.token_id)).unwrap()
         }
         "balance_of" => {
             let s = state.as_ref().expect("DRC9: not initialised");
-            let a: BalanceOfArgs =
-                serde_json::from_slice(args).expect("DRC9: bad balance_of args");
+            let a: BalanceOfArgs = serde_json::from_slice(args).expect("DRC9: bad balance_of args");
             serde_json::to_vec(&s.balance_of(&a.owner)).unwrap()
         }
         "get_approved" => {
@@ -390,8 +365,7 @@ pub fn dispatch(
         }
         "approve" => {
             let s = state.as_mut().expect("DRC9: not initialised");
-            let a: ApproveArgs =
-                serde_json::from_slice(args).expect("DRC9: bad approve args");
+            let a: ApproveArgs = serde_json::from_slice(args).expect("DRC9: bad approve args");
             s.approve(caller, a.to, a.token_id);
             serde_json::to_vec("ok").unwrap()
         }
@@ -412,8 +386,7 @@ pub fn dispatch(
         // -- DRC-9 Rental Queries --------------------------------------------
         "user_of" => {
             let s = state.as_ref().expect("DRC9: not initialised");
-            let a: UserOfArgs =
-                serde_json::from_slice(args).expect("DRC9: bad user_of args");
+            let a: UserOfArgs = serde_json::from_slice(args).expect("DRC9: bad user_of args");
             serde_json::to_vec(&s.user_of(a.token_id, a.current_time)).unwrap()
         }
         "user_expires" => {
@@ -432,8 +405,7 @@ pub fn dispatch(
         // -- DRC-9 Rental Mutations ------------------------------------------
         "set_user" => {
             let s = state.as_mut().expect("DRC9: not initialised");
-            let a: SetUserArgs =
-                serde_json::from_slice(args).expect("DRC9: bad set_user args");
+            let a: SetUserArgs = serde_json::from_slice(args).expect("DRC9: bad set_user args");
             s.set_user(caller, a.token_id, a.user, a.expiry);
             serde_json::to_vec("ok").unwrap()
         }

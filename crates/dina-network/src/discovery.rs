@@ -44,7 +44,10 @@ impl Default for DiscoveryConfig {
 /// Build an mDNS behaviour for local peer discovery.
 ///
 /// Returns `None` if mDNS is disabled in the config.
-pub fn build_mdns(local_peer_id: PeerId, config: &DiscoveryConfig) -> Option<mdns::tokio::Behaviour> {
+pub fn build_mdns(
+    local_peer_id: PeerId,
+    config: &DiscoveryConfig,
+) -> Option<mdns::tokio::Behaviour> {
     if !config.enable_mdns {
         return None;
     }
@@ -157,10 +160,7 @@ impl Default for DiscoveryState {
 ///
 /// Each multiaddr must contain a `/p2p/<peer_id>` component so the DHT knows
 /// who lives at that address.
-pub fn add_bootstrap_peers(
-    kademlia: &mut kad::Behaviour<MemoryStore>,
-    peers: &[Multiaddr],
-) {
+pub fn add_bootstrap_peers(kademlia: &mut kad::Behaviour<MemoryStore>, peers: &[Multiaddr]) {
     for addr in peers {
         // Extract the PeerId from the multiaddr's last `/p2p/...` component.
         if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {

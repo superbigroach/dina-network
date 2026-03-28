@@ -119,15 +119,23 @@ pub struct TimelockEntry {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum WalletAction {
-    Transfer { to: [u8; 32], amount: u64, memo: String },
-    Call { target: [u8; 32], amount: u64, method: String },
+    Transfer {
+        to: [u8; 32],
+        amount: u64,
+        memo: String,
+    },
+    Call {
+        target: [u8; 32],
+        amount: u64,
+        method: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SmartWalletState {
     pub owner: [u8; 32],
     pub passkeys: BTreeMap<Vec<u8>, PasskeyCredential>, // credential_id -> credential
-    pub sessions: BTreeMap<[u8; 32], SessionConfig>,     // session_key -> config
+    pub sessions: BTreeMap<[u8; 32], SessionConfig>,    // session_key -> config
     pub guardians: Vec<Guardian>,
     pub recovery_threshold: u16,
     pub recovery_cooldown_ms: u64,
@@ -194,11 +202,7 @@ impl SmartWalletState {
 
     // -- Session execution --------------------------------------------------
 
-    pub fn create_session(
-        &mut self,
-        caller: [u8; 32],
-        config: SessionConfig,
-    ) {
+    pub fn create_session(&mut self, caller: [u8; 32], config: SessionConfig) {
         assert!(
             caller == self.owner,
             "DRC111: only owner can create sessions"
@@ -233,10 +237,7 @@ impl SmartWalletState {
             .get_mut(&session_key)
             .expect("DRC111: session not found");
 
-        assert!(
-            timestamp_ms < session.expires_at,
-            "DRC111: session expired"
-        );
+        assert!(timestamp_ms < session.expires_at, "DRC111: session expired");
 
         // Check permission
         let required_permission = match &action {
@@ -454,10 +455,7 @@ impl SmartWalletState {
     }
 
     pub fn cancel_recovery(&mut self, caller: [u8; 32]) {
-        assert!(
-            self.active_recovery.is_some(),
-            "DRC111: no active recovery"
-        );
+        assert!(self.active_recovery.is_some(), "DRC111: no active recovery");
         // Owner (via passkey) or any guardian can cancel
         assert!(
             caller == self.owner || self.guardians.iter().any(|g| g.address == caller),
@@ -473,25 +471,14 @@ impl SmartWalletState {
         self.limits = limits;
     }
 
-    pub fn set_timelock(
-        &mut self,
-        caller: [u8; 32],
-        threshold: u64,
-        delay_ms: u64,
-    ) {
-        assert!(
-            caller == self.owner,
-            "DRC111: only owner can set timelock"
-        );
+    pub fn set_timelock(&mut self, caller: [u8; 32], threshold: u64, delay_ms: u64) {
+        assert!(caller == self.owner, "DRC111: only owner can set timelock");
         self.limits.timelock_threshold = threshold;
         self.limits.timelock_delay_ms = delay_ms;
     }
 
     pub fn add_guardian(&mut self, caller: [u8; 32], guardian: Guardian) {
-        assert!(
-            caller == self.owner,
-            "DRC111: only owner can add guardians"
-        );
+        assert!(caller == self.owner, "DRC111: only owner can add guardians");
         assert!(
             !self.guardians.iter().any(|g| g.address == guardian.address),
             "DRC111: guardian already exists"
@@ -508,10 +495,7 @@ impl SmartWalletState {
     }
 
     pub fn link_device(&mut self, caller: [u8; 32], device_id: [u8; 32]) {
-        assert!(
-            caller == self.owner,
-            "DRC111: only owner can link devices"
-        );
+        assert!(caller == self.owner, "DRC111: only owner can link devices");
         if !self.linked_devices.contains(&device_id) {
             self.linked_devices.push(device_id);
         }
@@ -660,8 +644,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "DRC111: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("DRC111: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("DRC111: bad init args");
             *state = Some(SmartWalletState::new(caller, a.initial_passkey));
             serde_json::to_vec("ok").unwrap()
         }
@@ -670,13 +653,7 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC111: not initialised");
             let a: ExecuteWithPasskeyArgs =
                 serde_json::from_slice(args).expect("DRC111: bad execute_with_passkey args");
-            s.execute_with_passkey(
-                &a.credential_id,
-                a.counter,
-                a.action,
-                a.timestamp_ms,
-                a.day,
-            );
+            s.execute_with_passkey(&a.credential_id, a.counter, a.action, a.timestamp_ms, a.day);
             serde_json::to_vec("ok").unwrap()
         }
 
@@ -774,8 +751,7 @@ pub fn dispatch(
 
         "deposit" => {
             let s = state.as_mut().expect("DRC111: not initialised");
-            let a: DepositArgs =
-                serde_json::from_slice(args).expect("DRC111: bad deposit args");
+            let a: DepositArgs = serde_json::from_slice(args).expect("DRC111: bad deposit args");
             s.deposit(a.amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -800,15 +776,13 @@ pub fn dispatch(
 
         "passkeys" => {
             let s = state.as_ref().expect("DRC111: not initialised");
-            let pks: Vec<PasskeyCredential> =
-                s.get_passkeys().into_iter().cloned().collect();
+            let pks: Vec<PasskeyCredential> = s.get_passkeys().into_iter().cloned().collect();
             serde_json::to_vec(&pks).unwrap()
         }
 
         "active_sessions" => {
             let s = state.as_ref().expect("DRC111: not initialised");
-            let sessions: Vec<SessionConfig> =
-                s.active_sessions().into_iter().cloned().collect();
+            let sessions: Vec<SessionConfig> = s.active_sessions().into_iter().cloned().collect();
             serde_json::to_vec(&sessions).unwrap()
         }
 

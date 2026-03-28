@@ -256,8 +256,7 @@ pub fn dispatch(
 
         "resolve" => {
             let s = state.as_ref().expect("DRC2: not initialised");
-            let a: DeviceIdArgs =
-                serde_json::from_slice(args).expect("DRC2: bad resolve args");
+            let a: DeviceIdArgs = serde_json::from_slice(args).expect("DRC2: bad resolve args");
             serde_json::to_vec(&s.resolve(&a.device_id)).unwrap()
         }
 
@@ -286,23 +285,20 @@ pub fn dispatch(
 
         "revoke" => {
             let s = state.as_mut().expect("DRC2: not initialised");
-            let a: DeviceIdArgs =
-                serde_json::from_slice(args).expect("DRC2: bad revoke args");
+            let a: DeviceIdArgs = serde_json::from_slice(args).expect("DRC2: bad revoke args");
             s.revoke(caller, a.device_id);
             serde_json::to_vec("ok").unwrap()
         }
 
         "is_active" => {
             let s = state.as_ref().expect("DRC2: not initialised");
-            let a: DeviceIdArgs =
-                serde_json::from_slice(args).expect("DRC2: bad is_active args");
+            let a: DeviceIdArgs = serde_json::from_slice(args).expect("DRC2: bad is_active args");
             serde_json::to_vec(&s.is_active(&a.device_id)).unwrap()
         }
 
         "devices_of" => {
             let s = state.as_ref().expect("DRC2: not initialised");
-            let a: OwnerArgs =
-                serde_json::from_slice(args).expect("DRC2: bad devices_of args");
+            let a: OwnerArgs = serde_json::from_slice(args).expect("DRC2: bad devices_of args");
             serde_json::to_vec(&s.devices_of(&a.owner)).unwrap()
         }
 

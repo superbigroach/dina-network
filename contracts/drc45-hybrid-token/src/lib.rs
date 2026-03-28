@@ -124,15 +124,29 @@ impl HybridTokenState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { name: String, symbol: String, units_per_nft: u64 }
+struct InitArgs {
+    name: String,
+    symbol: String,
+    units_per_nft: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { to: Address, amount: u64 }
+struct TransferArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MintArgs { to: Address, amount: u64 }
+struct MintArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct NftIdArg { nft_id: u64 }
+struct NftIdArg {
+    nft_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<HybridTokenState>,
@@ -144,7 +158,12 @@ pub fn dispatch(
         "init" => {
             assert!(state.is_none(), "DRC45: already initialised");
             let a: InitArgs = serde_json::from_slice(args).expect("DRC45: bad init args");
-            *state = Some(HybridTokenState::new(a.name, a.symbol, a.units_per_nft, caller));
+            *state = Some(HybridTokenState::new(
+                a.name,
+                a.symbol,
+                a.units_per_nft,
+                caller,
+            ));
             serde_json::to_vec("ok").unwrap()
         }
         "balance_of" => {
@@ -194,13 +213,18 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<HybridTokenState> {
         let mut state = None;
         let args = serde_json::to_vec(&InitArgs {
-            name: "HybridCoin".into(), symbol: "HYB".into(), units_per_nft: 100,
-        }).unwrap();
+            name: "HybridCoin".into(),
+            symbol: "HYB".into(),
+            units_per_nft: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, addr(1));
         state
     }
@@ -209,7 +233,11 @@ mod tests {
     fn test_mint_auto_creates_nfts() {
         let mut state = setup();
         // Mint 250 units => 2 NFTs (250 / 100 = 2)
-        let args = serde_json::to_vec(&MintArgs { to: addr(2), amount: 250 }).unwrap();
+        let args = serde_json::to_vec(&MintArgs {
+            to: addr(2),
+            amount: 250,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(2)), 250);
@@ -221,12 +249,20 @@ mod tests {
     fn test_transfer_burns_and_mints_nfts() {
         let mut state = setup();
         // Give addr(1) 300 tokens => 3 NFTs
-        let mint = serde_json::to_vec(&MintArgs { to: addr(1), amount: 300 }).unwrap();
+        let mint = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            amount: 300,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &mint, addr(1));
         assert_eq!(state.as_ref().unwrap().nfts_of(&addr(1)).len(), 3);
 
         // Transfer 150 to addr(2) => addr(1) has 150 (1 NFT), addr(2) has 150 (1 NFT)
-        let xfer = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 150 }).unwrap();
+        let xfer = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 150,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &xfer, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(1)), 150);
@@ -240,7 +276,11 @@ mod tests {
     fn test_sub_unit_no_nft() {
         let mut state = setup();
         // Mint 50 (less than units_per_nft=100) => 0 NFTs
-        let args = serde_json::to_vec(&MintArgs { to: addr(3), amount: 50 }).unwrap();
+        let args = serde_json::to_vec(&MintArgs {
+            to: addr(3),
+            amount: 50,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.nfts_of(&addr(3)).len(), 0);
@@ -249,7 +289,11 @@ mod tests {
     #[test]
     fn test_nft_ownership_tracking() {
         let mut state = setup();
-        let args = serde_json::to_vec(&MintArgs { to: addr(4), amount: 100 }).unwrap();
+        let args = serde_json::to_vec(&MintArgs {
+            to: addr(4),
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &args, addr(1));
         let s = state.as_ref().unwrap();
         let nfts = s.nfts_of(&addr(4));
@@ -262,9 +306,17 @@ mod tests {
     #[should_panic(expected = "insufficient balance")]
     fn test_transfer_insufficient() {
         let mut state = setup();
-        let mint = serde_json::to_vec(&MintArgs { to: addr(1), amount: 50 }).unwrap();
+        let mint = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            amount: 50,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &mint, addr(1));
-        let xfer = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 100 }).unwrap();
+        let xfer = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &xfer, addr(1));
     }
 }

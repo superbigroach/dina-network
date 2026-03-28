@@ -9,11 +9,7 @@ use std::collections::BTreeMap;
 pub enum SensorValue {
     Float(f64),
     Integer(i64),
-    Location {
-        lat: f64,
-        lng: f64,
-        accuracy: f64,
-    },
+    Location { lat: f64, lng: f64, accuracy: f64 },
     Vector(Vec<f64>),
     Json(String),
 }
@@ -63,12 +59,7 @@ impl SensorAttestationState {
     }
 
     /// Submit a sensor reading as an attestation.
-    pub fn attest(
-        &mut self,
-        caller: [u8; 32],
-        reading: SensorReading,
-        timestamp: u64,
-    ) -> u64 {
+    pub fn attest(&mut self, caller: [u8; 32], reading: SensorReading, timestamp: u64) -> u64 {
         assert!(
             !reading.device_signature.is_empty(),
             "DRC105: device signature is required"
@@ -104,12 +95,7 @@ impl SensorAttestationState {
 
     /// A verifier confirms the attestation is valid (e.g. cross-checked the
     /// device signature against DRC-2 registry).
-    pub fn verify(
-        &mut self,
-        caller: [u8; 32],
-        attestation_id: u64,
-        timestamp: u64,
-    ) {
+    pub fn verify(&mut self, caller: [u8; 32], attestation_id: u64, timestamp: u64) {
         let attestation = self
             .attestations
             .get_mut(&attestation_id)
@@ -191,16 +177,14 @@ pub fn dispatch(
 
         "attest" => {
             let s = state.as_mut().expect("DRC105: not initialised");
-            let a: AttestArgs =
-                serde_json::from_slice(args).expect("DRC105: bad attest args");
+            let a: AttestArgs = serde_json::from_slice(args).expect("DRC105: bad attest args");
             let id = s.attest(caller, a.reading, a.timestamp);
             serde_json::to_vec(&id).unwrap()
         }
 
         "verify" => {
             let s = state.as_mut().expect("DRC105: not initialised");
-            let a: VerifyArgs =
-                serde_json::from_slice(args).expect("DRC105: bad verify args");
+            let a: VerifyArgs = serde_json::from_slice(args).expect("DRC105: bad verify args");
             s.verify(caller, a.attestation_id, a.timestamp);
             serde_json::to_vec("ok").unwrap()
         }

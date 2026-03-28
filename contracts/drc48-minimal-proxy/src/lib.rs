@@ -62,7 +62,10 @@ impl MinimalProxyState {
     }
 
     pub fn clones_by_creator(&self, creator: &Address) -> Vec<&CloneInfo> {
-        self.clones.values().filter(|c| &c.creator == creator).collect()
+        self.clones
+            .values()
+            .filter(|c| &c.creator == creator)
+            .collect()
     }
 
     pub fn implementation(&self) -> &Address {
@@ -71,27 +74,28 @@ impl MinimalProxyState {
 
     // -- Mutations -----------------------------------------------------------
 
-    pub fn create_clone(
-        &mut self,
-        caller: Address,
-        init_data: Vec<u8>,
-        timestamp: u64,
-    ) -> Address {
+    pub fn create_clone(&mut self, caller: Address, init_data: Vec<u8>, timestamp: u64) -> Address {
         let id = self.next_clone_id;
         self.next_clone_id += 1;
         let address = Self::derive_clone_address(&self.implementation, id);
-        self.clones.insert(id, CloneInfo {
+        self.clones.insert(
             id,
-            address,
-            creator: caller,
-            created_at: timestamp,
-            init_data,
-        });
+            CloneInfo {
+                id,
+                address,
+                creator: caller,
+                created_at: timestamp,
+                init_data,
+            },
+        );
         address
     }
 
     pub fn set_implementation(&mut self, caller: Address, new_impl: Address) {
-        assert!(caller == self.admin, "DRC48: only admin can set implementation");
+        assert!(
+            caller == self.admin,
+            "DRC48: only admin can set implementation"
+        );
         self.implementation = new_impl;
     }
 }
@@ -101,15 +105,26 @@ impl MinimalProxyState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { implementation: Address }
+struct InitArgs {
+    implementation: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateCloneArgs { init_data: Vec<u8>, timestamp: u64 }
+struct CreateCloneArgs {
+    init_data: Vec<u8>,
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CloneIdArg { id: u64 }
+struct CloneIdArg {
+    id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SetImplArgs { implementation: Address }
+struct SetImplArgs {
+    implementation: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<MinimalProxyState>,
@@ -167,11 +182,16 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<MinimalProxyState> {
         let mut state = None;
-        let args = serde_json::to_vec(&InitArgs { implementation: addr(99) }).unwrap();
+        let args = serde_json::to_vec(&InitArgs {
+            implementation: addr(99),
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, addr(1));
         state
     }
@@ -180,8 +200,10 @@ mod tests {
     fn test_create_clone() {
         let mut state = setup();
         let args = serde_json::to_vec(&CreateCloneArgs {
-            init_data: vec![1, 2, 3], timestamp: 1000,
-        }).unwrap();
+            init_data: vec![1, 2, 3],
+            timestamp: 1000,
+        })
+        .unwrap();
         let result = dispatch(&mut state, "create_clone", &args, addr(2));
         let clone_addr: Address = serde_json::from_slice(&result).unwrap();
         assert_ne!(clone_addr, [0u8; 32]);
@@ -191,8 +213,16 @@ mod tests {
     #[test]
     fn test_multiple_clones_unique_addresses() {
         let mut state = setup();
-        let args1 = serde_json::to_vec(&CreateCloneArgs { init_data: vec![], timestamp: 1000 }).unwrap();
-        let args2 = serde_json::to_vec(&CreateCloneArgs { init_data: vec![], timestamp: 2000 }).unwrap();
+        let args1 = serde_json::to_vec(&CreateCloneArgs {
+            init_data: vec![],
+            timestamp: 1000,
+        })
+        .unwrap();
+        let args2 = serde_json::to_vec(&CreateCloneArgs {
+            init_data: vec![],
+            timestamp: 2000,
+        })
+        .unwrap();
         let r1 = dispatch(&mut state, "create_clone", &args1, addr(2));
         let r2 = dispatch(&mut state, "create_clone", &args2, addr(2));
         let a1: Address = serde_json::from_slice(&r1).unwrap();
@@ -204,7 +234,11 @@ mod tests {
     #[test]
     fn test_clones_by_creator() {
         let mut state = setup();
-        let args = serde_json::to_vec(&CreateCloneArgs { init_data: vec![], timestamp: 1000 }).unwrap();
+        let args = serde_json::to_vec(&CreateCloneArgs {
+            init_data: vec![],
+            timestamp: 1000,
+        })
+        .unwrap();
         dispatch(&mut state, "create_clone", &args, addr(3));
         dispatch(&mut state, "create_clone", &args, addr(3));
         dispatch(&mut state, "create_clone", &args, addr(4));
@@ -217,8 +251,10 @@ mod tests {
     fn test_get_clone_info() {
         let mut state = setup();
         let args = serde_json::to_vec(&CreateCloneArgs {
-            init_data: vec![42], timestamp: 5000,
-        }).unwrap();
+            init_data: vec![42],
+            timestamp: 5000,
+        })
+        .unwrap();
         dispatch(&mut state, "create_clone", &args, addr(5));
         let s = state.as_ref().unwrap();
         let clone = s.get_clone(1).unwrap();
@@ -237,7 +273,10 @@ mod tests {
     #[should_panic(expected = "only admin")]
     fn test_set_implementation_non_admin() {
         let mut state = setup();
-        let args = serde_json::to_vec(&SetImplArgs { implementation: addr(50) }).unwrap();
+        let args = serde_json::to_vec(&SetImplArgs {
+            implementation: addr(50),
+        })
+        .unwrap();
         dispatch(&mut state, "set_implementation", &args, addr(99));
     }
 }

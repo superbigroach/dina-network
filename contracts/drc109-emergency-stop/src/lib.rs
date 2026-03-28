@@ -106,12 +106,7 @@ impl EmergencyStopState {
         self.frozen.get(target)
     }
 
-    pub fn register_responder(
-        &mut self,
-        caller: [u8; 32],
-        responder: [u8; 32],
-        label: String,
-    ) {
+    pub fn register_responder(&mut self, caller: [u8; 32], responder: [u8; 32], label: String) {
         assert!(
             caller == self.admin,
             "DRC109: only admin can register responders"
@@ -184,31 +179,27 @@ pub fn dispatch(
 
         "freeze" => {
             let s = state.as_mut().expect("DRC109: not initialised");
-            let a: FreezeArgs =
-                serde_json::from_slice(args).expect("DRC109: bad freeze args");
+            let a: FreezeArgs = serde_json::from_slice(args).expect("DRC109: bad freeze args");
             s.freeze(caller, a.target, a.reason, a.scope, a.timestamp);
             serde_json::to_vec("ok").unwrap()
         }
 
         "unfreeze" => {
             let s = state.as_mut().expect("DRC109: not initialised");
-            let a: UnfreezeArgs =
-                serde_json::from_slice(args).expect("DRC109: bad unfreeze args");
+            let a: UnfreezeArgs = serde_json::from_slice(args).expect("DRC109: bad unfreeze args");
             s.unfreeze(caller, a.target);
             serde_json::to_vec("ok").unwrap()
         }
 
         "is_frozen" => {
             let s = state.as_ref().expect("DRC109: not initialised");
-            let a: TargetArgs =
-                serde_json::from_slice(args).expect("DRC109: bad is_frozen args");
+            let a: TargetArgs = serde_json::from_slice(args).expect("DRC109: bad is_frozen args");
             serde_json::to_vec(&s.is_frozen(&a.target)).unwrap()
         }
 
         "freeze_info" => {
             let s = state.as_ref().expect("DRC109: not initialised");
-            let a: TargetArgs =
-                serde_json::from_slice(args).expect("DRC109: bad freeze_info args");
+            let a: TargetArgs = serde_json::from_slice(args).expect("DRC109: bad freeze_info args");
             serde_json::to_vec(&s.freeze_info(&a.target)).unwrap()
         }
 

@@ -26,7 +26,7 @@ pub struct NodeInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConnectionInfo {
-    pub signal_strength: i32,   // dBm, e.g. -70
+    pub signal_strength: i32, // dBm, e.g. -70
     pub latency_ms: u32,
     pub bandwidth_kbps: u64,
     pub last_seen: u64,
@@ -44,7 +44,11 @@ pub struct MeshNetwork {
 
 /// Edge key: sorted pair to avoid duplicates for undirected connections.
 fn edge_key(a: Address, b: Address) -> (Address, Address) {
-    if a <= b { (a, b) } else { (b, a) }
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -67,15 +71,27 @@ impl MeshState {
         }
     }
 
-    pub fn register_node(&mut self, caller: Address, name: String, device_type: String, registered_at: u64) {
-        assert!(!self.nodes.contains_key(&caller), "DRC55: node already registered");
-        self.nodes.insert(caller, NodeInfo {
-            address: caller,
-            name,
-            device_type,
-            registered_at,
-            active: true,
-        });
+    pub fn register_node(
+        &mut self,
+        caller: Address,
+        name: String,
+        device_type: String,
+        registered_at: u64,
+    ) {
+        assert!(
+            !self.nodes.contains_key(&caller),
+            "DRC55: node already registered"
+        );
+        self.nodes.insert(
+            caller,
+            NodeInfo {
+                address: caller,
+                name,
+                device_type,
+                registered_at,
+                active: true,
+            },
+        );
     }
 
     pub fn connect_nodes(
@@ -89,20 +105,29 @@ impl MeshState {
         timestamp: u64,
     ) {
         assert!(node_a != node_b, "DRC55: cannot connect node to itself");
-        assert!(self.nodes.contains_key(&node_a), "DRC55: node_a not registered");
-        assert!(self.nodes.contains_key(&node_b), "DRC55: node_b not registered");
+        assert!(
+            self.nodes.contains_key(&node_a),
+            "DRC55: node_a not registered"
+        );
+        assert!(
+            self.nodes.contains_key(&node_b),
+            "DRC55: node_b not registered"
+        );
         assert!(
             caller == node_a || caller == node_b || caller == self.owner,
             "DRC55: only involved nodes or owner can connect"
         );
         let key = edge_key(node_a, node_b);
-        self.edges.insert(key, ConnectionInfo {
-            signal_strength,
-            latency_ms,
-            bandwidth_kbps,
-            last_seen: timestamp,
-            active: true,
-        });
+        self.edges.insert(
+            key,
+            ConnectionInfo {
+                signal_strength,
+                latency_ms,
+                bandwidth_kbps,
+                last_seen: timestamp,
+                active: true,
+            },
+        );
     }
 
     pub fn disconnect(&mut self, caller: Address, node_a: Address, node_b: Address) {
@@ -111,7 +136,10 @@ impl MeshState {
             "DRC55: not authorised"
         );
         let key = edge_key(node_a, node_b);
-        let conn = self.edges.get_mut(&key).expect("DRC55: connection not found");
+        let conn = self
+            .edges
+            .get_mut(&key)
+            .expect("DRC55: connection not found");
         conn.active = false;
     }
 
@@ -130,7 +158,10 @@ impl MeshState {
             "DRC55: not authorised"
         );
         let key = edge_key(node_a, node_b);
-        let conn = self.edges.get_mut(&key).expect("DRC55: connection not found");
+        let conn = self
+            .edges
+            .get_mut(&key)
+            .expect("DRC55: connection not found");
         conn.signal_strength = signal_strength;
         conn.latency_ms = latency_ms;
         conn.bandwidth_kbps = bandwidth_kbps;
@@ -150,10 +181,16 @@ impl MeshState {
 
         while let Some((current, path)) = queue.pop_front() {
             for (&(a, b), conn) in &self.edges {
-                if !conn.active { continue; }
-                let neighbor = if a == current { Some(b) }
-                    else if b == current { Some(a) }
-                    else { None };
+                if !conn.active {
+                    continue;
+                }
+                let neighbor = if a == current {
+                    Some(b)
+                } else if b == current {
+                    Some(a)
+                } else {
+                    None
+                };
                 if let Some(n) = neighbor {
                     if n == to {
                         let mut result = path.clone();
@@ -172,22 +209,36 @@ impl MeshState {
         None
     }
 
-    pub fn create_network(&mut self, caller: Address, name: String, topology_type: TopologyType) -> u64 {
+    pub fn create_network(
+        &mut self,
+        caller: Address,
+        name: String,
+        topology_type: TopologyType,
+    ) -> u64 {
         let id = self.next_network_id;
         self.next_network_id += 1;
-        self.networks.insert(id, MeshNetwork {
+        self.networks.insert(
             id,
-            name,
-            owner: caller,
-            nodes: BTreeSet::new(),
-            topology_type,
-        });
+            MeshNetwork {
+                id,
+                name,
+                owner: caller,
+                nodes: BTreeSet::new(),
+                topology_type,
+            },
+        );
         id
     }
 
     pub fn add_node_to_network(&mut self, caller: Address, network_id: u64, node: Address) {
-        let net = self.networks.get_mut(&network_id).expect("DRC55: network not found");
-        assert!(caller == net.owner || caller == self.owner, "DRC55: not network owner");
+        let net = self
+            .networks
+            .get_mut(&network_id)
+            .expect("DRC55: network not found");
+        assert!(
+            caller == net.owner || caller == self.owner,
+            "DRC55: not network owner"
+        );
         assert!(self.nodes.contains_key(&node), "DRC55: node not registered");
         net.nodes.insert(node);
     }
@@ -200,12 +251,20 @@ impl MeshState {
         queue.push_back((addr, 0));
 
         while let Some((current, hops)) = queue.pop_front() {
-            if hops >= max_hops { continue; }
+            if hops >= max_hops {
+                continue;
+            }
             for (&(a, b), conn) in &self.edges {
-                if !conn.active { continue; }
-                let neighbor = if a == current { Some(b) }
-                    else if b == current { Some(a) }
-                    else { None };
+                if !conn.active {
+                    continue;
+                }
+                let neighbor = if a == current {
+                    Some(b)
+                } else if b == current {
+                    Some(a)
+                } else {
+                    None
+                };
                 if let Some(n) = neighbor {
                     if !visited.contains(&n) {
                         visited.insert(n);
@@ -224,25 +283,51 @@ impl MeshState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RegisterNodeArgs { name: String, device_type: String, registered_at: u64 }
+struct RegisterNodeArgs {
+    name: String,
+    device_type: String,
+    registered_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ConnectArgs { node_a: Address, node_b: Address, signal_strength: i32, latency_ms: u32, bandwidth_kbps: u64, timestamp: u64 }
+struct ConnectArgs {
+    node_a: Address,
+    node_b: Address,
+    signal_strength: i32,
+    latency_ms: u32,
+    bandwidth_kbps: u64,
+    timestamp: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DisconnectArgs { node_a: Address, node_b: Address }
+struct DisconnectArgs {
+    node_a: Address,
+    node_b: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct FindPathArgs { from: Address, to: Address }
+struct FindPathArgs {
+    from: Address,
+    to: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateNetworkArgs { name: String, topology_type: TopologyType }
+struct CreateNetworkArgs {
+    name: String,
+    topology_type: TopologyType,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AddNodeNetworkArgs { network_id: u64, node: Address }
+struct AddNodeNetworkArgs {
+    network_id: u64,
+    node: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct NearbyArgs { addr: Address, max_hops: u32 }
+struct NearbyArgs {
+    addr: Address,
+    max_hops: u32,
+}
 
 pub fn dispatch(
     state: &mut Option<MeshState>,
@@ -265,7 +350,15 @@ pub fn dispatch(
         "connect_nodes" => {
             let s = state.as_mut().expect("DRC55: not initialised");
             let a: ConnectArgs = serde_json::from_slice(args).expect("DRC55: bad args");
-            s.connect_nodes(caller, a.node_a, a.node_b, a.signal_strength, a.latency_ms, a.bandwidth_kbps, a.timestamp);
+            s.connect_nodes(
+                caller,
+                a.node_a,
+                a.node_b,
+                a.signal_strength,
+                a.latency_ms,
+                a.bandwidth_kbps,
+                a.timestamp,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "disconnect" => {
@@ -277,7 +370,15 @@ pub fn dispatch(
         "update_connection" => {
             let s = state.as_mut().expect("DRC55: not initialised");
             let a: ConnectArgs = serde_json::from_slice(args).expect("DRC55: bad args");
-            s.update_connection(caller, a.node_a, a.node_b, a.signal_strength, a.latency_ms, a.bandwidth_kbps, a.timestamp);
+            s.update_connection(
+                caller,
+                a.node_a,
+                a.node_b,
+                a.signal_strength,
+                a.latency_ms,
+                a.bandwidth_kbps,
+                a.timestamp,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "find_path" => {

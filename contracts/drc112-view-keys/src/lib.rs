@@ -64,7 +64,6 @@ pub struct ViewFilter {
     pub counterparty_filter: Vec<Address>,
 }
 
-
 /// A view key grant — permission for a grantee to see specific data
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ViewKeyGrant {
@@ -268,9 +267,15 @@ impl ViewKeyRegistry {
 
     /// Revoke a view key grant
     pub fn revoke_grant(&mut self, caller: Address, grant_id: GrantId) {
-        let grant = self.grants.get_mut(&grant_id).expect("DRC112: grant not found");
+        let grant = self
+            .grants
+            .get_mut(&grant_id)
+            .expect("DRC112: grant not found");
         assert!(grant.grantor == caller, "DRC112: only grantor can revoke");
-        assert!(grant.revocable, "DRC112: grant is non-revocable (regulatory)");
+        assert!(
+            grant.revocable,
+            "DRC112: grant is non-revocable (regulatory)"
+        );
         assert!(!grant.revoked, "DRC112: already revoked");
 
         grant.revoked = true;
@@ -298,12 +303,18 @@ impl ViewKeyRegistry {
 
     /// Get all grants issued by a grantor
     pub fn grants_by_grantor(&self, grantor: Address) -> Vec<GrantId> {
-        self.grantor_grants.get(&grantor).cloned().unwrap_or_default()
+        self.grantor_grants
+            .get(&grantor)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Get all grants received by a grantee
     pub fn grants_for_grantee(&self, grantee: Address) -> Vec<GrantId> {
-        self.grantee_grants.get(&grantee).cloned().unwrap_or_default()
+        self.grantee_grants
+            .get(&grantee)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Get active grants for a grantee (excludes expired and revoked)
@@ -324,13 +335,19 @@ impl ViewKeyRegistry {
 
     /// Register a regulatory authority (admin only)
     pub fn register_authority(&mut self, caller: Address, authority: Address, name: String) {
-        assert!(caller == self.admin, "DRC112: only admin can register authorities");
+        assert!(
+            caller == self.admin,
+            "DRC112: only admin can register authorities"
+        );
         self.regulatory_authorities.insert(authority, name);
     }
 
     /// Remove a regulatory authority (admin only)
     pub fn remove_authority(&mut self, caller: Address, authority: Address) {
-        assert!(caller == self.admin, "DRC112: only admin can remove authorities");
+        assert!(
+            caller == self.admin,
+            "DRC112: only admin can remove authorities"
+        );
         self.regulatory_authorities.remove(&authority);
     }
 
@@ -349,7 +366,10 @@ impl ViewKeyRegistry {
 
     /// Extend a grant's expiry (grantor only, cannot shorten)
     pub fn extend_grant(&mut self, caller: Address, grant_id: GrantId, new_expires_at: u64) {
-        let grant = self.grants.get_mut(&grant_id).expect("DRC112: grant not found");
+        let grant = self
+            .grants
+            .get_mut(&grant_id)
+            .expect("DRC112: grant not found");
         assert!(grant.grantor == caller, "DRC112: only grantor can extend");
         assert!(!grant.revoked, "DRC112: cannot extend revoked grant");
         assert!(
@@ -361,8 +381,14 @@ impl ViewKeyRegistry {
 
     /// Add scopes to an existing grant (grantor only)
     pub fn add_scopes(&mut self, caller: Address, grant_id: GrantId, new_scopes: Vec<ViewScope>) {
-        let grant = self.grants.get_mut(&grant_id).expect("DRC112: grant not found");
-        assert!(grant.grantor == caller, "DRC112: only grantor can add scopes");
+        let grant = self
+            .grants
+            .get_mut(&grant_id)
+            .expect("DRC112: grant not found");
+        assert!(
+            grant.grantor == caller,
+            "DRC112: only grantor can add scopes"
+        );
         assert!(!grant.revoked, "DRC112: cannot modify revoked grant");
 
         for scope in new_scopes {
@@ -433,7 +459,9 @@ pub fn dispatch(
 
         "revoke_grant" => {
             #[derive(Deserialize)]
-            struct Args { grant_id: GrantId }
+            struct Args {
+                grant_id: GrantId,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             state.revoke_grant(caller, a.grant_id);
             serde_json::to_vec(&true).unwrap()
@@ -441,7 +469,9 @@ pub fn dispatch(
 
         "grant_status" => {
             #[derive(Deserialize)]
-            struct Args { grant_id: GrantId }
+            struct Args {
+                grant_id: GrantId,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             let status = state.grant_status(a.grant_id, current_time);
             serde_json::to_vec(&status).unwrap()
@@ -449,7 +479,9 @@ pub fn dispatch(
 
         "get_grant" => {
             #[derive(Deserialize)]
-            struct Args { grant_id: GrantId }
+            struct Args {
+                grant_id: GrantId,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             let grant = state.get_grant(caller, a.grant_id);
             serde_json::to_vec(&grant).unwrap()
@@ -472,7 +504,9 @@ pub fn dispatch(
 
         "get_proof" => {
             #[derive(Deserialize)]
-            struct Args { grant_id: GrantId }
+            struct Args {
+                grant_id: GrantId,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             let proof = state.get_proof(a.grant_id);
             serde_json::to_vec(&proof).unwrap()
@@ -480,7 +514,10 @@ pub fn dispatch(
 
         "register_authority" => {
             #[derive(Deserialize)]
-            struct Args { authority: Address, name: String }
+            struct Args {
+                authority: Address,
+                name: String,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             state.register_authority(caller, a.authority, a.name);
             serde_json::to_vec(&true).unwrap()
@@ -488,14 +525,19 @@ pub fn dispatch(
 
         "is_authority" => {
             #[derive(Deserialize)]
-            struct Args { addr: Address }
+            struct Args {
+                addr: Address,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             serde_json::to_vec(&state.is_authority(a.addr)).unwrap()
         }
 
         "verify_access" => {
             #[derive(Deserialize)]
-            struct Args { grantee: Address, scope: ViewScope }
+            struct Args {
+                grantee: Address,
+                scope: ViewScope,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             let result = state.verify_access(a.grantee, &a.scope, current_time);
             serde_json::to_vec(&result).unwrap()
@@ -503,7 +545,10 @@ pub fn dispatch(
 
         "extend_grant" => {
             #[derive(Deserialize)]
-            struct Args { grant_id: GrantId, new_expires_at: u64 }
+            struct Args {
+                grant_id: GrantId,
+                new_expires_at: u64,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             state.extend_grant(caller, a.grant_id, a.new_expires_at);
             serde_json::to_vec(&true).unwrap()
@@ -511,7 +556,10 @@ pub fn dispatch(
 
         "add_scopes" => {
             #[derive(Deserialize)]
-            struct Args { grant_id: GrantId, new_scopes: Vec<ViewScope> }
+            struct Args {
+                grant_id: GrantId,
+                new_scopes: Vec<ViewScope>,
+            }
             let a: Args = serde_json::from_slice(args).expect("DRC112: invalid args");
             state.add_scopes(caller, a.grant_id, a.new_scopes);
             serde_json::to_vec(&true).unwrap()
@@ -587,10 +635,15 @@ mod tests {
         let grantee = test_addr(2);
 
         let grant_id = registry.grant_view_key(
-            grantor, grantee,
+            grantor,
+            grantee,
             vec![ViewScope::FullAccess],
             ViewFilter::default(),
-            0, true, "Test".to_string(), vec![], 100,
+            0,
+            true,
+            "Test".to_string(),
+            vec![],
+            100,
         );
 
         assert_eq!(registry.grant_status(grant_id, 200), GrantStatus::Active);
@@ -611,10 +664,15 @@ mod tests {
 
         // Non-revocable grant to regulator works
         let grant_id = registry.grant_view_key(
-            grantor, regulator,
+            grantor,
+            regulator,
             vec![ViewScope::Balances, ViewScope::TransactionAmounts],
             ViewFilter::default(),
-            0, false, "SEC Audit".to_string(), vec![], 100,
+            0,
+            false,
+            "SEC Audit".to_string(),
+            vec![],
+            100,
         );
 
         assert_eq!(registry.grant_status(grant_id, 200), GrantStatus::Active);
@@ -631,10 +689,15 @@ mod tests {
 
         // Non-revocable grant to non-authority should panic
         registry.grant_view_key(
-            grantor, random,
+            grantor,
+            random,
             vec![ViewScope::FullAccess],
             ViewFilter::default(),
-            0, false, "Nope".to_string(), vec![], 100,
+            0,
+            false,
+            "Nope".to_string(),
+            vec![],
+            100,
         );
     }
 
@@ -647,18 +710,29 @@ mod tests {
         let grantee = test_addr(2);
 
         registry.grant_view_key(
-            grantor, grantee,
+            grantor,
+            grantee,
             vec![ViewScope::Balances],
             ViewFilter::default(),
-            1000, true, "Test".to_string(), vec![], 100,
+            1000,
+            true,
+            "Test".to_string(),
+            vec![],
+            100,
         );
 
         // Grantee has access to Balances
-        assert!(registry.verify_access(grantee, &ViewScope::Balances, 500).is_some());
+        assert!(registry
+            .verify_access(grantee, &ViewScope::Balances, 500)
+            .is_some());
         // Grantee does NOT have access to TransactionMemos
-        assert!(registry.verify_access(grantee, &ViewScope::TransactionMemos, 500).is_none());
+        assert!(registry
+            .verify_access(grantee, &ViewScope::TransactionMemos, 500)
+            .is_none());
         // After expiry, no access
-        assert!(registry.verify_access(grantee, &ViewScope::Balances, 1500).is_none());
+        assert!(registry
+            .verify_access(grantee, &ViewScope::Balances, 1500)
+            .is_none());
     }
 
     #[test]
@@ -670,10 +744,15 @@ mod tests {
         let grantee = test_addr(2);
 
         let grant_id = registry.grant_view_key(
-            grantor, grantee,
+            grantor,
+            grantee,
             vec![ViewScope::Balances],
             ViewFilter::default(),
-            1000, true, "Test".to_string(), vec![], 100,
+            1000,
+            true,
+            "Test".to_string(),
+            vec![],
+            100,
         );
 
         // Extend

@@ -106,15 +106,10 @@ impl McpHandler {
                 .and_then(|m| m.as_str())
                 .unwrap_or("unknown RPC error");
             let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
-            return Err(McpError::RpcError(format!(
-                "RPC error {code}: {message}"
-            )));
+            return Err(McpError::RpcError(format!("RPC error {code}: {message}")));
         }
 
-        Ok(rpc_response
-            .get("result")
-            .cloned()
-            .unwrap_or(json!(null)))
+        Ok(rpc_response.get("result").cloned().unwrap_or(json!(null)))
     }
 
     /// Handle `dina/transfer` tool call.
@@ -168,10 +163,7 @@ impl McpHandler {
             None => return McpToolResult::err("missing required argument: 'wasm_bytecode'"),
         };
 
-        let init_args = args
-            .get("init_args")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let init_args = args.get("init_args").and_then(|v| v.as_str()).unwrap_or("");
         let fee = args.get("fee").and_then(|v| v.as_u64()).unwrap_or(100);
 
         let params = json!({
@@ -198,11 +190,11 @@ impl McpHandler {
             None => return McpToolResult::err("missing required argument: 'method'"),
         };
 
-        let call_args = args
-            .get("args")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let usdc_attached = args.get("usdc_attached").and_then(|v| v.as_u64()).unwrap_or(0);
+        let call_args = args.get("args").and_then(|v| v.as_str()).unwrap_or("");
+        let usdc_attached = args
+            .get("usdc_attached")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let fee = args.get("fee").and_then(|v| v.as_u64()).unwrap_or(10);
 
         let params = json!({
@@ -236,15 +228,13 @@ impl McpHandler {
             None => return McpToolResult::err("missing required argument: 'firmware_hash'"),
         };
 
-        let attestation_signature =
-            match args.get("attestation_signature").and_then(|v| v.as_str()) {
-                Some(sig) => sig,
-                None => {
-                    return McpToolResult::err(
-                        "missing required argument: 'attestation_signature'",
-                    )
-                }
-            };
+        let attestation_signature = match args.get("attestation_signature").and_then(|v| v.as_str())
+        {
+            Some(sig) => sig,
+            None => {
+                return McpToolResult::err("missing required argument: 'attestation_signature'")
+            }
+        };
 
         let witness_root = args
             .get("witness_root")

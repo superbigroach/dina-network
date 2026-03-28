@@ -54,28 +54,46 @@ impl SwarmConsensusState {
     ) -> u64 {
         assert!(!question.is_empty(), "DRC77: question required");
         assert!(options.len() >= 2, "DRC77: at least 2 options required");
-        assert!(consensus_threshold > 0 && consensus_threshold <= 10000, "DRC77: threshold must be 1-10000 bps");
+        assert!(
+            consensus_threshold > 0 && consensus_threshold <= 10000,
+            "DRC77: threshold must be 1-10000 bps"
+        );
 
         let id = self.next_id;
         self.next_id += 1;
-        self.decisions.insert(id, SwarmDecision {
+        self.decisions.insert(
             id,
-            proposer: caller,
-            question,
-            options,
-            votes: BTreeMap::new(),
-            weights: BTreeMap::new(),
-            deadline,
-            consensus_threshold,
-            result: None,
-            resolved: false,
-        });
+            SwarmDecision {
+                id,
+                proposer: caller,
+                question,
+                options,
+                votes: BTreeMap::new(),
+                weights: BTreeMap::new(),
+                deadline,
+                consensus_threshold,
+                result: None,
+                resolved: false,
+            },
+        );
         id
     }
 
-    pub fn register_voter(&mut self, caller: Address, decision_id: u64, voter: Address, weight: u64) {
-        let decision = self.decisions.get_mut(&decision_id).expect("DRC77: decision not found");
-        assert!(caller == decision.proposer, "DRC77: only proposer can register voters");
+    pub fn register_voter(
+        &mut self,
+        caller: Address,
+        decision_id: u64,
+        voter: Address,
+        weight: u64,
+    ) {
+        let decision = self
+            .decisions
+            .get_mut(&decision_id)
+            .expect("DRC77: decision not found");
+        assert!(
+            caller == decision.proposer,
+            "DRC77: only proposer can register voters"
+        );
         assert!(!decision.resolved, "DRC77: already resolved");
         assert!(weight > 0, "DRC77: weight must be positive");
         decision.weights.insert(voter, weight);
@@ -90,24 +108,45 @@ impl SwarmConsensusState {
         reasoning_hash: [u8; 32],
         current_time: u64,
     ) {
-        let decision = self.decisions.get_mut(&decision_id).expect("DRC77: decision not found");
+        let decision = self
+            .decisions
+            .get_mut(&decision_id)
+            .expect("DRC77: decision not found");
         assert!(!decision.resolved, "DRC77: already resolved");
-        assert!(current_time <= decision.deadline, "DRC77: voting period ended");
-        assert!(option_index < decision.options.len(), "DRC77: invalid option index");
-        assert!(decision.weights.contains_key(&caller), "DRC77: not a registered voter");
-        assert!(confidence > 0 && confidence <= 100, "DRC77: confidence must be 1-100");
+        assert!(
+            current_time <= decision.deadline,
+            "DRC77: voting period ended"
+        );
+        assert!(
+            option_index < decision.options.len(),
+            "DRC77: invalid option index"
+        );
+        assert!(
+            decision.weights.contains_key(&caller),
+            "DRC77: not a registered voter"
+        );
+        assert!(
+            confidence > 0 && confidence <= 100,
+            "DRC77: confidence must be 1-100"
+        );
 
-        decision.votes.insert(caller, Vote {
-            option_index,
-            confidence,
-            reasoning_hash,
-        });
+        decision.votes.insert(
+            caller,
+            Vote {
+                option_index,
+                confidence,
+                reasoning_hash,
+            },
+        );
     }
 
     /// Resolve the decision using weighted consensus.
     /// Returns the winning option index if consensus was reached.
     pub fn resolve(&mut self, decision_id: u64) -> Option<usize> {
-        let decision = self.decisions.get(&decision_id).expect("DRC77: decision not found");
+        let decision = self
+            .decisions
+            .get(&decision_id)
+            .expect("DRC77: decision not found");
         assert!(!decision.resolved, "DRC77: already resolved");
 
         let num_options = decision.options.len();
@@ -129,7 +168,8 @@ impl SwarmConsensusState {
         }
 
         // Find winner and check if it meets threshold
-        let (winner_idx, winner_score) = option_scores.iter()
+        let (winner_idx, winner_score) = option_scores
+            .iter()
             .enumerate()
             .max_by_key(|(_, s)| *s)
             .unwrap();
@@ -148,14 +188,15 @@ impl SwarmConsensusState {
     }
 
     pub fn get_result(&self, decision_id: u64) -> Option<usize> {
-        let decision = self.decisions.get(&decision_id).expect("DRC77: decision not found");
+        let decision = self
+            .decisions
+            .get(&decision_id)
+            .expect("DRC77: decision not found");
         decision.result
     }
 
     pub fn active_decisions(&self) -> Vec<&SwarmDecision> {
-        self.decisions.values()
-            .filter(|d| !d.resolved)
-            .collect()
+        self.decisions.values().filter(|d| !d.resolved).collect()
     }
 }
 
@@ -164,13 +205,30 @@ impl SwarmConsensusState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ProposeArgs { question: String, options: Vec<String>, deadline: u64, consensus_threshold: u16 }
+struct ProposeArgs {
+    question: String,
+    options: Vec<String>,
+    deadline: u64,
+    consensus_threshold: u16,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct RegisterVoterArgs { decision_id: u64, voter: Address, weight: u64 }
+struct RegisterVoterArgs {
+    decision_id: u64,
+    voter: Address,
+    weight: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct VoteArgs { decision_id: u64, option_index: usize, confidence: u64, reasoning_hash: [u8; 32], current_time: u64 }
+struct VoteArgs {
+    decision_id: u64,
+    option_index: usize,
+    confidence: u64,
+    reasoning_hash: [u8; 32],
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct IdArgs { decision_id: u64 }
+struct IdArgs {
+    decision_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<SwarmConsensusState>,
@@ -187,7 +245,13 @@ pub fn dispatch(
         "propose_decision" => {
             let s = state.as_mut().expect("DRC77: not initialised");
             let a: ProposeArgs = serde_json::from_slice(args).expect("DRC77: bad args");
-            let id = s.propose_decision(caller, a.question, a.options, a.deadline, a.consensus_threshold);
+            let id = s.propose_decision(
+                caller,
+                a.question,
+                a.options,
+                a.deadline,
+                a.consensus_threshold,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "register_voter" => {
@@ -199,7 +263,14 @@ pub fn dispatch(
         "vote" => {
             let s = state.as_mut().expect("DRC77: not initialised");
             let a: VoteArgs = serde_json::from_slice(args).expect("DRC77: bad args");
-            s.vote(caller, a.decision_id, a.option_index, a.confidence, a.reasoning_hash, a.current_time);
+            s.vote(
+                caller,
+                a.decision_id,
+                a.option_index,
+                a.confidence,
+                a.reasoning_hash,
+                a.current_time,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "resolve" => {
@@ -265,8 +336,8 @@ mod tests {
         let (mut s, id) = setup_decision();
         // Even split — no single option gets 50%
         s.vote(ALICE, id, 0, 80, [0xAA; 32], 1000); // 10*80 = 800
-        s.vote(BOB, id, 1, 90, [0xBB; 32], 1001);   // 20*90 = 1800
-        s.vote(CAROL, id, 2, 50, [0xCC; 32], 1002);  // 5*50 = 250
+        s.vote(BOB, id, 1, 90, [0xBB; 32], 1001); // 20*90 = 1800
+        s.vote(CAROL, id, 2, 50, [0xCC; 32], 1002); // 5*50 = 250
 
         // Route B has 1800/2850 = 63.1% > 50%, so it actually wins
         let result = s.resolve(id);
@@ -277,9 +348,11 @@ mod tests {
     fn test_high_threshold_no_consensus() {
         let mut s = SwarmConsensusState::new(OWNER);
         let id = s.propose_decision(
-            OWNER, "Test".into(),
+            OWNER,
+            "Test".into(),
             vec!["A".into(), "B".into()],
-            10000, 9000, // 90% threshold
+            10000,
+            9000, // 90% threshold
         );
         s.register_voter(OWNER, id, ALICE, 10);
         s.register_voter(OWNER, id, BOB, 10);

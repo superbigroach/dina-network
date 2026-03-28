@@ -60,14 +60,15 @@ impl ResourceRegistry {
         assert!(amount > 0, "DRC108: allocation amount must be positive");
 
         let key = (device_id, resource_type.clone());
-        let alloc = self.allocations.entry(key).or_insert_with(|| {
-            ResourceAllocation {
+        let alloc = self
+            .allocations
+            .entry(key)
+            .or_insert_with(|| ResourceAllocation {
                 resource_type: resource_type.clone(),
                 amount: 0,
                 used: 0,
                 expires_at: None,
-            }
-        });
+            });
         alloc.amount += amount;
         if expires_at.is_some() {
             alloc.expires_at = expires_at;
@@ -106,23 +107,19 @@ impl ResourceRegistry {
         from_alloc.amount -= amount;
 
         let to_key = (to_device, resource_type.clone());
-        let to_alloc = self.allocations.entry(to_key).or_insert_with(|| {
-            ResourceAllocation {
+        let to_alloc = self
+            .allocations
+            .entry(to_key)
+            .or_insert_with(|| ResourceAllocation {
                 resource_type: resource_type.clone(),
                 amount: 0,
                 used: 0,
                 expires_at: None,
-            }
-        });
+            });
         to_alloc.amount += amount;
     }
 
-    pub fn purchase_resource(
-        &mut self,
-        caller: Address,
-        resource_type: String,
-        amount: u64,
-    ) {
+    pub fn purchase_resource(&mut self, caller: Address, resource_type: String, amount: u64) {
         assert!(amount > 0, "DRC108: purchase amount must be positive");
         let price_per_unit = self
             .prices
@@ -138,14 +135,15 @@ impl ResourceRegistry {
 
         // Credit the resource to the caller's device (using caller as device ID)
         let key = (caller, resource_type.clone());
-        let alloc = self.allocations.entry(key).or_insert_with(|| {
-            ResourceAllocation {
+        let alloc = self
+            .allocations
+            .entry(key)
+            .or_insert_with(|| ResourceAllocation {
                 resource_type,
                 amount: 0,
                 used: 0,
                 expires_at: None,
-            }
-        });
+            });
         alloc.amount += amount;
     }
 
@@ -175,10 +173,7 @@ impl ResourceRegistry {
     }
 
     pub fn set_price(&mut self, caller: Address, resource_type: String, price_per_unit: u64) {
-        assert!(
-            caller == self.admin,
-            "DRC108: only admin can set prices"
-        );
+        assert!(caller == self.admin, "DRC108: only admin can set prices");
         self.prices.insert(resource_type, price_per_unit);
     }
 }
@@ -244,16 +239,14 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "balance" => {
             let s = state.as_ref().expect("DRC108: not initialised");
-            let a: BalanceArgs =
-                serde_json::from_slice(args).expect("DRC108: bad balance args");
+            let a: BalanceArgs = serde_json::from_slice(args).expect("DRC108: bad balance args");
             serde_json::to_vec(&s.balance(&a.device_id, &a.resource_type)).unwrap()
         }
 
         // -- Mutations -------------------------------------------------------
         "allocate" => {
             let s = state.as_mut().expect("DRC108: not initialised");
-            let a: AllocateArgs =
-                serde_json::from_slice(args).expect("DRC108: bad allocate args");
+            let a: AllocateArgs = serde_json::from_slice(args).expect("DRC108: bad allocate args");
             s.allocate(caller, a.device_id, a.resource_type, a.amount, a.expires_at);
             serde_json::to_vec("ok").unwrap()
         }
@@ -261,7 +254,13 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC108: not initialised");
             let a: TransferResourceArgs =
                 serde_json::from_slice(args).expect("DRC108: bad transfer_resource args");
-            s.transfer_resource(caller, a.from_device, a.to_device, a.resource_type, a.amount);
+            s.transfer_resource(
+                caller,
+                a.from_device,
+                a.to_device,
+                a.resource_type,
+                a.amount,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "purchase_resource" => {
@@ -280,8 +279,7 @@ pub fn dispatch(
         }
         "set_price" => {
             let s = state.as_mut().expect("DRC108: not initialised");
-            let a: SetPriceArgs =
-                serde_json::from_slice(args).expect("DRC108: bad set_price args");
+            let a: SetPriceArgs = serde_json::from_slice(args).expect("DRC108: bad set_price args");
             s.set_price(caller, a.resource_type, a.price_per_unit);
             serde_json::to_vec("ok").unwrap()
         }

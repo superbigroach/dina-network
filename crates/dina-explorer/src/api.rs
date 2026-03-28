@@ -77,7 +77,12 @@ fn tx_to_response(
     let (tx_type, from, to, amount) = match tx {
         Transaction::Transfer {
             from, to, amount, ..
-        } => ("transfer".to_string(), from.to_string(), Some(to.to_string()), Some(*amount)),
+        } => (
+            "transfer".to_string(),
+            from.to_string(),
+            Some(to.to_string()),
+            Some(*amount),
+        ),
         Transaction::DeployContract { from, .. } => {
             ("deploy_contract".to_string(), from.to_string(), None, None)
         }
@@ -197,9 +202,7 @@ async fn get_block_by_height(
 ) -> impl IntoResponse {
     match state.db.get_block(height) {
         Ok(Some(block)) => Json(block_to_response(&block)).into_response(),
-        Ok(None) => {
-            error_response(StatusCode::NOT_FOUND, "block not found").into_response()
-        }
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "block not found").into_response(),
         Err(e) => {
             warn!("failed to load block {height}: {e}");
             error_response(StatusCode::INTERNAL_SERVER_ERROR, "database error").into_response()
@@ -221,9 +224,7 @@ async fn get_block_by_hash(
 
     match state.db.get_block_by_hash(hash) {
         Ok(Some(block)) => Json(block_to_response(&block)).into_response(),
-        Ok(None) => {
-            error_response(StatusCode::NOT_FOUND, "block not found").into_response()
-        }
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "block not found").into_response(),
         Err(e) => {
             warn!("failed to load block by hash: {e}");
             error_response(StatusCode::INTERNAL_SERVER_ERROR, "database error").into_response()
@@ -253,9 +254,7 @@ async fn get_transaction(
             };
             Json(tx_to_response(tx, *block_height, timestamp)).into_response()
         }
-        None => {
-            error_response(StatusCode::NOT_FOUND, "transaction not found").into_response()
-        }
+        None => error_response(StatusCode::NOT_FOUND, "transaction not found").into_response(),
     }
 }
 
@@ -524,7 +523,11 @@ async fn list_devices(
 
     let total = all_devices.len() as u64;
     let skip = ((page - 1) * limit) as usize;
-    let data: Vec<DeviceResponse> = all_devices.into_iter().skip(skip).take(limit as usize).collect();
+    let data: Vec<DeviceResponse> = all_devices
+        .into_iter()
+        .skip(skip)
+        .take(limit as usize)
+        .collect();
     let has_more = (skip as u64) + (data.len() as u64) < total;
 
     Json(PaginatedResponse {

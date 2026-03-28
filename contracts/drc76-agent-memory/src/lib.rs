@@ -69,16 +69,19 @@ impl AgentMemoryState {
             entry.updated_at = timestamp;
             entry.max_age = max_age;
         } else {
-            self.memories.insert(composite, MemoryEntry {
-                key,
-                value,
-                value_type,
-                created_at: timestamp,
-                updated_at: timestamp,
-                access_count: 0,
-                max_age,
-                shared_with: Vec::new(),
-            });
+            self.memories.insert(
+                composite,
+                MemoryEntry {
+                    key,
+                    value,
+                    value_type,
+                    created_at: timestamp,
+                    updated_at: timestamp,
+                    access_count: 0,
+                    max_age,
+                    shared_with: Vec::new(),
+                },
+            );
         }
     }
 
@@ -91,7 +94,9 @@ impl AgentMemoryState {
             return self.memories.get(&composite);
         }
         // Check if any other agent shared this key with caller
-        let shared_key = self.memories.iter()
+        let shared_key = self
+            .memories
+            .iter()
             .find(|((agent, k), entry)| {
                 k == key && *agent != caller && entry.shared_with.contains(&caller)
             })
@@ -111,7 +116,8 @@ impl AgentMemoryState {
     }
 
     pub fn list_memories(&self, caller: &Address) -> Vec<&MemoryEntry> {
-        self.memories.iter()
+        self.memories
+            .iter()
             .filter(|((addr, _), _)| addr == caller)
             .map(|(_, entry)| entry)
             .collect()
@@ -134,7 +140,8 @@ impl AgentMemoryState {
     }
 
     pub fn search_by_prefix(&self, caller: &Address, prefix: &str) -> Vec<&MemoryEntry> {
-        self.memories.iter()
+        self.memories
+            .iter()
             .filter(|((addr, key), _)| addr == caller && key.starts_with(prefix))
             .map(|(_, entry)| entry)
             .collect()
@@ -142,7 +149,9 @@ impl AgentMemoryState {
 
     pub fn cleanup_expired(&mut self, current_time: u64) -> u32 {
         let mut removed = 0u32;
-        let expired_keys: Vec<(Address, String)> = self.memories.iter()
+        let expired_keys: Vec<(Address, String)> = self
+            .memories
+            .iter()
             .filter(|(_, entry)| {
                 if let Some(max_age) = entry.max_age {
                     current_time > entry.created_at + max_age
@@ -162,7 +171,10 @@ impl AgentMemoryState {
 
     pub fn share_memory(&mut self, caller: Address, key: &str, with_agent: Address) {
         let composite = (caller, key.to_string());
-        let entry = self.memories.get_mut(&composite).expect("DRC76: memory not found");
+        let entry = self
+            .memories
+            .get_mut(&composite)
+            .expect("DRC76: memory not found");
         if !entry.shared_with.contains(&with_agent) {
             entry.shared_with.push(with_agent);
         }
@@ -174,15 +186,30 @@ impl AgentMemoryState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct StoreArgs { key: String, value: Vec<u8>, value_type: ValueType, timestamp: u64, max_age: Option<u64> }
+struct StoreArgs {
+    key: String,
+    value: Vec<u8>,
+    value_type: ValueType,
+    timestamp: u64,
+    max_age: Option<u64>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct KeyArgs { key: String }
+struct KeyArgs {
+    key: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct PrefixArgs { prefix: String }
+struct PrefixArgs {
+    prefix: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CleanupArgs { current_time: u64 }
+struct CleanupArgs {
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ShareArgs { key: String, with_agent: Address }
+struct ShareArgs {
+    key: String,
+    with_agent: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<AgentMemoryState>,
@@ -256,9 +283,30 @@ mod tests {
 
     fn setup() -> AgentMemoryState {
         let mut s = AgentMemoryState::new(OWNER);
-        s.store(AGENT_A, "goal".into(), b"reach destination X".to_vec(), ValueType::Text, 1000, None);
-        s.store(AGENT_A, "context.user".into(), b"{\"name\":\"Bob\"}".to_vec(), ValueType::Json, 1001, None);
-        s.store(AGENT_A, "context.session".into(), b"{\"id\":42}".to_vec(), ValueType::Json, 1002, Some(3600));
+        s.store(
+            AGENT_A,
+            "goal".into(),
+            b"reach destination X".to_vec(),
+            ValueType::Text,
+            1000,
+            None,
+        );
+        s.store(
+            AGENT_A,
+            "context.user".into(),
+            b"{\"name\":\"Bob\"}".to_vec(),
+            ValueType::Json,
+            1001,
+            None,
+        );
+        s.store(
+            AGENT_A,
+            "context.session".into(),
+            b"{\"id\":42}".to_vec(),
+            ValueType::Json,
+            1002,
+            Some(3600),
+        );
         s
     }
 
@@ -274,7 +322,14 @@ mod tests {
     #[test]
     fn test_update_existing_key() {
         let mut s = setup();
-        s.store(AGENT_A, "goal".into(), b"new goal".to_vec(), ValueType::Text, 2000, None);
+        s.store(
+            AGENT_A,
+            "goal".into(),
+            b"new goal".to_vec(),
+            ValueType::Text,
+            2000,
+            None,
+        );
         let entry = s.recall(AGENT_A, "goal").unwrap();
         assert_eq!(entry.value, b"new goal");
         assert_eq!(entry.created_at, 1000); // original create time preserved

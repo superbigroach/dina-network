@@ -109,8 +109,7 @@ pub fn dispatch(
 
         "set_admin" => {
             let s = state.as_mut().expect("DRC19: not initialised");
-            let a: SetAdminArgs =
-                serde_json::from_slice(args).expect("DRC19: bad set_admin args");
+            let a: SetAdminArgs = serde_json::from_slice(args).expect("DRC19: bad set_admin args");
             s.set_admin(caller, a.new_admin);
             serde_json::to_vec("ok").unwrap()
         }
@@ -197,10 +196,7 @@ mod tests {
     #[should_panic(expected = "DRC19: recipients list is empty")]
     fn test_empty_recipients_fails() {
         let mut state = init_state();
-        let args = serde_json::to_vec(&BatchTransferArgs {
-            recipients: vec![],
-        })
-        .unwrap();
+        let args = serde_json::to_vec(&BatchTransferArgs { recipients: vec![] }).unwrap();
         dispatch(&mut state, "batch_transfer", &args, ADMIN);
     }
 

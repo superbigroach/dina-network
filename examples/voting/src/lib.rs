@@ -274,16 +274,14 @@ pub fn dispatch(
 
         "vote" => {
             let s = state.as_mut().expect("Voting: not initialised");
-            let a: VoteArgs =
-                serde_json::from_slice(args).expect("Voting: bad vote args");
+            let a: VoteArgs = serde_json::from_slice(args).expect("Voting: bad vote args");
             s.vote(caller, a.poll_id, a.option_index, a.current_time);
             serde_json::to_vec("ok").unwrap()
         }
 
         "get_results" => {
             let s = state.as_ref().expect("Voting: not initialised");
-            let a: PollIdArgs =
-                serde_json::from_slice(args).expect("Voting: bad get_results args");
+            let a: PollIdArgs = serde_json::from_slice(args).expect("Voting: bad get_results args");
             let results: Vec<ResultEntry> = s
                 .get_results(a.poll_id)
                 .into_iter()
@@ -294,16 +292,14 @@ pub fn dispatch(
 
         "close_poll" => {
             let s = state.as_mut().expect("Voting: not initialised");
-            let a: PollIdArgs =
-                serde_json::from_slice(args).expect("Voting: bad close_poll args");
+            let a: PollIdArgs = serde_json::from_slice(args).expect("Voting: bad close_poll args");
             s.close_poll(caller, a.poll_id);
             serde_json::to_vec("ok").unwrap()
         }
 
         "get_poll" => {
             let s = state.as_ref().expect("Voting: not initialised");
-            let a: PollIdArgs =
-                serde_json::from_slice(args).expect("Voting: bad get_poll args");
+            let a: PollIdArgs = serde_json::from_slice(args).expect("Voting: bad get_poll args");
             serde_json::to_vec(&s.get_poll(a.poll_id)).unwrap()
         }
 

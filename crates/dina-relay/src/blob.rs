@@ -133,7 +133,11 @@ mod tests {
     use super::*;
     use dina_core::crypto;
 
-    fn make_test_blob() -> (RelayBlob, ed25519_dalek::SigningKey, ed25519_dalek::SigningKey) {
+    fn make_test_blob() -> (
+        RelayBlob,
+        ed25519_dalek::SigningKey,
+        ed25519_dalek::SigningKey,
+    ) {
         let (sender_sk, sender_vk) = crypto::generate_keypair();
         let (receiver_sk, receiver_vk) = crypto::generate_keypair();
 

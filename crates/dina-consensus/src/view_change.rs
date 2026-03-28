@@ -20,12 +20,7 @@ pub struct ViewChange {
 
 impl ViewChange {
     /// Create a new signed view change message.
-    pub fn new(
-        height: u64,
-        old_round: u32,
-        new_round: u32,
-        signing_key: &SigningKey,
-    ) -> Self {
+    pub fn new(height: u64, old_round: u32, new_round: u32, signing_key: &SigningKey) -> Self {
         let voter = signing_key.verifying_key().to_bytes();
         let sign_bytes = Self::sign_bytes(height, old_round, new_round);
         let signature = signing_key.sign(&sign_bytes);
@@ -154,8 +149,7 @@ impl ViewChangeCollector {
         if round_messages.contains_key(&vc.voter) {
             debug!(
                 voter = hex::encode(vc.voter),
-                new_round,
-                "Rejected duplicate view change"
+                new_round, "Rejected duplicate view change"
             );
             return None;
         }
@@ -176,8 +170,7 @@ impl ViewChangeCollector {
         if round_messages.len() >= quorum {
             info!(
                 height = self.height,
-                new_round,
-                "View change quorum reached — advancing to new round"
+                new_round, "View change quorum reached — advancing to new round"
             );
             Some(new_round)
         } else {
@@ -187,9 +180,7 @@ impl ViewChangeCollector {
 
     /// Get the number of view change messages received for a specific target round.
     pub fn count_for_round(&self, new_round: u32) -> usize {
-        self.messages
-            .get(&new_round)
-            .map_or(0, |m| m.len())
+        self.messages.get(&new_round).map_or(0, |m| m.len())
     }
 
     /// Get all view change messages for a specific target round.

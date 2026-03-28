@@ -84,22 +84,28 @@ impl ComputeState {
         storage_gb: u32,
         price_per_hour: u64,
     ) -> u64 {
-        assert!(cpu_cores > 0 || storage_gb > 0, "DRC57: must offer some resources");
+        assert!(
+            cpu_cores > 0 || storage_gb > 0,
+            "DRC57: must offer some resources"
+        );
         assert!(price_per_hour > 0, "DRC57: price must be positive");
         let id = self.next_offer_id;
         self.next_offer_id += 1;
-        self.offers.insert(id, ComputeOffer {
+        self.offers.insert(
             id,
-            provider: caller,
-            cpu_cores,
-            gpu_available,
-            memory_gb,
-            storage_gb,
-            price_per_hour,
-            available: true,
-            total_jobs: 0,
-            total_earned: 0,
-        });
+            ComputeOffer {
+                id,
+                provider: caller,
+                cpu_cores,
+                gpu_available,
+                memory_gb,
+                storage_gb,
+                price_per_hour,
+                available: true,
+                total_jobs: 0,
+                total_earned: 0,
+            },
+        );
         id
     }
 
@@ -113,9 +119,18 @@ impl ComputeState {
     ) -> u64 {
         let offer = self.offers.get(&offer_id).expect("DRC57: offer not found");
         assert!(offer.available, "DRC57: offer not available");
-        assert!(resources.cpu_cores <= offer.cpu_cores, "DRC57: not enough CPU");
-        assert!(resources.memory_gb <= offer.memory_gb, "DRC57: not enough memory");
-        assert!(resources.storage_gb <= offer.storage_gb, "DRC57: not enough storage");
+        assert!(
+            resources.cpu_cores <= offer.cpu_cores,
+            "DRC57: not enough CPU"
+        );
+        assert!(
+            resources.memory_gb <= offer.memory_gb,
+            "DRC57: not enough memory"
+        );
+        assert!(
+            resources.storage_gb <= offer.storage_gb,
+            "DRC57: not enough storage"
+        );
         if resources.gpu_needed {
             assert!(offer.gpu_available, "DRC57: GPU not available");
         }
@@ -126,19 +141,22 @@ impl ComputeState {
         let job_id = self.next_job_id;
         self.next_job_id += 1;
 
-        self.jobs.insert(job_id, ComputeJob {
-            id: job_id,
-            client: caller,
-            provider,
-            offer_id,
-            resources,
-            duration_hours,
-            total_cost,
-            status: JobStatus::Pending,
-            started_at,
-            completed_at: None,
-            result_hash: None,
-        });
+        self.jobs.insert(
+            job_id,
+            ComputeJob {
+                id: job_id,
+                client: caller,
+                provider,
+                offer_id,
+                resources,
+                duration_hours,
+                total_cost,
+                status: JobStatus::Pending,
+                started_at,
+                completed_at: None,
+                result_hash: None,
+            },
+        );
         job_id
     }
 
@@ -149,7 +167,13 @@ impl ComputeState {
         job.status = JobStatus::Running;
     }
 
-    pub fn complete_job(&mut self, caller: Address, job_id: u64, result_hash: [u8; 32], completed_at: u64) {
+    pub fn complete_job(
+        &mut self,
+        caller: Address,
+        job_id: u64,
+        result_hash: [u8; 32],
+        completed_at: u64,
+    ) {
         let job = self.jobs.get_mut(&job_id).expect("DRC57: job not found");
         assert!(caller == job.provider, "DRC57: only provider can complete");
         assert!(job.status == JobStatus::Running, "DRC57: job not running");
@@ -196,22 +220,43 @@ impl ComputeState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ListComputeArgs { cpu_cores: u32, gpu_available: bool, memory_gb: u32, storage_gb: u32, price_per_hour: u64 }
+struct ListComputeArgs {
+    cpu_cores: u32,
+    gpu_available: bool,
+    memory_gb: u32,
+    storage_gb: u32,
+    price_per_hour: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct HireComputeArgs { offer_id: u64, resources: ResourceRequest, duration_hours: u32, started_at: u64 }
+struct HireComputeArgs {
+    offer_id: u64,
+    resources: ResourceRequest,
+    duration_hours: u32,
+    started_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct StartJobArgs { job_id: u64 }
+struct StartJobArgs {
+    job_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CompleteJobArgs { job_id: u64, result_hash: [u8; 32], completed_at: u64 }
+struct CompleteJobArgs {
+    job_id: u64,
+    result_hash: [u8; 32],
+    completed_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CancelJobArgs { job_id: u64 }
+struct CancelJobArgs {
+    job_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct GetJobArgs { job_id: u64 }
+struct GetJobArgs {
+    job_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<ComputeState>,
@@ -228,13 +273,26 @@ pub fn dispatch(
         "list_compute" => {
             let s = state.as_mut().expect("DRC57: not initialised");
             let a: ListComputeArgs = serde_json::from_slice(args).expect("DRC57: bad args");
-            let id = s.list_compute(caller, a.cpu_cores, a.gpu_available, a.memory_gb, a.storage_gb, a.price_per_hour);
+            let id = s.list_compute(
+                caller,
+                a.cpu_cores,
+                a.gpu_available,
+                a.memory_gb,
+                a.storage_gb,
+                a.price_per_hour,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "hire_compute" => {
             let s = state.as_mut().expect("DRC57: not initialised");
             let a: HireComputeArgs = serde_json::from_slice(args).expect("DRC57: bad args");
-            let id = s.hire_compute(caller, a.offer_id, a.resources, a.duration_hours, a.started_at);
+            let id = s.hire_compute(
+                caller,
+                a.offer_id,
+                a.resources,
+                a.duration_hours,
+                a.started_at,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "start_job" => {
@@ -300,7 +358,12 @@ mod tests {
     #[test]
     fn test_hire_and_complete_job() {
         let (mut s, offer_id) = setup_with_offer();
-        let resources = ResourceRequest { cpu_cores: 4, gpu_needed: true, memory_gb: 16, storage_gb: 100 };
+        let resources = ResourceRequest {
+            cpu_cores: 4,
+            gpu_needed: true,
+            memory_gb: 16,
+            storage_gb: 100,
+        };
         let job_id = s.hire_compute(CLIENT, offer_id, resources, 5, 1000);
         let job = s.get_job(job_id).unwrap();
         assert_eq!(job.total_cost, 500); // 100 * 5
@@ -317,7 +380,12 @@ mod tests {
     #[test]
     fn test_cancel_job() {
         let (mut s, offer_id) = setup_with_offer();
-        let resources = ResourceRequest { cpu_cores: 2, gpu_needed: false, memory_gb: 8, storage_gb: 50 };
+        let resources = ResourceRequest {
+            cpu_cores: 2,
+            gpu_needed: false,
+            memory_gb: 8,
+            storage_gb: 50,
+        };
         let job_id = s.hire_compute(CLIENT, offer_id, resources, 1, 1000);
         s.cancel_job(CLIENT, job_id);
         assert_eq!(s.get_job(job_id).unwrap().status, JobStatus::Cancelled);
@@ -327,7 +395,12 @@ mod tests {
     #[should_panic(expected = "not enough CPU")]
     fn test_exceed_cpu_resources() {
         let (mut s, offer_id) = setup_with_offer();
-        let resources = ResourceRequest { cpu_cores: 16, gpu_needed: false, memory_gb: 8, storage_gb: 50 };
+        let resources = ResourceRequest {
+            cpu_cores: 16,
+            gpu_needed: false,
+            memory_gb: 8,
+            storage_gb: 50,
+        };
         s.hire_compute(CLIENT, offer_id, resources, 1, 1000);
     }
 
@@ -335,7 +408,12 @@ mod tests {
     #[should_panic(expected = "only provider can start")]
     fn test_client_cannot_start_job() {
         let (mut s, offer_id) = setup_with_offer();
-        let resources = ResourceRequest { cpu_cores: 2, gpu_needed: false, memory_gb: 8, storage_gb: 50 };
+        let resources = ResourceRequest {
+            cpu_cores: 2,
+            gpu_needed: false,
+            memory_gb: 8,
+            storage_gb: 50,
+        };
         let job_id = s.hire_compute(CLIENT, offer_id, resources, 1, 1000);
         s.start_job(CLIENT, job_id);
     }
@@ -343,7 +421,12 @@ mod tests {
     #[test]
     fn test_offer_stats_after_completion() {
         let (mut s, offer_id) = setup_with_offer();
-        let resources = ResourceRequest { cpu_cores: 2, gpu_needed: false, memory_gb: 8, storage_gb: 50 };
+        let resources = ResourceRequest {
+            cpu_cores: 2,
+            gpu_needed: false,
+            memory_gb: 8,
+            storage_gb: 50,
+        };
         let job_id = s.hire_compute(CLIENT, offer_id, resources, 3, 1000);
         s.start_job(PROVIDER, job_id);
         s.complete_job(PROVIDER, job_id, [0xAA; 32], 2000);

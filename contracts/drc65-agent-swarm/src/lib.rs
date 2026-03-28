@@ -89,26 +89,37 @@ impl SwarmState {
         assert!(max_agents >= 2, "DRC65: need at least 2 agents");
         let id = self.next_swarm_id;
         self.next_swarm_id += 1;
-        self.swarms.insert(id, AgentSwarm {
+        self.swarms.insert(
             id,
-            coordinator: caller,
-            agents: vec![caller],
-            objective,
-            status: SwarmStatus::Forming,
-            consensus_method,
-            created_at: timestamp,
-            budget,
-            spent: 0,
-            max_agents,
-        });
+            AgentSwarm {
+                id,
+                coordinator: caller,
+                agents: vec![caller],
+                objective,
+                status: SwarmStatus::Forming,
+                consensus_method,
+                created_at: timestamp,
+                budget,
+                spent: 0,
+                max_agents,
+            },
+        );
         id
     }
 
     pub fn join_swarm(&mut self, caller: Address, swarm_id: SwarmId) {
-        let swarm = self.swarms.get_mut(&swarm_id).expect("DRC65: swarm not found");
-        assert!(swarm.status == SwarmStatus::Forming || swarm.status == SwarmStatus::Active,
-            "DRC65: swarm not accepting members");
-        assert!((swarm.agents.len() as u64) < swarm.max_agents, "DRC65: swarm full");
+        let swarm = self
+            .swarms
+            .get_mut(&swarm_id)
+            .expect("DRC65: swarm not found");
+        assert!(
+            swarm.status == SwarmStatus::Forming || swarm.status == SwarmStatus::Active,
+            "DRC65: swarm not accepting members"
+        );
+        assert!(
+            (swarm.agents.len() as u64) < swarm.max_agents,
+            "DRC65: swarm full"
+        );
         assert!(!swarm.agents.contains(&caller), "DRC65: already a member");
         swarm.agents.push(caller);
         if swarm.status == SwarmStatus::Forming && swarm.agents.len() >= 2 {
@@ -127,37 +138,44 @@ impl SwarmState {
     ) -> TaskId {
         let swarm = self.swarms.get(&swarm_id).expect("DRC65: swarm not found");
         assert!(caller == swarm.coordinator, "DRC65: only coordinator");
-        assert!(swarm.status == SwarmStatus::Active, "DRC65: swarm not active");
+        assert!(
+            swarm.status == SwarmStatus::Active,
+            "DRC65: swarm not active"
+        );
         // Verify all assigned agents are members
         for agent in &assigned_agents {
             assert!(swarm.agents.contains(agent), "DRC65: agent not in swarm");
         }
         let total_reward = reward_per_agent * assigned_agents.len() as u64;
-        assert!(swarm.budget - swarm.spent >= total_reward, "DRC65: insufficient budget");
+        assert!(
+            swarm.budget - swarm.spent >= total_reward,
+            "DRC65: insufficient budget"
+        );
 
         let id = self.next_task_id;
         self.next_task_id += 1;
-        self.tasks.insert(id, SwarmTask {
+        self.tasks.insert(
             id,
-            swarm_id,
-            description,
-            assigned_agents,
-            results: BTreeMap::new(),
-            consensus_result: None,
-            deadline,
-            reward_per_agent,
-        });
+            SwarmTask {
+                id,
+                swarm_id,
+                description,
+                assigned_agents,
+                results: BTreeMap::new(),
+                consensus_result: None,
+                deadline,
+                reward_per_agent,
+            },
+        );
         id
     }
 
-    pub fn submit_result(
-        &mut self,
-        caller: Address,
-        task_id: TaskId,
-        result: Vec<u8>,
-    ) {
+    pub fn submit_result(&mut self, caller: Address, task_id: TaskId, result: Vec<u8>) {
         let task = self.tasks.get_mut(&task_id).expect("DRC65: task not found");
-        assert!(task.assigned_agents.contains(&caller), "DRC65: not assigned");
+        assert!(
+            task.assigned_agents.contains(&caller),
+            "DRC65: not assigned"
+        );
         let key = addr_key(&caller);
         assert!(!task.results.contains_key(&key), "DRC65: already submitted");
         task.results.insert(key, result);
@@ -165,16 +183,24 @@ impl SwarmState {
 
     pub fn reach_consensus(&mut self, caller: Address, task_id: TaskId) -> Option<Vec<u8>> {
         let task = self.tasks.get(&task_id).expect("DRC65: task not found");
-        let swarm = self.swarms.get(&task.swarm_id).expect("DRC65: swarm not found");
+        let swarm = self
+            .swarms
+            .get(&task.swarm_id)
+            .expect("DRC65: swarm not found");
         assert!(caller == swarm.coordinator, "DRC65: only coordinator");
-        assert!(task.consensus_result.is_none(), "DRC65: consensus already reached");
+        assert!(
+            task.consensus_result.is_none(),
+            "DRC65: consensus already reached"
+        );
 
         let total_assigned = task.assigned_agents.len();
         let submitted = task.results.len();
 
         let consensus = match swarm.consensus_method {
             ConsensusMethod::Unanimous => {
-                if submitted < total_assigned { return None; }
+                if submitted < total_assigned {
+                    return None;
+                }
                 // All must match
                 let values: Vec<&Vec<u8>> = task.results.values().collect();
                 if values.windows(2).all(|w| w[0] == w[1]) {
@@ -184,24 +210,30 @@ impl SwarmState {
                 }
             }
             ConsensusMethod::Majority => {
-                if submitted * 2 <= total_assigned { return None; }
+                if submitted * 2 <= total_assigned {
+                    return None;
+                }
                 // Find most common result
                 let mut counts: BTreeMap<&Vec<u8>, usize> = BTreeMap::new();
                 for v in task.results.values() {
                     *counts.entry(v).or_insert(0) += 1;
                 }
-                counts.into_iter()
+                counts
+                    .into_iter()
                     .max_by_key(|(_, c)| *c)
                     .map(|(v, _)| v.clone())
             }
             ConsensusMethod::WeightedVote => {
                 // Equal weights, pick most common
-                if submitted == 0 { return None; }
+                if submitted == 0 {
+                    return None;
+                }
                 let mut counts: BTreeMap<&Vec<u8>, usize> = BTreeMap::new();
                 for v in task.results.values() {
                     *counts.entry(v).or_insert(0) += 1;
                 }
-                counts.into_iter()
+                counts
+                    .into_iter()
                     .max_by_key(|(_, c)| *c)
                     .map(|(v, _)| v.clone())
             }
@@ -220,7 +252,10 @@ impl SwarmState {
     }
 
     pub fn complete_swarm(&mut self, caller: Address, swarm_id: SwarmId) {
-        let swarm = self.swarms.get_mut(&swarm_id).expect("DRC65: swarm not found");
+        let swarm = self
+            .swarms
+            .get_mut(&swarm_id)
+            .expect("DRC65: swarm not found");
         assert!(caller == swarm.coordinator, "DRC65: only coordinator");
         assert!(swarm.status == SwarmStatus::Active, "DRC65: not active");
         swarm.status = SwarmStatus::Completed;
@@ -228,8 +263,12 @@ impl SwarmState {
 
     pub fn distribute_rewards(&self, task_id: TaskId) -> Vec<(Address, u64)> {
         let task = self.tasks.get(&task_id).expect("DRC65: task not found");
-        assert!(task.consensus_result.is_some(), "DRC65: no consensus reached");
-        task.assigned_agents.iter()
+        assert!(
+            task.consensus_result.is_some(),
+            "DRC65: no consensus reached"
+        );
+        task.assigned_agents
+            .iter()
             .filter(|a| task.results.contains_key(&addr_key(a)))
             .map(|a| (*a, task.reward_per_agent))
             .collect()
@@ -241,17 +280,38 @@ impl SwarmState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateSwarmArgs { objective: String, consensus_method: ConsensusMethod, budget: u64, max_agents: u64, timestamp: u64 }
+struct CreateSwarmArgs {
+    objective: String,
+    consensus_method: ConsensusMethod,
+    budget: u64,
+    max_agents: u64,
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct JoinSwarmArgs { swarm_id: SwarmId }
+struct JoinSwarmArgs {
+    swarm_id: SwarmId,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AssignTaskArgs { swarm_id: SwarmId, description: String, assigned_agents: Vec<Address>, deadline: u64, reward_per_agent: u64 }
+struct AssignTaskArgs {
+    swarm_id: SwarmId,
+    description: String,
+    assigned_agents: Vec<Address>,
+    deadline: u64,
+    reward_per_agent: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SubmitResultArgs { task_id: TaskId, result: Vec<u8> }
+struct SubmitResultArgs {
+    task_id: TaskId,
+    result: Vec<u8>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TaskIdArgs { task_id: TaskId }
+struct TaskIdArgs {
+    task_id: TaskId,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SwarmIdArgs { swarm_id: SwarmId }
+struct SwarmIdArgs {
+    swarm_id: SwarmId,
+}
 
 pub fn dispatch(
     state: &mut Option<SwarmState>,
@@ -268,7 +328,14 @@ pub fn dispatch(
         "create_swarm" => {
             let s = state.as_mut().expect("DRC65: not initialised");
             let a: CreateSwarmArgs = serde_json::from_slice(args).expect("DRC65: bad args");
-            let id = s.create_swarm(caller, a.objective, a.consensus_method, a.budget, a.max_agents, a.timestamp);
+            let id = s.create_swarm(
+                caller,
+                a.objective,
+                a.consensus_method,
+                a.budget,
+                a.max_agents,
+                a.timestamp,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "join_swarm" => {
@@ -280,7 +347,14 @@ pub fn dispatch(
         "assign_task" => {
             let s = state.as_mut().expect("DRC65: not initialised");
             let a: AssignTaskArgs = serde_json::from_slice(args).expect("DRC65: bad args");
-            let id = s.assign_task(caller, a.swarm_id, a.description, a.assigned_agents, a.deadline, a.reward_per_agent);
+            let id = s.assign_task(
+                caller,
+                a.swarm_id,
+                a.description,
+                a.assigned_agents,
+                a.deadline,
+                a.reward_per_agent,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "submit_result" => {
@@ -326,8 +400,14 @@ mod tests {
 
     fn setup_active_swarm() -> (SwarmState, SwarmId) {
         let mut s = SwarmState::new(COORDINATOR);
-        let sid = s.create_swarm(COORDINATOR, "classify images".into(),
-            ConsensusMethod::Majority, 10_000, 5, 1000);
+        let sid = s.create_swarm(
+            COORDINATOR,
+            "classify images".into(),
+            ConsensusMethod::Majority,
+            10_000,
+            5,
+            1000,
+        );
         s.join_swarm(AGENT_A, sid);
         s.join_swarm(AGENT_B, sid);
         (s, sid)
@@ -345,9 +425,14 @@ mod tests {
     #[test]
     fn test_assign_task_and_submit() {
         let (mut s, sid) = setup_active_swarm();
-        let tid = s.assign_task(COORDINATOR, sid,
+        let tid = s.assign_task(
+            COORDINATOR,
+            sid,
             "classify batch-42".into(),
-            vec![AGENT_A, AGENT_B], 5000, 100);
+            vec![AGENT_A, AGENT_B],
+            5000,
+            100,
+        );
         assert_eq!(tid, 1);
 
         s.submit_result(AGENT_A, tid, vec![1, 0]); // "cat"
@@ -361,9 +446,14 @@ mod tests {
     fn test_majority_consensus() {
         let (mut s, sid) = setup_active_swarm();
         s.join_swarm(AGENT_C, sid);
-        let tid = s.assign_task(COORDINATOR, sid,
+        let tid = s.assign_task(
+            COORDINATOR,
+            sid,
             "sentiment".into(),
-            vec![AGENT_A, AGENT_B, AGENT_C], 5000, 50);
+            vec![AGENT_A, AGENT_B, AGENT_C],
+            5000,
+            50,
+        );
 
         s.submit_result(AGENT_A, tid, vec![1]); // positive
         s.submit_result(AGENT_B, tid, vec![0]); // negative
@@ -376,12 +466,24 @@ mod tests {
     #[test]
     fn test_unanimous_consensus_fails_on_disagreement() {
         let mut s = SwarmState::new(COORDINATOR);
-        let sid = s.create_swarm(COORDINATOR, "critical task".into(),
-            ConsensusMethod::Unanimous, 10_000, 5, 1000);
+        let sid = s.create_swarm(
+            COORDINATOR,
+            "critical task".into(),
+            ConsensusMethod::Unanimous,
+            10_000,
+            5,
+            1000,
+        );
         s.join_swarm(AGENT_A, sid);
 
-        let tid = s.assign_task(COORDINATOR, sid,
-            "verify".into(), vec![COORDINATOR, AGENT_A], 5000, 100);
+        let tid = s.assign_task(
+            COORDINATOR,
+            sid,
+            "verify".into(),
+            vec![COORDINATOR, AGENT_A],
+            5000,
+            100,
+        );
 
         s.submit_result(COORDINATOR, tid, vec![1]);
         s.submit_result(AGENT_A, tid, vec![0]);
@@ -393,8 +495,14 @@ mod tests {
     #[test]
     fn test_distribute_rewards() {
         let (mut s, sid) = setup_active_swarm();
-        let tid = s.assign_task(COORDINATOR, sid,
-            "task".into(), vec![AGENT_A, AGENT_B], 5000, 200);
+        let tid = s.assign_task(
+            COORDINATOR,
+            sid,
+            "task".into(),
+            vec![AGENT_A, AGENT_B],
+            5000,
+            200,
+        );
 
         s.submit_result(AGENT_A, tid, vec![42]);
         s.submit_result(AGENT_B, tid, vec![42]);

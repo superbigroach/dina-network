@@ -110,10 +110,7 @@ impl FleetManagerState {
             .fleets
             .get_mut(&fleet_id)
             .expect("DRC35: fleet not found");
-        assert!(
-            fleet.owner == caller,
-            "DRC35: only owner can assign tasks"
-        );
+        assert!(fleet.owner == caller, "DRC35: only owner can assign tasks");
         assert!(
             fleet.robots.contains(&robot_id),
             "DRC35: robot not in fleet"
@@ -237,8 +234,7 @@ pub fn dispatch(
         }
         "add_robot" => {
             let s = state.as_mut().expect("DRC35: not initialised");
-            let a: AddRobotArgs =
-                serde_json::from_slice(args).expect("DRC35: bad add_robot args");
+            let a: AddRobotArgs = serde_json::from_slice(args).expect("DRC35: bad add_robot args");
             s.add_robot(caller, a.fleet_id, a.robot_id);
             serde_json::to_vec("ok").unwrap()
         }

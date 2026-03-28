@@ -75,11 +75,17 @@ impl EscrowState {
 
         // Validate shares sum to 10000
         let share_sum: u16 = agents.iter().map(|a| a.contribution_share_bps).sum();
-        assert_eq!(share_sum, 10000, "DRC67: agent shares must sum to 10000 bps");
+        assert_eq!(
+            share_sum, 10000,
+            "DRC67: agent shares must sum to 10000 bps"
+        );
 
         // Validate milestone weights sum to 10000
         let weight_sum: u16 = milestones.iter().map(|m| m.weight_bps).sum();
-        assert_eq!(weight_sum, 10000, "DRC67: milestone weights must sum to 10000 bps");
+        assert_eq!(
+            weight_sum, 10000,
+            "DRC67: milestone weights must sum to 10000 bps"
+        );
 
         let num_milestones = milestones.len();
         let mut agent_completions = BTreeMap::new();
@@ -89,17 +95,20 @@ impl EscrowState {
 
         let id = self.next_escrow_id;
         self.next_escrow_id += 1;
-        self.escrows.insert(id, MultiAgentEscrow {
+        self.escrows.insert(
             id,
-            client: caller,
-            agents,
-            total_amount,
-            milestones,
-            agent_completions,
-            client_verifications: vec![false; num_milestones],
-            status: EscrowStatus::Active,
-            released_amount: 0,
-        });
+            MultiAgentEscrow {
+                id,
+                client: caller,
+                agents,
+                total_amount,
+                milestones,
+                agent_completions,
+                client_verifications: vec![false; num_milestones],
+                status: EscrowStatus::Active,
+                released_amount: 0,
+            },
+        );
         id
     }
 
@@ -109,46 +118,72 @@ impl EscrowState {
         escrow_id: u64,
         milestone_idx: usize,
     ) {
-        let esc = self.escrows.get_mut(&escrow_id).expect("DRC67: escrow not found");
-        assert!(esc.status == EscrowStatus::Active, "DRC67: escrow not active");
+        let esc = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC67: escrow not found");
+        assert!(
+            esc.status == EscrowStatus::Active,
+            "DRC67: escrow not active"
+        );
         let key = addr_key(&caller);
-        let completions = esc.agent_completions.get_mut(&key).expect("DRC67: not an agent");
-        assert!(milestone_idx < completions.len(), "DRC67: invalid milestone index");
-        assert!(!completions[milestone_idx], "DRC67: milestone already completed");
+        let completions = esc
+            .agent_completions
+            .get_mut(&key)
+            .expect("DRC67: not an agent");
+        assert!(
+            milestone_idx < completions.len(),
+            "DRC67: invalid milestone index"
+        );
+        assert!(
+            !completions[milestone_idx],
+            "DRC67: milestone already completed"
+        );
         completions[milestone_idx] = true;
     }
 
-    pub fn client_verify(
-        &mut self,
-        caller: Address,
-        escrow_id: u64,
-        milestone_idx: usize,
-    ) {
-        let esc = self.escrows.get_mut(&escrow_id).expect("DRC67: escrow not found");
+    pub fn client_verify(&mut self, caller: Address, escrow_id: u64, milestone_idx: usize) {
+        let esc = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC67: escrow not found");
         assert!(caller == esc.client, "DRC67: only client can verify");
-        assert!(esc.status == EscrowStatus::Active, "DRC67: escrow not active");
-        assert!(milestone_idx < esc.milestones.len(), "DRC67: invalid milestone index");
-        assert!(!esc.client_verifications[milestone_idx], "DRC67: already verified");
+        assert!(
+            esc.status == EscrowStatus::Active,
+            "DRC67: escrow not active"
+        );
+        assert!(
+            milestone_idx < esc.milestones.len(),
+            "DRC67: invalid milestone index"
+        );
+        assert!(
+            !esc.client_verifications[milestone_idx],
+            "DRC67: already verified"
+        );
 
         // All agents must have completed this milestone
         for agent in &esc.agents {
             let key = addr_key(&agent.address);
             let completions = esc.agent_completions.get(&key).unwrap();
-            assert!(completions[milestone_idx],
-                "DRC67: not all agents completed milestone");
+            assert!(
+                completions[milestone_idx],
+                "DRC67: not all agents completed milestone"
+            );
         }
 
         esc.client_verifications[milestone_idx] = true;
     }
 
-    pub fn release_proportional(
-        &mut self,
-        caller: Address,
-        escrow_id: u64,
-    ) -> Vec<(Address, u64)> {
-        let esc = self.escrows.get_mut(&escrow_id).expect("DRC67: escrow not found");
+    pub fn release_proportional(&mut self, caller: Address, escrow_id: u64) -> Vec<(Address, u64)> {
+        let esc = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC67: escrow not found");
         assert!(caller == esc.client, "DRC67: only client can release");
-        assert!(esc.status == EscrowStatus::Active, "DRC67: escrow not active");
+        assert!(
+            esc.status == EscrowStatus::Active,
+            "DRC67: escrow not active"
+        );
 
         // Calculate amount to release based on verified milestones
         let mut verified_weight: u64 = 0;
@@ -181,11 +216,20 @@ impl EscrowState {
     }
 
     pub fn dispute(&mut self, caller: Address, escrow_id: u64) {
-        let esc = self.escrows.get_mut(&escrow_id).expect("DRC67: escrow not found");
-        assert!(esc.status == EscrowStatus::Active, "DRC67: escrow not active");
+        let esc = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC67: escrow not found");
+        assert!(
+            esc.status == EscrowStatus::Active,
+            "DRC67: escrow not active"
+        );
         // Client or any agent can dispute
         let is_agent = esc.agents.iter().any(|a| a.address == caller);
-        assert!(caller == esc.client || is_agent, "DRC67: not a party to escrow");
+        assert!(
+            caller == esc.client || is_agent,
+            "DRC67: not a party to escrow"
+        );
         esc.status = EscrowStatus::Disputed;
     }
 }
@@ -195,11 +239,20 @@ impl EscrowState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateEscrowArgs { agents: Vec<AgentShare>, total_amount: u64, milestones: Vec<Milestone> }
+struct CreateEscrowArgs {
+    agents: Vec<AgentShare>,
+    total_amount: u64,
+    milestones: Vec<Milestone>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MilestoneArgs { escrow_id: u64, milestone_idx: usize }
+struct MilestoneArgs {
+    escrow_id: u64,
+    milestone_idx: usize,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct EscrowIdArgs { escrow_id: u64 }
+struct EscrowIdArgs {
+    escrow_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<EscrowState>,
@@ -262,13 +315,28 @@ mod tests {
     fn two_agent_escrow() -> (EscrowState, u64) {
         let mut s = EscrowState::new(CLIENT);
         let agents = vec![
-            AgentShare { address: AGENT_A, contribution_share_bps: 6000 },
-            AgentShare { address: AGENT_B, contribution_share_bps: 4000 },
+            AgentShare {
+                address: AGENT_A,
+                contribution_share_bps: 6000,
+            },
+            AgentShare {
+                address: AGENT_B,
+                contribution_share_bps: 4000,
+            },
         ];
         let milestones = vec![
-            Milestone { description: "Design".into(), weight_bps: 3000 },
-            Milestone { description: "Implementation".into(), weight_bps: 5000 },
-            Milestone { description: "Testing".into(), weight_bps: 2000 },
+            Milestone {
+                description: "Design".into(),
+                weight_bps: 3000,
+            },
+            Milestone {
+                description: "Implementation".into(),
+                weight_bps: 5000,
+            },
+            Milestone {
+                description: "Testing".into(),
+                weight_bps: 2000,
+            },
         ];
         let id = s.create_escrow(CLIENT, agents, 10_000, milestones);
         (s, id)
@@ -339,10 +407,19 @@ mod tests {
     fn test_invalid_shares_rejected() {
         let mut s = EscrowState::new(CLIENT);
         let agents = vec![
-            AgentShare { address: AGENT_A, contribution_share_bps: 5000 },
-            AgentShare { address: AGENT_B, contribution_share_bps: 3000 },
+            AgentShare {
+                address: AGENT_A,
+                contribution_share_bps: 5000,
+            },
+            AgentShare {
+                address: AGENT_B,
+                contribution_share_bps: 3000,
+            },
         ];
-        let milestones = vec![Milestone { description: "x".into(), weight_bps: 10000 }];
+        let milestones = vec![Milestone {
+            description: "x".into(),
+            weight_bps: 10000,
+        }];
         s.create_escrow(CLIENT, agents, 1000, milestones);
     }
 
@@ -360,12 +437,17 @@ mod tests {
         let mut state = None;
         dispatch(&mut state, "init", b"{}", CLIENT);
         let args = serde_json::to_vec(&CreateEscrowArgs {
-            agents: vec![
-                AgentShare { address: AGENT_A, contribution_share_bps: 10000 },
-            ],
+            agents: vec![AgentShare {
+                address: AGENT_A,
+                contribution_share_bps: 10000,
+            }],
             total_amount: 5000,
-            milestones: vec![Milestone { description: "all".into(), weight_bps: 10000 }],
-        }).unwrap();
+            milestones: vec![Milestone {
+                description: "all".into(),
+                weight_bps: 10000,
+            }],
+        })
+        .unwrap();
         let result = dispatch(&mut state, "create_escrow", &args, CLIENT);
         let id: u64 = serde_json::from_slice(&result).unwrap();
         assert_eq!(id, 1);

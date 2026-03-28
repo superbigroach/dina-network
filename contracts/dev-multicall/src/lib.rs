@@ -41,11 +41,8 @@ impl MulticallState {
         for call in calls {
             // In a real runtime this would invoke the target contract.
             // Here we simulate successful execution and record the call.
-            let return_data = serde_json::to_vec(&format!(
-                "executed:{}:{}",
-                call.target, call.method
-            ))
-            .unwrap();
+            let return_data =
+                serde_json::to_vec(&format!("executed:{}:{}", call.target, call.method)).unwrap();
             results.push(MulticallResult {
                 success: true,
                 return_data,
@@ -69,11 +66,9 @@ impl MulticallState {
                     return_data: b"error: empty method".to_vec(),
                 });
             } else {
-                let return_data = serde_json::to_vec(&format!(
-                    "executed:{}:{}",
-                    call.target, call.method
-                ))
-                .unwrap();
+                let return_data =
+                    serde_json::to_vec(&format!("executed:{}:{}", call.target, call.method))
+                        .unwrap();
                 results.push(MulticallResult {
                     success: true,
                     return_data,
@@ -85,11 +80,7 @@ impl MulticallState {
     }
 
     /// Execute multiple calls with USDC value attached per call.
-    pub fn multicall_with_value(
-        &mut self,
-        calls: &[Call],
-        values: &[u64],
-    ) -> Vec<MulticallResult> {
+    pub fn multicall_with_value(&mut self, calls: &[Call], values: &[u64]) -> Vec<MulticallResult> {
         assert!(!calls.is_empty(), "Multicall: empty call list");
         assert_eq!(
             calls.len(),
@@ -143,8 +134,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "Multicall: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("Multicall: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("Multicall: bad init args");
             *state = Some(MulticallState::new(a.owner));
             serde_json::to_vec("ok").unwrap()
         }
@@ -167,8 +157,8 @@ pub fn dispatch(
 
         "multicall_with_value" => {
             let s = state.as_mut().expect("Multicall: not initialised");
-            let a: MulticallWithValueArgs = serde_json::from_slice(args)
-                .expect("Multicall: bad multicall_with_value args");
+            let a: MulticallWithValueArgs =
+                serde_json::from_slice(args).expect("Multicall: bad multicall_with_value args");
             let results = s.multicall_with_value(&a.calls, &a.values);
             serde_json::to_vec(&results).unwrap()
         }

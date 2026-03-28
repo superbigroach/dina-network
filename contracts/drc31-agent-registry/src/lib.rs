@@ -267,8 +267,7 @@ pub fn dispatch(
         }
         "get_agent" => {
             let s = state.as_ref().expect("DRC31: not initialised");
-            let a: GetAgentArgs =
-                serde_json::from_slice(args).expect("DRC31: bad get_agent args");
+            let a: GetAgentArgs = serde_json::from_slice(args).expect("DRC31: bad get_agent args");
             serde_json::to_vec(&s.get_agent(&a.address)).unwrap()
         }
         _ => panic!("DRC31: unknown method '{method}'"),

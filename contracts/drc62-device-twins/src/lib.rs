@@ -75,18 +75,21 @@ impl TwinState {
         let id = self.next_twin_id;
         self.next_twin_id += 1;
         self.device_index.insert(physical_device_id.clone(), id);
-        self.twins.insert(id, DigitalTwin {
+        self.twins.insert(
             id,
-            physical_device_id,
-            owner: caller,
-            state: BTreeMap::new(),
-            last_sync: 0,
-            sync_count: 0,
-            alerts: Vec::new(),
-            next_alert_id: 1,
-            history: Vec::new(),
-            max_history: if max_history == 0 { 100 } else { max_history },
-        });
+            DigitalTwin {
+                id,
+                physical_device_id,
+                owner: caller,
+                state: BTreeMap::new(),
+                last_sync: 0,
+                sync_count: 0,
+                alerts: Vec::new(),
+                next_alert_id: 1,
+                history: Vec::new(),
+                max_history: if max_history == 0 { 100 } else { max_history },
+            },
+        );
         id
     }
 
@@ -98,7 +101,10 @@ impl TwinState {
         timestamp: u64,
     ) {
         let twin = self.twins.get_mut(&twin_id).expect("DRC62: twin not found");
-        assert!(caller == twin.owner || caller == self.owner, "DRC62: not authorised");
+        assert!(
+            caller == twin.owner || caller == self.owner,
+            "DRC62: not authorised"
+        );
         assert!(!state_updates.is_empty(), "DRC62: empty update");
 
         // Save current state to history before updating
@@ -127,7 +133,8 @@ impl TwinState {
     }
 
     pub fn get_twin_by_device(&self, physical_device_id: &str) -> Option<&DigitalTwin> {
-        self.device_index.get(physical_device_id)
+        self.device_index
+            .get(physical_device_id)
             .and_then(|id| self.twins.get(id))
     }
 
@@ -140,7 +147,10 @@ impl TwinState {
         timestamp: u64,
     ) -> u64 {
         let twin = self.twins.get_mut(&twin_id).expect("DRC62: twin not found");
-        assert!(caller == twin.owner || caller == self.owner, "DRC62: not authorised");
+        assert!(
+            caller == twin.owner || caller == self.owner,
+            "DRC62: not authorised"
+        );
         let alert_id = twin.next_alert_id;
         twin.next_alert_id += 1;
         twin.alerts.push(Alert {
@@ -155,8 +165,13 @@ impl TwinState {
 
     pub fn acknowledge_alert(&mut self, caller: Address, twin_id: u64, alert_id: u64) {
         let twin = self.twins.get_mut(&twin_id).expect("DRC62: twin not found");
-        assert!(caller == twin.owner || caller == self.owner, "DRC62: not authorised");
-        let alert = twin.alerts.iter_mut()
+        assert!(
+            caller == twin.owner || caller == self.owner,
+            "DRC62: not authorised"
+        );
+        let alert = twin
+            .alerts
+            .iter_mut()
             .find(|a| a.id == alert_id)
             .expect("DRC62: alert not found");
         assert!(!alert.acknowledged, "DRC62: alert already acknowledged");
@@ -178,22 +193,41 @@ impl TwinState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateTwinArgs { physical_device_id: String, max_history: usize }
+struct CreateTwinArgs {
+    physical_device_id: String,
+    max_history: usize,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct SyncStateArgs { twin_id: u64, state_updates: BTreeMap<String, String>, timestamp: u64 }
+struct SyncStateArgs {
+    twin_id: u64,
+    state_updates: BTreeMap<String, String>,
+    timestamp: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct TwinIdArgs { twin_id: u64 }
+struct TwinIdArgs {
+    twin_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DeviceIdArgs { physical_device_id: String }
+struct DeviceIdArgs {
+    physical_device_id: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct SetAlertArgs { twin_id: u64, severity: Severity, message: String, timestamp: u64 }
+struct SetAlertArgs {
+    twin_id: u64,
+    severity: Severity,
+    message: String,
+    timestamp: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AckAlertArgs { twin_id: u64, alert_id: u64 }
+struct AckAlertArgs {
+    twin_id: u64,
+    alert_id: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<TwinState>,
@@ -319,8 +353,20 @@ mod tests {
     #[test]
     fn test_alerts_and_acknowledge() {
         let (mut s, twin_id) = setup_twin();
-        let a1 = s.set_alert(DEVICE_OWNER, twin_id, Severity::Warning, "Overheating".into(), 100);
-        let a2 = s.set_alert(DEVICE_OWNER, twin_id, Severity::Critical, "Motor stall".into(), 200);
+        let a1 = s.set_alert(
+            DEVICE_OWNER,
+            twin_id,
+            Severity::Warning,
+            "Overheating".into(),
+            100,
+        );
+        let a2 = s.set_alert(
+            DEVICE_OWNER,
+            twin_id,
+            Severity::Critical,
+            "Motor stall".into(),
+            200,
+        );
 
         let unacked = s.unacknowledged_alerts(twin_id);
         assert_eq!(unacked.len(), 2);
@@ -358,7 +404,8 @@ mod tests {
         let args = serde_json::to_vec(&CreateTwinArgs {
             physical_device_id: "sensor-42".into(),
             max_history: 10,
-        }).unwrap();
+        })
+        .unwrap();
         let result = dispatch(&mut state, "create_twin", &args, DEVICE_OWNER);
         let id: u64 = serde_json::from_slice(&result).unwrap();
         assert_eq!(id, 1);

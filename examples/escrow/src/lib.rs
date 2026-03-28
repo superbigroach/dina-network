@@ -220,11 +220,7 @@ impl EscrowState {
     /// # Returns
     /// A tuple of (amount released, seller address) so the VM can execute
     /// the actual USDC transfer.
-    pub fn confirm_delivery(
-        &mut self,
-        caller: [u8; 32],
-        deal_id: DealId,
-    ) -> (u64, [u8; 32]) {
+    pub fn confirm_delivery(&mut self, caller: [u8; 32], deal_id: DealId) -> (u64, [u8; 32]) {
         let deal = self
             .deals
             .get_mut(&deal_id)
@@ -366,8 +362,7 @@ pub fn dispatch(
 
         "fund_deal" => {
             let s = state.as_mut().expect("Escrow: not initialised");
-            let a: FundDealArgs =
-                serde_json::from_slice(args).expect("Escrow: bad fund_deal args");
+            let a: FundDealArgs = serde_json::from_slice(args).expect("Escrow: bad fund_deal args");
             s.fund_deal(caller, a.deal_id, a.usdc_attached);
             serde_json::to_vec("ok").unwrap()
         }
@@ -390,16 +385,14 @@ pub fn dispatch(
 
         "dispute" => {
             let s = state.as_mut().expect("Escrow: not initialised");
-            let a: DealIdArgs =
-                serde_json::from_slice(args).expect("Escrow: bad dispute args");
+            let a: DealIdArgs = serde_json::from_slice(args).expect("Escrow: bad dispute args");
             s.dispute(caller, a.deal_id);
             serde_json::to_vec("ok").unwrap()
         }
 
         "refund" => {
             let s = state.as_mut().expect("Escrow: not initialised");
-            let a: DealIdArgs =
-                serde_json::from_slice(args).expect("Escrow: bad refund args");
+            let a: DealIdArgs = serde_json::from_slice(args).expect("Escrow: bad refund args");
             let refunded = s.refund(caller, a.deal_id);
             serde_json::to_vec(&refunded).unwrap()
         }
@@ -407,8 +400,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "get_deal" => {
             let s = state.as_ref().expect("Escrow: not initialised");
-            let a: DealIdArgs =
-                serde_json::from_slice(args).expect("Escrow: bad get_deal args");
+            let a: DealIdArgs = serde_json::from_slice(args).expect("Escrow: bad get_deal args");
             serde_json::to_vec(&s.get_deal(a.deal_id)).unwrap()
         }
 

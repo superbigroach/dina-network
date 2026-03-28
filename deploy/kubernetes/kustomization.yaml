@@ -24,7 +24,9 @@ resources:
 
   # Configuration
   - configmap.yaml
-  - secrets.yaml
+  # NOTE: secrets.yaml.template is a template — do NOT include it directly.
+  # Create actual secrets via kubectl or a secrets manager (see secrets.yaml.template).
+  # - secrets.yaml
 
   # Stateful validators
   - validator-statefulset.yaml

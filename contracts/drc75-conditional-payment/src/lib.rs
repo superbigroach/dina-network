@@ -9,12 +9,29 @@ type Address = [u8; 32];
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum ConditionType {
-    PriceAbove { pair: String, threshold: u64 },
-    PriceBelow { pair: String, threshold: u64 },
-    SensorReading { device: Address, metric: String, threshold: u64 },
-    BlockHeight { height: u64 },
-    TimePassed { timestamp: u64 },
-    CustomOracle { oracle_addr: Address, key: String },
+    PriceAbove {
+        pair: String,
+        threshold: u64,
+    },
+    PriceBelow {
+        pair: String,
+        threshold: u64,
+    },
+    SensorReading {
+        device: Address,
+        metric: String,
+        threshold: u64,
+    },
+    BlockHeight {
+        height: u64,
+    },
+    TimePassed {
+        timestamp: u64,
+    },
+    CustomOracle {
+        oracle_addr: Address,
+        key: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -79,7 +96,10 @@ impl ConditionalPaymentState {
         created_at: u64,
     ) -> u64 {
         assert!(amount > 0, "DRC75: amount must be positive");
-        assert!(deadline > created_at, "DRC75: deadline must be in the future");
+        assert!(
+            deadline > created_at,
+            "DRC75: deadline must be in the future"
+        );
 
         let bal = self.balances.get(&caller).copied().unwrap_or(0);
         assert!(bal >= amount, "DRC75: insufficient balance");
@@ -87,17 +107,32 @@ impl ConditionalPaymentState {
 
         let id = self.next_id;
         self.next_id += 1;
-        self.payments.insert(id, ConditionalPayment {
-            id, payer: caller, payee, amount, condition,
-            deadline, status: PaymentStatus::Pending, created_at,
-        });
+        self.payments.insert(
+            id,
+            ConditionalPayment {
+                id,
+                payer: caller,
+                payee,
+                amount,
+                condition,
+                deadline,
+                status: PaymentStatus::Pending,
+                created_at,
+            },
+        );
         id
     }
 
     /// Check whether the condition is satisfied and execute the payment.
     pub fn check_and_execute(&mut self, payment_id: u64, oracle: &OracleData) -> bool {
-        let payment = self.payments.get(&payment_id).expect("DRC75: payment not found");
-        assert!(payment.status == PaymentStatus::Pending, "DRC75: payment not pending");
+        let payment = self
+            .payments
+            .get(&payment_id)
+            .expect("DRC75: payment not found");
+        assert!(
+            payment.status == PaymentStatus::Pending,
+            "DRC75: payment not pending"
+        );
 
         let satisfied = match &payment.condition {
             ConditionType::PriceAbove { threshold, .. } => {
@@ -115,9 +150,7 @@ impl ConditionalPaymentState {
             ConditionType::TimePassed { timestamp } => {
                 oracle.current_time.map_or(false, |t| t >= *timestamp)
             }
-            ConditionType::CustomOracle { .. } => {
-                oracle.oracle_result.unwrap_or(false)
-            }
+            ConditionType::CustomOracle { .. } => oracle.oracle_result.unwrap_or(false),
         };
 
         if satisfied {
@@ -133,7 +166,9 @@ impl ConditionalPaymentState {
     /// Cancel all expired pending payments, returning funds to payers.
     pub fn cancel_expired(&mut self, current_time: u64) -> u32 {
         let mut cancelled = 0u32;
-        let expired: Vec<u64> = self.payments.values()
+        let expired: Vec<u64> = self
+            .payments
+            .values()
             .filter(|p| p.status == PaymentStatus::Pending && current_time > p.deadline)
             .map(|p| p.id)
             .collect();
@@ -150,7 +185,8 @@ impl ConditionalPaymentState {
     }
 
     pub fn my_conditional_payments(&self, addr: &Address) -> Vec<&ConditionalPayment> {
-        self.payments.values()
+        self.payments
+            .values()
             .filter(|p| &p.payer == addr || &p.payee == addr)
             .collect()
     }
@@ -161,15 +197,30 @@ impl ConditionalPaymentState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateArgs { payee: Address, amount: u64, condition: ConditionType, deadline: u64, created_at: u64 }
+struct CreateArgs {
+    payee: Address,
+    amount: u64,
+    condition: ConditionType,
+    deadline: u64,
+    created_at: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CheckArgs { payment_id: u64, oracle_data: OracleData }
+struct CheckArgs {
+    payment_id: u64,
+    oracle_data: OracleData,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CancelExpiredArgs { current_time: u64 }
+struct CancelExpiredArgs {
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArgs { addr: Address }
+struct AddrArgs {
+    addr: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<ConditionalPaymentState>,
@@ -192,7 +243,14 @@ pub fn dispatch(
         "create_conditional_payment" => {
             let s = state.as_mut().expect("DRC75: not initialised");
             let a: CreateArgs = serde_json::from_slice(args).expect("DRC75: bad args");
-            let id = s.create_conditional_payment(caller, a.payee, a.amount, a.condition, a.deadline, a.created_at);
+            let id = s.create_conditional_payment(
+                caller,
+                a.payee,
+                a.amount,
+                a.condition,
+                a.deadline,
+                a.created_at,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "check_and_execute" => {
@@ -238,19 +296,37 @@ mod tests {
     fn test_create_price_above_and_execute() {
         let mut s = setup();
         let id = s.create_conditional_payment(
-            ALICE, BOB, 1000,
-            ConditionType::PriceAbove { pair: "DINA/USD".into(), threshold: 500 },
-            10000, 1000,
+            ALICE,
+            BOB,
+            1000,
+            ConditionType::PriceAbove {
+                pair: "DINA/USD".into(),
+                threshold: 500,
+            },
+            10000,
+            1000,
         );
         assert_eq!(s.balances.get(&ALICE).copied().unwrap(), 49000);
 
         // Price not met
-        let oracle = OracleData { price: Some(400), sensor_value: None, block_height: None, current_time: None, oracle_result: None };
+        let oracle = OracleData {
+            price: Some(400),
+            sensor_value: None,
+            block_height: None,
+            current_time: None,
+            oracle_result: None,
+        };
         assert!(!s.check_and_execute(id, &oracle));
         assert_eq!(s.payments.get(&id).unwrap().status, PaymentStatus::Pending);
 
         // Price met
-        let oracle = OracleData { price: Some(600), sensor_value: None, block_height: None, current_time: None, oracle_result: None };
+        let oracle = OracleData {
+            price: Some(600),
+            sensor_value: None,
+            block_height: None,
+            current_time: None,
+            oracle_result: None,
+        };
         assert!(s.check_and_execute(id, &oracle));
         assert_eq!(s.payments.get(&id).unwrap().status, PaymentStatus::Executed);
         assert_eq!(s.balances.get(&BOB).copied().unwrap(), 1000);
@@ -261,11 +337,24 @@ mod tests {
         let mut s = setup();
         let device: Address = [99u8; 32];
         let id = s.create_conditional_payment(
-            ALICE, BOB, 500,
-            ConditionType::SensorReading { device, metric: "temperature".into(), threshold: 100 },
-            10000, 1000,
+            ALICE,
+            BOB,
+            500,
+            ConditionType::SensorReading {
+                device,
+                metric: "temperature".into(),
+                threshold: 100,
+            },
+            10000,
+            1000,
         );
-        let oracle = OracleData { price: None, sensor_value: Some(100), block_height: None, current_time: None, oracle_result: None };
+        let oracle = OracleData {
+            price: None,
+            sensor_value: Some(100),
+            block_height: None,
+            current_time: None,
+            oracle_result: None,
+        };
         assert!(s.check_and_execute(id, &oracle));
     }
 
@@ -273,14 +362,20 @@ mod tests {
     fn test_cancel_expired() {
         let mut s = setup();
         s.create_conditional_payment(
-            ALICE, BOB, 1000,
+            ALICE,
+            BOB,
+            1000,
             ConditionType::TimePassed { timestamp: 5000 },
-            3000, 1000, // deadline 3000
+            3000,
+            1000, // deadline 3000
         );
         s.create_conditional_payment(
-            ALICE, BOB, 2000,
+            ALICE,
+            BOB,
+            2000,
             ConditionType::TimePassed { timestamp: 5000 },
-            6000, 1000, // deadline 6000
+            6000,
+            1000, // deadline 6000
         );
 
         // At time 4000, first payment expired but second is still pending
@@ -293,9 +388,12 @@ mod tests {
     fn test_my_conditional_payments() {
         let mut s = setup();
         s.create_conditional_payment(
-            ALICE, BOB, 100,
+            ALICE,
+            BOB,
+            100,
             ConditionType::BlockHeight { height: 1000 },
-            5000, 100,
+            5000,
+            100,
         );
         let alice_payments = s.my_conditional_payments(&ALICE);
         assert_eq!(alice_payments.len(), 1);
@@ -308,11 +406,23 @@ mod tests {
         let mut s = setup();
         let oracle_addr: Address = [88u8; 32];
         let id = s.create_conditional_payment(
-            ALICE, BOB, 300,
-            ConditionType::CustomOracle { oracle_addr, key: "task_complete".into() },
-            10000, 1000,
+            ALICE,
+            BOB,
+            300,
+            ConditionType::CustomOracle {
+                oracle_addr,
+                key: "task_complete".into(),
+            },
+            10000,
+            1000,
         );
-        let oracle = OracleData { price: None, sensor_value: None, block_height: None, current_time: None, oracle_result: Some(true) };
+        let oracle = OracleData {
+            price: None,
+            sensor_value: None,
+            block_height: None,
+            current_time: None,
+            oracle_result: Some(true),
+        };
         assert!(s.check_and_execute(id, &oracle));
         assert_eq!(s.balances.get(&BOB).copied().unwrap(), 300);
     }
@@ -322,9 +432,12 @@ mod tests {
     fn test_insufficient_balance() {
         let mut s = setup();
         s.create_conditional_payment(
-            ALICE, BOB, 999_999,
+            ALICE,
+            BOB,
+            999_999,
             ConditionType::BlockHeight { height: 10 },
-            5000, 100,
+            5000,
+            100,
         );
     }
 }

@@ -208,8 +208,14 @@ mod tests {
             abi: vec![MethodAbi {
                 name: "transfer".to_string(),
                 params: vec![
-                    ParamAbi { name: "to".to_string(), param_type: "Address".to_string() },
-                    ParamAbi { name: "amount".to_string(), param_type: "u64".to_string() },
+                    ParamAbi {
+                        name: "to".to_string(),
+                        param_type: "Address".to_string(),
+                    },
+                    ParamAbi {
+                        name: "amount".to_string(),
+                        param_type: "u64".to_string(),
+                    },
                 ],
                 returns: "bool".to_string(),
                 mutability: Mutability::Mutable,
@@ -246,7 +252,8 @@ mod tests {
     #[test]
     fn register_duplicate_address_fails() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, Some("a"))).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("a")))
+            .unwrap();
         let result = reg.register_contract(make_contract_info(1, 10, Some("b")));
         assert!(result.is_err());
         assert!(format!("{}", result.unwrap_err()).contains("already registered"));
@@ -255,7 +262,8 @@ mod tests {
     #[test]
     fn register_duplicate_name_fails() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, Some("token"))).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("token")))
+            .unwrap();
         let result = reg.register_contract(make_contract_info(2, 10, Some("token")));
         assert!(result.is_err());
         assert!(format!("{}", result.unwrap_err()).contains("already taken"));
@@ -264,7 +272,8 @@ mod tests {
     #[test]
     fn find_by_name() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, Some("mytoken"))).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("mytoken")))
+            .unwrap();
         assert_eq!(reg.find_by_name("mytoken"), Some(make_address(1)));
         assert_eq!(reg.find_by_name("nonexistent"), None);
     }
@@ -272,9 +281,12 @@ mod tests {
     #[test]
     fn contracts_by_deployer() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, Some("a"))).unwrap();
-        reg.register_contract(make_contract_info(2, 10, Some("b"))).unwrap();
-        reg.register_contract(make_contract_info(3, 20, Some("c"))).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("a")))
+            .unwrap();
+        reg.register_contract(make_contract_info(2, 10, Some("b")))
+            .unwrap();
+        reg.register_contract(make_contract_info(3, 20, Some("c")))
+            .unwrap();
         let deployer_10 = reg.contracts_by_deployer(&make_address(10));
         assert_eq!(deployer_10.len(), 2);
         let deployer_20 = reg.contracts_by_deployer(&make_address(20));
@@ -302,7 +314,8 @@ mod tests {
     #[test]
     fn verify_contract_success() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, Some("a"))).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("a")))
+            .unwrap();
         let src_hash = make_hash(0xAA);
         reg.verify_contract(&make_address(1), src_hash).unwrap();
         let info = reg.get_contract(&make_address(1)).unwrap();
@@ -313,8 +326,10 @@ mod tests {
     #[test]
     fn verify_contract_already_verified_fails() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, Some("a"))).unwrap();
-        reg.verify_contract(&make_address(1), make_hash(0xAA)).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("a")))
+            .unwrap();
+        reg.verify_contract(&make_address(1), make_hash(0xAA))
+            .unwrap();
         let result = reg.verify_contract(&make_address(1), make_hash(0xBB));
         assert!(result.is_err());
         assert!(format!("{}", result.unwrap_err()).contains("already verified"));
@@ -330,14 +345,16 @@ mod tests {
     #[test]
     fn update_metadata_by_deployer() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, None)).unwrap();
+        reg.register_contract(make_contract_info(1, 10, None))
+            .unwrap();
         let new_meta = ContractMetadata {
             description: "updated".to_string(),
             repository: "https://new.repo".to_string(),
             license: "Apache-2.0".to_string(),
             abi: vec![],
         };
-        reg.update_metadata(&make_address(1), &make_address(10), new_meta).unwrap();
+        reg.update_metadata(&make_address(1), &make_address(10), new_meta)
+            .unwrap();
         let info = reg.get_contract(&make_address(1)).unwrap();
         assert_eq!(info.metadata.description, "updated");
         assert_eq!(info.metadata.license, "Apache-2.0");
@@ -346,7 +363,8 @@ mod tests {
     #[test]
     fn update_metadata_wrong_deployer_fails() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, None)).unwrap();
+        reg.register_contract(make_contract_info(1, 10, None))
+            .unwrap();
         let new_meta = ContractMetadata {
             description: "hacked".to_string(),
             repository: String::new(),
@@ -362,9 +380,11 @@ mod tests {
     fn total_contracts() {
         let mut reg = ContractRegistry::new();
         assert_eq!(reg.total_contracts(), 0);
-        reg.register_contract(make_contract_info(1, 10, Some("a"))).unwrap();
+        reg.register_contract(make_contract_info(1, 10, Some("a")))
+            .unwrap();
         assert_eq!(reg.total_contracts(), 1);
-        reg.register_contract(make_contract_info(2, 10, Some("b"))).unwrap();
+        reg.register_contract(make_contract_info(2, 10, Some("b")))
+            .unwrap();
         assert_eq!(reg.total_contracts(), 2);
     }
 
@@ -377,7 +397,8 @@ mod tests {
     #[test]
     fn register_without_name_skips_name_index() {
         let mut reg = ContractRegistry::new();
-        reg.register_contract(make_contract_info(1, 10, None)).unwrap();
+        reg.register_contract(make_contract_info(1, 10, None))
+            .unwrap();
         assert!(reg.get_contract(&make_address(1)).is_some());
         // No name should be in the index
         assert_eq!(reg.name_index.len(), 0);

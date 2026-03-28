@@ -10,12 +10,19 @@ fn init() -> Option<RoyaltyRegistry> {
     state
 }
 
-fn register_and_set(state: &mut Option<RoyaltyRegistry>, creator: [u8; 32], token_id: u64, recipient: [u8; 32], bp: u16) {
+fn register_and_set(
+    state: &mut Option<RoyaltyRegistry>,
+    creator: [u8; 32],
+    token_id: u64,
+    recipient: [u8; 32],
+    bp: u16,
+) {
     let reg_args = serde_json::to_vec(&serde_json::json!({"token_id": token_id})).unwrap();
     dispatch(state, "register_creator", &reg_args, creator);
     let set_args = serde_json::to_vec(&serde_json::json!({
         "token_id": token_id, "recipient": recipient, "basis_points": bp
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "set_royalty", &set_args, creator);
 }
 
@@ -35,7 +42,8 @@ fn royalty_info_calculates_correctly() {
     register_and_set(&mut state, addr(2), 1, addr(3), 1000); // 10%
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": 1u64, "sale_price": 10000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "royalty_info", &args, addr(1));
     let (recipient, amount): ([u8; 32], u64) = serde_json::from_slice(&result).unwrap();
     assert_eq!(recipient, addr(3));
@@ -48,7 +56,8 @@ fn royalty_info_with_250_basis_points() {
     register_and_set(&mut state, addr(2), 1, addr(3), 250); // 2.5%
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": 1u64, "sale_price": 20000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "royalty_info", &args, addr(1));
     let (_recipient, amount): ([u8; 32], u64) = serde_json::from_slice(&result).unwrap();
     assert_eq!(amount, 500); // 2.5% of 20000
@@ -60,7 +69,8 @@ fn royalty_zero_sale_price_returns_zero() {
     register_and_set(&mut state, addr(2), 1, addr(3), 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": 1u64, "sale_price": 0u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "royalty_info", &args, addr(1));
     let (_recipient, amount): ([u8; 32], u64) = serde_json::from_slice(&result).unwrap();
     assert_eq!(amount, 0);
@@ -74,7 +84,8 @@ fn set_royalty_by_non_creator_fails() {
     dispatch(&mut state, "register_creator", &reg_args, addr(2));
     let set_args = serde_json::to_vec(&serde_json::json!({
         "token_id": 1u64, "recipient": addr(3), "basis_points": 500u16
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "set_royalty", &set_args, addr(99));
 }
 
@@ -86,7 +97,8 @@ fn set_royalty_over_100_percent_fails() {
     dispatch(&mut state, "register_creator", &reg_args, addr(2));
     let set_args = serde_json::to_vec(&serde_json::json!({
         "token_id": 1u64, "recipient": addr(3), "basis_points": 10001u16
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "set_royalty", &set_args, addr(2));
 }
 

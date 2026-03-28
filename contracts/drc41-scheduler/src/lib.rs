@@ -312,7 +312,10 @@ mod tests {
         let result = dispatch(&mut state, "execute_due_tasks", &exec_args, ALICE);
         let results: Vec<ExecutionResult> = serde_json::from_slice(&result).unwrap();
         assert_eq!(results.len(), 1);
-        assert_eq!(state.as_ref().unwrap().tasks.get(&id).unwrap().execute_at, 200);
+        assert_eq!(
+            state.as_ref().unwrap().tasks.get(&id).unwrap().execute_at,
+            200
+        );
     }
 
     #[test]

@@ -91,8 +91,8 @@ where
                 self.set(key, default);
                 // Re-deserialize to return an owned copy consistent with what was stored
                 let storage_key = self.storage_key(key);
-                let raw = host::storage_get_raw(&storage_key)
-                    .expect("value should exist after set");
+                let raw =
+                    host::storage_get_raw(&storage_key).expect("value should exist after set");
                 V::try_from_slice(&raw).expect("failed to deserialize map value")
             }
         }

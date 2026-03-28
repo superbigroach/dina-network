@@ -64,10 +64,7 @@ impl CapabilityRegistryState {
             "DRC102: must register at least one capability"
         );
 
-        let existing = self
-            .device_capabilities
-            .entry(device_id)
-            .or_default();
+        let existing = self.device_capabilities.entry(device_id).or_default();
 
         for cap in &capabilities {
             // Update the reverse index
@@ -142,7 +139,10 @@ impl CapabilityRegistryState {
                 found = true;
             }
         }
-        assert!(found, "DRC102: capability '{capability_type}' not found on device");
+        assert!(
+            found,
+            "DRC102: capability '{capability_type}' not found on device"
+        );
         let _ = caller;
     }
 
@@ -167,7 +167,10 @@ impl CapabilityRegistryState {
                 found = true;
             }
         }
-        assert!(found, "DRC102: capability '{capability_type}' not found on device");
+        assert!(
+            found,
+            "DRC102: capability '{capability_type}' not found on device"
+        );
         let _ = caller;
     }
 }
@@ -284,7 +287,13 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC102: not initialised");
             let a: UpdateStatusArgs =
                 serde_json::from_slice(args).expect("DRC102: bad update_status args");
-            s.update_status(caller, a.device_id, a.capability_type, a.new_status, a.timestamp);
+            s.update_status(
+                caller,
+                a.device_id,
+                a.capability_type,
+                a.new_status,
+                a.timestamp,
+            );
             serde_json::to_vec("ok").unwrap()
         }
 
@@ -292,7 +301,13 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC102: not initialised");
             let a: SetPricingArgs =
                 serde_json::from_slice(args).expect("DRC102: bad set_pricing args");
-            s.set_pricing(caller, a.device_id, a.capability_type, a.pricing, a.timestamp);
+            s.set_pricing(
+                caller,
+                a.device_id,
+                a.capability_type,
+                a.pricing,
+                a.timestamp,
+            );
             serde_json::to_vec("ok").unwrap()
         }
 

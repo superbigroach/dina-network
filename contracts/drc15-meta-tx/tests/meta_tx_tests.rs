@@ -13,7 +13,8 @@ fn init() -> Option<MetaTxRegistry> {
 fn register_forwarder(state: &mut Option<MetaTxRegistry>, forwarder: [u8; 32]) {
     let args = serde_json::to_vec(&serde_json::json!({
         "addr": forwarder, "name": "TestForwarder", "timestamp": 1000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "register_forwarder", &args, addr(1));
 }
 
@@ -53,7 +54,8 @@ fn verify_and_execute_succeeds_with_trusted_forwarder() {
             "data": [],
             "signature": make_sig()
         }
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "verify_and_execute", &args, addr(2));
     let success: bool = serde_json::from_slice(&result).unwrap();
     assert!(success);
@@ -68,7 +70,8 @@ fn verify_and_execute_increments_nonce() {
             "from": addr(3), "to": addr(4), "value": 100u64,
             "nonce": 0u64, "data": [], "signature": make_sig()
         }
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify_and_execute", &args, addr(2));
 
     let nonce_args = serde_json::to_vec(&serde_json::json!({"addr": addr(3)})).unwrap();
@@ -86,7 +89,8 @@ fn verify_and_execute_by_untrusted_fails() {
             "from": addr(3), "to": addr(4), "value": 100u64,
             "nonce": 0u64, "data": [], "signature": make_sig()
         }
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify_and_execute", &args, addr(99));
 }
 
@@ -100,7 +104,8 @@ fn verify_and_execute_with_wrong_nonce_fails() {
             "from": addr(3), "to": addr(4), "value": 100u64,
             "nonce": 5u64, "data": [], "signature": make_sig()
         }
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify_and_execute", &args, addr(2));
 }
 
@@ -114,7 +119,8 @@ fn verify_and_execute_with_short_signature_fails() {
             "from": addr(3), "to": addr(4), "value": 100u64,
             "nonce": 0u64, "data": [], "signature": vec![0u8; 10]
         }
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify_and_execute", &args, addr(2));
 }
 

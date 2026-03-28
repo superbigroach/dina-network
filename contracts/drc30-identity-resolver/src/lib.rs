@@ -50,14 +50,8 @@ impl IdentityState {
     }
 
     pub fn transfer_name(&mut self, caller: Address, name: String, new_owner: Address) {
-        let owner = self
-            .name_owners
-            .get(&name)
-            .expect("DRC30: name not found");
-        assert!(
-            *owner == caller,
-            "DRC30: only name owner can transfer"
-        );
+        let owner = self.name_owners.get(&name).expect("DRC30: name not found");
+        assert!(*owner == caller, "DRC30: only name owner can transfer");
         assert!(
             !self.addresses.contains_key(&new_owner),
             "DRC30: new owner already has a name"
@@ -83,20 +77,14 @@ impl IdentityState {
             "DRC30: caller has no registered name"
         );
         let devices = self.device_links.entry(caller).or_default();
-        assert!(
-            !devices.contains(&device),
-            "DRC30: device already linked"
-        );
+        assert!(!devices.contains(&device), "DRC30: device already linked");
         devices.push(device);
     }
 
     // -- Queries -------------------------------------------------------------
 
     pub fn resolve_name(&self, name: &str) -> Address {
-        *self
-            .names
-            .get(name)
-            .expect("DRC30: name not found")
+        *self.names.get(name).expect("DRC30: name not found")
     }
 
     pub fn reverse_resolve(&self, addr: &Address) -> &str {
@@ -197,8 +185,7 @@ pub fn dispatch(
         }
         "devices_of" => {
             let s = state.as_ref().expect("DRC30: not initialised");
-            let a: AddrArgs =
-                serde_json::from_slice(args).expect("DRC30: bad devices_of args");
+            let a: AddrArgs = serde_json::from_slice(args).expect("DRC30: bad devices_of args");
             let devices = s.devices_of(&a.addr);
             serde_json::to_vec(devices).unwrap()
         }

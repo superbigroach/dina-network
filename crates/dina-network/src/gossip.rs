@@ -5,16 +5,12 @@
 //! - `dina/blocks/v1`       -- new blocks
 //! - `dina/consensus/v1`    -- proposals, votes, view-changes
 
-use libp2p::gossipsub::{
-    self, IdentTopic, MessageAuthenticity, MessageId, ValidationMode,
-};
+use libp2p::gossipsub::{self, IdentTopic, MessageAuthenticity, MessageId, ValidationMode};
 use libp2p::identity::Keypair;
 use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
 
-use crate::message::{
-    BlockPayload, NetworkMessage, TransactionPayload,
-};
+use crate::message::{BlockPayload, NetworkMessage, TransactionPayload};
 
 /// The three canonical GossipSub topics.
 pub const TOPIC_TRANSACTIONS: &str = "dina/transactions/v1";
@@ -50,11 +46,8 @@ pub fn build_gossipsub(keypair: &Keypair) -> Result<gossipsub::Behaviour, String
         .build()
         .map_err(|e| e.to_string())?;
 
-    gossipsub::Behaviour::new(
-        MessageAuthenticity::Signed(keypair.clone()),
-        config,
-    )
-    .map_err(|e| e.to_string())
+    gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair.clone()), config)
+        .map_err(|e| e.to_string())
 }
 
 /// High-level wrapper for publishing typed messages to the right GossipSub topics.
@@ -71,7 +64,11 @@ impl DinaGossip {
             .to_bytes()
             .map_err(|e| PublishError::Serialization(e.to_string()))?;
         let topic = IdentTopic::new(TOPIC_TRANSACTIONS);
-        debug!(topic = TOPIC_TRANSACTIONS, bytes = data.len(), "publishing transaction");
+        debug!(
+            topic = TOPIC_TRANSACTIONS,
+            bytes = data.len(),
+            "publishing transaction"
+        );
         gossipsub
             .publish(topic, data)
             .map_err(|e| PublishError::Gossipsub(e.to_string()))
@@ -104,7 +101,10 @@ impl DinaGossip {
             | NetworkMessage::Vote(_)
             | NetworkMessage::ViewChange(_) => {}
             other => {
-                warn!(label = other.label(), "attempted to publish non-consensus message on consensus topic");
+                warn!(
+                    label = other.label(),
+                    "attempted to publish non-consensus message on consensus topic"
+                );
                 return Err(PublishError::WrongTopic(
                     "only Proposal, Vote, and ViewChange go on the consensus topic".into(),
                 ));
@@ -115,7 +115,11 @@ impl DinaGossip {
             .to_bytes()
             .map_err(|e| PublishError::Serialization(e.to_string()))?;
         let topic = IdentTopic::new(TOPIC_CONSENSUS);
-        debug!(topic = TOPIC_CONSENSUS, bytes = data.len(), "publishing consensus message");
+        debug!(
+            topic = TOPIC_CONSENSUS,
+            bytes = data.len(),
+            "publishing consensus message"
+        );
         gossipsub
             .publish(topic, data)
             .map_err(|e| PublishError::Gossipsub(e.to_string()))

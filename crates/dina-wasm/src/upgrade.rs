@@ -47,12 +47,7 @@ impl ContractUpgrader {
     /// Register a contract so it can be upgraded later.
     ///
     /// Must be called after initial deployment to track the owner and code.
-    pub fn register_contract(
-        &mut self,
-        contract: Address,
-        owner: Address,
-        wasm_bytes: &[u8],
-    ) {
+    pub fn register_contract(&mut self, contract: Address, owner: Address, wasm_bytes: &[u8]) {
         self.owners.insert(contract, owner);
         self.current_code.insert(contract, wasm_bytes.to_vec());
     }
@@ -136,12 +131,9 @@ impl ContractUpgrader {
             ));
         }
 
-        let history = self
-            .upgrade_history
-            .get(&contract)
-            .ok_or_else(|| {
-                DinaError::WasmExecutionError("no upgrade history to rollback".into())
-            })?;
+        let history = self.upgrade_history.get(&contract).ok_or_else(|| {
+            DinaError::WasmExecutionError("no upgrade history to rollback".into())
+        })?;
 
         let last_upgrade = history.last().ok_or_else(|| {
             DinaError::WasmExecutionError("no upgrade history to rollback".into())
@@ -344,9 +336,7 @@ mod tests {
         upgrader.register_contract(contract, owner, &v1);
 
         assert_eq!(upgrader.current_code(contract), Some(v1.as_slice()));
-        upgrader
-            .upgrade(contract, &v2, None, owner, 100)
-            .unwrap();
+        upgrader.upgrade(contract, &v2, None, owner, 100).unwrap();
         assert_eq!(upgrader.current_code(contract), Some(v2.as_slice()));
     }
 

@@ -102,10 +102,7 @@ impl RelaySubmitter {
         let blob_bytes = match bincode::serialize(&blob) {
             Ok(b) => b,
             Err(e) => {
-                return SubmissionResult::failure(
-                    blob_hash,
-                    format!("serialization failed: {e}"),
-                );
+                return SubmissionResult::failure(blob_hash, format!("serialization failed: {e}"));
             }
         };
 
@@ -240,10 +237,7 @@ impl RelaySubmitter {
     /// This is a minimal HTTP client implementation using tokio's TCP stream
     /// to avoid pulling in a heavy HTTP crate like reqwest. For production use,
     /// integrators would swap this for their preferred HTTP client.
-    async fn do_rpc_call(
-        &self,
-        request_body: &serde_json::Value,
-    ) -> Result<serde_json::Value> {
+    async fn do_rpc_call(&self, request_body: &serde_json::Value) -> Result<serde_json::Value> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpStream;
 
@@ -269,9 +263,9 @@ impl RelaySubmitter {
             format!("{host_port}:80")
         };
 
-        let mut stream = TcpStream::connect(&addr).await.map_err(|e| {
-            RelayError::NetworkError(format!("failed to connect to {addr}: {e}"))
-        })?;
+        let mut stream = TcpStream::connect(&addr)
+            .await
+            .map_err(|e| RelayError::NetworkError(format!("failed to connect to {addr}: {e}")))?;
 
         let request = format!(
             "POST {path} HTTP/1.1\r\n\
@@ -284,14 +278,16 @@ impl RelaySubmitter {
             body.len()
         );
 
-        stream.write_all(request.as_bytes()).await.map_err(|e| {
-            RelayError::NetworkError(format!("failed to write request: {e}"))
-        })?;
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .map_err(|e| RelayError::NetworkError(format!("failed to write request: {e}")))?;
 
         let mut response_buf = Vec::new();
-        stream.read_to_end(&mut response_buf).await.map_err(|e| {
-            RelayError::NetworkError(format!("failed to read response: {e}"))
-        })?;
+        stream
+            .read_to_end(&mut response_buf)
+            .await
+            .map_err(|e| RelayError::NetworkError(format!("failed to read response: {e}")))?;
 
         let response_str = String::from_utf8_lossy(&response_buf);
 
@@ -301,9 +297,8 @@ impl RelaySubmitter {
             .map(|i| &response_str[i + 4..])
             .unwrap_or(&response_str);
 
-        serde_json::from_str(json_body).map_err(|e| {
-            RelayError::SubmissionFailed(format!("failed to parse RPC response: {e}"))
-        })
+        serde_json::from_str(json_body)
+            .map_err(|e| RelayError::SubmissionFailed(format!("failed to parse RPC response: {e}")))
     }
 }
 

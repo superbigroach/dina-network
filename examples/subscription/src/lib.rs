@@ -119,10 +119,7 @@ impl SubscriptionState {
             amount_per_period > 0,
             "Subscription: amount must be positive"
         );
-        assert!(
-            period_seconds > 0,
-            "Subscription: period must be positive"
-        );
+        assert!(period_seconds > 0, "Subscription: period must be positive");
         assert!(
             caller != provider,
             "Subscription: subscriber and provider must be different"
@@ -298,16 +295,14 @@ pub fn dispatch(
 
         "cancel" => {
             let s = state.as_mut().expect("Subscription: not initialised");
-            let a: SubIdArgs =
-                serde_json::from_slice(args).expect("Subscription: bad cancel args");
+            let a: SubIdArgs = serde_json::from_slice(args).expect("Subscription: bad cancel args");
             s.cancel(caller, a.sub_id);
             serde_json::to_vec("ok").unwrap()
         }
 
         "get_subscription" => {
             let s = state.as_ref().expect("Subscription: not initialised");
-            let a: SubIdArgs =
-                serde_json::from_slice(args).expect("Subscription: bad get args");
+            let a: SubIdArgs = serde_json::from_slice(args).expect("Subscription: bad get args");
             serde_json::to_vec(&s.get_subscription(a.sub_id)).unwrap()
         }
 

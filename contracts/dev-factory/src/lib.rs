@@ -138,8 +138,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "Factory: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("Factory: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("Factory: bad init args");
             *state = Some(FactoryState::new(a.owner));
             serde_json::to_vec("ok").unwrap()
         }
@@ -154,8 +153,7 @@ pub fn dispatch(
 
         "deploy_from_template" => {
             let s = state.as_mut().expect("Factory: not initialised");
-            let a: DeployArgs =
-                serde_json::from_slice(args).expect("Factory: bad deploy args");
+            let a: DeployArgs = serde_json::from_slice(args).expect("Factory: bad deploy args");
             let address =
                 s.deploy_from_template(caller, &a.template_name, a.init_args, a.current_time);
             serde_json::to_vec(&address).unwrap()

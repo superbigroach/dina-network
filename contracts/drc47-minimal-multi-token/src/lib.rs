@@ -38,11 +38,17 @@ impl MinimalMultiTokenState {
     }
 
     pub fn allowance(&self, owner: &Address, spender: &Address, id: u64) -> u64 {
-        self.allowances.get(&(*owner, *spender, id)).copied().unwrap_or(0)
+        self.allowances
+            .get(&(*owner, *spender, id))
+            .copied()
+            .unwrap_or(0)
     }
 
     pub fn is_operator(&self, owner: &Address, operator: &Address) -> bool {
-        self.operators.get(&(*owner, *operator)).copied().unwrap_or(false)
+        self.operators
+            .get(&(*owner, *operator))
+            .copied()
+            .unwrap_or(false)
     }
 
     // -- Mutations -----------------------------------------------------------
@@ -101,21 +107,51 @@ impl MinimalMultiTokenState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct MintArgs { to: Address, id: u64, amount: u64 }
+struct MintArgs {
+    to: Address,
+    id: u64,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { to: Address, id: u64, amount: u64 }
+struct TransferArgs {
+    to: Address,
+    id: u64,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferFromArgs { from: Address, to: Address, id: u64, amount: u64 }
+struct TransferFromArgs {
+    from: Address,
+    to: Address,
+    id: u64,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ApproveArgs { spender: Address, id: u64, amount: u64 }
+struct ApproveArgs {
+    spender: Address,
+    id: u64,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SetOperatorArgs { operator: Address, approved: bool }
+struct SetOperatorArgs {
+    operator: Address,
+    approved: bool,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct BalanceOfArgs { owner: Address, id: u64 }
+struct BalanceOfArgs {
+    owner: Address,
+    id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AllowanceArgs { owner: Address, spender: Address, id: u64 }
+struct AllowanceArgs {
+    owner: Address,
+    spender: Address,
+    id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct IsOperatorArgs { owner: Address, operator: Address }
+struct IsOperatorArgs {
+    owner: Address,
+    operator: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<MinimalMultiTokenState>,
@@ -186,14 +222,26 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<MinimalMultiTokenState> {
         let mut state = None;
         dispatch(&mut state, "init", b"", addr(1));
         // Mint token id 1 and 2
-        let m1 = serde_json::to_vec(&MintArgs { to: addr(1), id: 1, amount: 1000 }).unwrap();
-        let m2 = serde_json::to_vec(&MintArgs { to: addr(1), id: 2, amount: 500 }).unwrap();
+        let m1 = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            id: 1,
+            amount: 1000,
+        })
+        .unwrap();
+        let m2 = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            id: 2,
+            amount: 500,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &m1, addr(1));
         dispatch(&mut state, "mint", &m2, addr(1));
         state
@@ -202,7 +250,12 @@ mod tests {
     #[test]
     fn test_transfer_single_id() {
         let mut state = setup();
-        let args = serde_json::to_vec(&TransferArgs { to: addr(2), id: 1, amount: 300 }).unwrap();
+        let args = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            id: 1,
+            amount: 300,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(1), 1), 700);
@@ -214,12 +267,21 @@ mod tests {
     #[test]
     fn test_approve_and_transfer_from() {
         let mut state = setup();
-        let approve = serde_json::to_vec(&ApproveArgs { spender: addr(3), id: 1, amount: 200 }).unwrap();
+        let approve = serde_json::to_vec(&ApproveArgs {
+            spender: addr(3),
+            id: 1,
+            amount: 200,
+        })
+        .unwrap();
         dispatch(&mut state, "approve", &approve, addr(1));
 
         let xfer = serde_json::to_vec(&TransferFromArgs {
-            from: addr(1), to: addr(4), id: 1, amount: 150,
-        }).unwrap();
+            from: addr(1),
+            to: addr(4),
+            id: 1,
+            amount: 150,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_from", &xfer, addr(3));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(4), 1), 150);
@@ -229,13 +291,21 @@ mod tests {
     #[test]
     fn test_operator_bypasses_allowance() {
         let mut state = setup();
-        let op = serde_json::to_vec(&SetOperatorArgs { operator: addr(5), approved: true }).unwrap();
+        let op = serde_json::to_vec(&SetOperatorArgs {
+            operator: addr(5),
+            approved: true,
+        })
+        .unwrap();
         dispatch(&mut state, "set_operator", &op, addr(1));
 
         // addr(5) can transfer without per-id allowance
         let xfer = serde_json::to_vec(&TransferFromArgs {
-            from: addr(1), to: addr(6), id: 2, amount: 100,
-        }).unwrap();
+            from: addr(1),
+            to: addr(6),
+            id: 2,
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_from", &xfer, addr(5));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(6), 2), 100);
@@ -246,8 +316,12 @@ mod tests {
     fn test_transfer_from_no_allowance() {
         let mut state = setup();
         let xfer = serde_json::to_vec(&TransferFromArgs {
-            from: addr(1), to: addr(2), id: 1, amount: 100,
-        }).unwrap();
+            from: addr(1),
+            to: addr(2),
+            id: 1,
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_from", &xfer, addr(99));
     }
 
@@ -255,7 +329,12 @@ mod tests {
     #[should_panic(expected = "insufficient balance")]
     fn test_transfer_insufficient() {
         let mut state = setup();
-        let xfer = serde_json::to_vec(&TransferArgs { to: addr(2), id: 1, amount: 9999 }).unwrap();
+        let xfer = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            id: 1,
+            amount: 9999,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &xfer, addr(1));
     }
 }

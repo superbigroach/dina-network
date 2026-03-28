@@ -256,22 +256,15 @@ mod tests {
             .unwrap();
         txn.set_account(&addr2, &Account::with_balance(addr2, 200))
             .unwrap();
-        txn.set_contract_code(&code_hash, b"wasm_bytecode")
-            .unwrap();
+        txn.set_contract_code(&code_hash, b"wasm_bytecode").unwrap();
         txn.set_contract_storage(&contract_addr, &slot, b"slot_value")
             .unwrap();
         txn.commit().unwrap();
 
         // All four writes should be visible
         let txn2 = store.begin_transaction().unwrap();
-        assert_eq!(
-            txn2.get_account(&addr1).unwrap().unwrap().balance,
-            100
-        );
-        assert_eq!(
-            txn2.get_account(&addr2).unwrap().unwrap().balance,
-            200
-        );
+        assert_eq!(txn2.get_account(&addr1).unwrap().unwrap().balance, 100);
+        assert_eq!(txn2.get_account(&addr2).unwrap().unwrap().balance, 200);
         assert_eq!(
             txn2.get_contract_code(&code_hash).unwrap().unwrap(),
             b"wasm_bytecode"
@@ -354,10 +347,8 @@ mod tests {
         let slot = [0x01; 32];
 
         let txn = store.begin_transaction().unwrap();
-        txn.set_contract_storage(&addr_a, &slot, b"from_a")
-            .unwrap();
-        txn.set_contract_storage(&addr_b, &slot, b"from_b")
-            .unwrap();
+        txn.set_contract_storage(&addr_a, &slot, b"from_a").unwrap();
+        txn.set_contract_storage(&addr_b, &slot, b"from_b").unwrap();
         txn.commit().unwrap();
 
         let txn2 = store.begin_transaction().unwrap();

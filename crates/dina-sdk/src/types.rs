@@ -1,11 +1,20 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
 use core::fmt;
+use serde::{Deserialize, Serialize};
 
 /// A 32-byte account address on the Dina network.
 #[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
 )]
 pub struct Address(pub [u8; 32]);
 
@@ -42,8 +51,17 @@ impl From<[u8; 32]> for Address {
 
 /// A 32-byte hash value (e.g., SHA-256 digest).
 #[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
 )]
 pub struct Hash(pub [u8; 32]);
 
@@ -78,10 +96,7 @@ impl From<[u8; 32]> for Hash {
 }
 
 /// Identifier for a physical device registered on the network.
-#[derive(
-    Clone, PartialEq, Eq, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct DeviceId(pub Vec<u8>);
 
 impl fmt::Display for DeviceId {
@@ -100,10 +115,7 @@ impl fmt::Debug for DeviceId {
 }
 
 /// Identifier for a credential (e.g., passkey, DID credential).
-#[derive(
-    Clone, PartialEq, Eq, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct CredentialId(pub Vec<u8>);
 
 impl fmt::Display for CredentialId {
@@ -117,8 +129,7 @@ impl fmt::Display for CredentialId {
 
 /// Identifier for a service agreement between agents/devices.
 #[derive(
-    Clone, Copy, PartialEq, Eq, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct AgreementId(pub [u8; 32]);
 
@@ -133,8 +144,7 @@ impl fmt::Display for AgreementId {
 
 /// Identifier for a swarm of collaborating agents.
 #[derive(
-    Clone, Copy, PartialEq, Eq, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct SwarmId(pub [u8; 32]);
 
@@ -149,8 +159,7 @@ impl fmt::Display for SwarmId {
 
 /// Identifier for a contract interface (like ERC-165 interface IDs).
 #[derive(
-    Clone, Copy, PartialEq, Eq, Hash,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct InterfaceId(pub u32);
 
@@ -167,10 +176,7 @@ impl fmt::Debug for InterfaceId {
 }
 
 /// Result of a transaction execution.
-#[derive(
-    Clone, Debug, PartialEq, Eq,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum TxResult {
     /// Transaction succeeded.
     Success,
@@ -200,10 +206,7 @@ impl TxResult {
 }
 
 /// Per-address spending limits for smart wallet contracts.
-#[derive(
-    Clone, Debug, PartialEq, Eq,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct SpendingLimits {
     /// Maximum amount per single transaction (in USDC micro-units).
     pub per_tx: u64,
@@ -225,8 +228,7 @@ impl Default for SpendingLimits {
 
 /// Tracks spending against limits within rolling windows.
 #[derive(
-    Clone, Debug, Default, PartialEq, Eq,
-    Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct SpendingStats {
     /// Total spent in the current daily window.
@@ -238,4 +240,3 @@ pub struct SpendingStats {
     /// Timestamp when the monthly window resets (Unix seconds).
     pub monthly_reset_at: u64,
 }
-

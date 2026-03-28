@@ -23,7 +23,7 @@ pub struct Attestation {
     pub attester: Address,
     pub attested: Address,
     pub attestation_type: AttestationType,
-    pub confidence: u64,     // 0-10000 bps
+    pub confidence: u64, // 0-10000 bps
     pub timestamp: u64,
     pub evidence_hash: [u8; 32],
 }
@@ -62,10 +62,18 @@ impl AttestationChainState {
 
         let id = self.next_id;
         self.next_id += 1;
-        self.attestations.insert(id, Attestation {
-            id, attester: caller, attested: device,
-            attestation_type, confidence, timestamp, evidence_hash,
-        });
+        self.attestations.insert(
+            id,
+            Attestation {
+                id,
+                attester: caller,
+                attested: device,
+                attestation_type,
+                confidence,
+                timestamp,
+                evidence_hash,
+            },
+        );
 
         // Invalidate trust cache for attested device
         self.trust_cache.remove(&device);
@@ -74,7 +82,8 @@ impl AttestationChainState {
     }
 
     pub fn get_attestations_for(&self, device: &Address) -> Vec<&Attestation> {
-        self.attestations.values()
+        self.attestations
+            .values()
             .filter(|a| &a.attested == device)
             .collect()
     }
@@ -88,7 +97,9 @@ impl AttestationChainState {
             return cached;
         }
 
-        let attestations: Vec<(Address, u64)> = self.attestations.values()
+        let attestations: Vec<(Address, u64)> = self
+            .attestations
+            .values()
             .filter(|a| &a.attested == device)
             .map(|a| (a.attester, a.confidence))
             .collect();
@@ -102,7 +113,9 @@ impl AttestationChainState {
 
         for (attester, confidence) in &attestations {
             // Attester's own score: base 1000 + 100 per attestation they received
-            let attester_attestation_count = self.attestations.values()
+            let attester_attestation_count = self
+                .attestations
+                .values()
                 .filter(|a| &a.attested == attester)
                 .count() as u64;
             let attester_base = 1000 + attester_attestation_count * 100;
@@ -111,23 +124,35 @@ impl AttestationChainState {
             total_weight += attester_base;
         }
 
-        let score = if total_weight > 0 { total_weighted / total_weight } else { 0 };
+        let score = if total_weight > 0 {
+            total_weighted / total_weight
+        } else {
+            0
+        };
         self.trust_cache.insert(*device, score);
         score
     }
 
     /// Check if two devices have mutually attested each other.
     pub fn mutual_attestation(&self, device_a: &Address, device_b: &Address) -> bool {
-        let a_attests_b = self.attestations.values()
+        let a_attests_b = self
+            .attestations
+            .values()
             .any(|a| &a.attester == device_a && &a.attested == device_b);
-        let b_attests_a = self.attestations.values()
+        let b_attests_a = self
+            .attestations
+            .values()
             .any(|a| &a.attester == device_b && &a.attested == device_a);
         a_attests_b && b_attests_a
     }
 
     /// Get the attestation chain for a device up to a given depth.
     /// Returns all devices in the trust chain and their attestation connections.
-    pub fn attestation_chain(&self, device: &Address, max_depth: u32) -> Vec<(Address, Address, AttestationType)> {
+    pub fn attestation_chain(
+        &self,
+        device: &Address,
+        max_depth: u32,
+    ) -> Vec<(Address, Address, AttestationType)> {
         let mut chain = Vec::new();
         let mut visited: Vec<Address> = vec![*device];
         let mut frontier: Vec<Address> = vec![*device];
@@ -136,8 +161,13 @@ impl AttestationChainState {
             let mut next_frontier = Vec::new();
             for current in &frontier {
                 for attestation in self.attestations.values() {
-                    if &attestation.attested == current && !visited.contains(&attestation.attester) {
-                        chain.push((attestation.attester, attestation.attested, attestation.attestation_type.clone()));
+                    if &attestation.attested == current && !visited.contains(&attestation.attester)
+                    {
+                        chain.push((
+                            attestation.attester,
+                            attestation.attested,
+                            attestation.attestation_type.clone(),
+                        ));
                         visited.push(attestation.attester);
                         next_frontier.push(attestation.attester);
                     }
@@ -157,13 +187,27 @@ impl AttestationChainState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AttestArgs { device: Address, attestation_type: AttestationType, confidence: u64, evidence_hash: [u8; 32], timestamp: u64 }
+struct AttestArgs {
+    device: Address,
+    attestation_type: AttestationType,
+    confidence: u64,
+    evidence_hash: [u8; 32],
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DeviceArgs { device: Address }
+struct DeviceArgs {
+    device: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MutualArgs { device_a: Address, device_b: Address }
+struct MutualArgs {
+    device_a: Address,
+    device_b: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ChainArgs { device: Address, depth: u32 }
+struct ChainArgs {
+    device: Address,
+    depth: u32,
+}
 
 pub fn dispatch(
     state: &mut Option<AttestationChainState>,
@@ -180,7 +224,14 @@ pub fn dispatch(
         "attest" => {
             let s = state.as_mut().expect("DRC78: not initialised");
             let a: AttestArgs = serde_json::from_slice(args).expect("DRC78: bad args");
-            let id = s.attest(caller, a.device, a.attestation_type, a.confidence, a.evidence_hash, a.timestamp);
+            let id = s.attest(
+                caller,
+                a.device,
+                a.attestation_type,
+                a.confidence,
+                a.evidence_hash,
+                a.timestamp,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "get_attestations_for" => {
@@ -225,11 +276,32 @@ mod tests {
     fn setup() -> AttestationChainState {
         let mut s = AttestationChainState::new(OWNER);
         // A attests B (identity, high confidence)
-        s.attest(DEV_A, DEV_B, AttestationType::Identity, 9000, [0xAA; 32], 1000);
+        s.attest(
+            DEV_A,
+            DEV_B,
+            AttestationType::Identity,
+            9000,
+            [0xAA; 32],
+            1000,
+        );
         // A attests C (capability)
-        s.attest(DEV_A, DEV_C, AttestationType::Capability, 7000, [0xBB; 32], 1001);
+        s.attest(
+            DEV_A,
+            DEV_C,
+            AttestationType::Capability,
+            7000,
+            [0xBB; 32],
+            1001,
+        );
         // B attests C (firmware)
-        s.attest(DEV_B, DEV_C, AttestationType::Firmware, 8000, [0xCC; 32], 1002);
+        s.attest(
+            DEV_B,
+            DEV_C,
+            AttestationType::Firmware,
+            8000,
+            [0xCC; 32],
+            1002,
+        );
         s
     }
 
@@ -267,7 +339,14 @@ mod tests {
         assert!(!s.mutual_attestation(&DEV_A, &DEV_B)); // only A->B
 
         // Add B->A
-        s.attest(DEV_B, DEV_A, AttestationType::Identity, 8500, [0xDD; 32], 2000);
+        s.attest(
+            DEV_B,
+            DEV_A,
+            AttestationType::Identity,
+            8500,
+            [0xDD; 32],
+            2000,
+        );
         assert!(s.mutual_attestation(&DEV_A, &DEV_B));
     }
 
@@ -277,14 +356,21 @@ mod tests {
         // Chain from C: C is attested by A and B. B is attested by A.
         let chain = s.attestation_chain(&DEV_C, 3);
         assert!(chain.len() >= 2); // at least A->C and B->C
-        // With depth 2, should also pick up A->B (A attests B, and B is in the chain)
+                                   // With depth 2, should also pick up A->B (A attests B, and B is in the chain)
     }
 
     #[test]
     #[should_panic(expected = "cannot attest yourself")]
     fn test_cannot_self_attest() {
         let mut s = AttestationChainState::new(OWNER);
-        s.attest(DEV_A, DEV_A, AttestationType::Identity, 10000, [0; 32], 1000);
+        s.attest(
+            DEV_A,
+            DEV_A,
+            AttestationType::Identity,
+            10000,
+            [0; 32],
+            1000,
+        );
     }
 
     #[test]
@@ -292,9 +378,13 @@ mod tests {
         let mut state: Option<AttestationChainState> = None;
         dispatch(&mut state, "init", b"", OWNER);
         let args = serde_json::to_vec(&AttestArgs {
-            device: DEV_B, attestation_type: AttestationType::Uptime,
-            confidence: 5000, evidence_hash: [0xFF; 32], timestamp: 100,
-        }).unwrap();
+            device: DEV_B,
+            attestation_type: AttestationType::Uptime,
+            confidence: 5000,
+            evidence_hash: [0xFF; 32],
+            timestamp: 100,
+        })
+        .unwrap();
         let id_bytes = dispatch(&mut state, "attest", &args, DEV_A);
         let id: u64 = serde_json::from_slice(&id_bytes).unwrap();
         assert_eq!(id, 1);

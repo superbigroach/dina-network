@@ -82,29 +82,40 @@ impl TrainingState {
 
         let id = self.next_session_id;
         self.next_session_id += 1;
-        self.sessions.insert(id, TrainingSession {
+        self.sessions.insert(
             id,
-            coordinator: caller,
-            model_hash,
-            participants: Vec::new(),
-            round: 0,
-            max_rounds,
-            min_participants,
-            aggregation_method,
-            status: TrainingStatus::Recruiting,
-            reward_per_round,
-            updates: Vec::new(),
-            aggregated_hashes: Vec::new(),
-            total_rewards_distributed: 0,
-        });
+            TrainingSession {
+                id,
+                coordinator: caller,
+                model_hash,
+                participants: Vec::new(),
+                round: 0,
+                max_rounds,
+                min_participants,
+                aggregation_method,
+                status: TrainingStatus::Recruiting,
+                reward_per_round,
+                updates: Vec::new(),
+                aggregated_hashes: Vec::new(),
+                total_rewards_distributed: 0,
+            },
+        );
         id
     }
 
     pub fn join_training(&mut self, caller: Address, session_id: u64) {
-        let session = self.sessions.get_mut(&session_id).expect("DRC71: session not found");
-        assert!(session.status == TrainingStatus::Recruiting,
-            "DRC71: not recruiting");
-        assert!(!session.participants.contains(&caller), "DRC71: already joined");
+        let session = self
+            .sessions
+            .get_mut(&session_id)
+            .expect("DRC71: session not found");
+        assert!(
+            session.status == TrainingStatus::Recruiting,
+            "DRC71: not recruiting"
+        );
+        assert!(
+            !session.participants.contains(&caller),
+            "DRC71: already joined"
+        );
         session.participants.push(caller);
 
         if session.participants.len() as u64 >= session.min_participants {
@@ -120,13 +131,24 @@ impl TrainingState {
         gradient_hash: Vec<u8>,
         metrics: BTreeMap<String, u64>,
     ) {
-        let session = self.sessions.get_mut(&session_id).expect("DRC71: session not found");
-        assert!(session.status == TrainingStatus::InProgress, "DRC71: not in progress");
-        assert!(session.participants.contains(&caller), "DRC71: not a participant");
+        let session = self
+            .sessions
+            .get_mut(&session_id)
+            .expect("DRC71: session not found");
+        assert!(
+            session.status == TrainingStatus::InProgress,
+            "DRC71: not in progress"
+        );
+        assert!(
+            session.participants.contains(&caller),
+            "DRC71: not a participant"
+        );
 
         // Check no duplicate submission for current round
-        let already = session.updates.iter().any(|u|
-            u.address == caller && u.round == session.round);
+        let already = session
+            .updates
+            .iter()
+            .any(|u| u.address == caller && u.round == session.round);
         assert!(!already, "DRC71: already submitted for this round");
 
         session.updates.push(ParticipantUpdate {
@@ -137,7 +159,9 @@ impl TrainingState {
         });
 
         // If all participants submitted, move to aggregating
-        let round_submissions = session.updates.iter()
+        let round_submissions = session
+            .updates
+            .iter()
             .filter(|u| u.round == session.round)
             .count();
         if round_submissions == session.participants.len() {
@@ -145,15 +169,16 @@ impl TrainingState {
         }
     }
 
-    pub fn aggregate_round(
-        &mut self,
-        caller: Address,
-        session_id: u64,
-        aggregated_hash: Vec<u8>,
-    ) {
-        let session = self.sessions.get_mut(&session_id).expect("DRC71: session not found");
+    pub fn aggregate_round(&mut self, caller: Address, session_id: u64, aggregated_hash: Vec<u8>) {
+        let session = self
+            .sessions
+            .get_mut(&session_id)
+            .expect("DRC71: session not found");
         assert!(caller == session.coordinator, "DRC71: only coordinator");
-        assert!(session.status == TrainingStatus::Aggregating, "DRC71: not aggregating");
+        assert!(
+            session.status == TrainingStatus::Aggregating,
+            "DRC71: not aggregating"
+        );
 
         session.aggregated_hashes.push(aggregated_hash);
         session.model_hash = session.aggregated_hashes.last().unwrap().clone();
@@ -171,24 +196,43 @@ impl TrainingState {
     }
 
     pub fn complete_training(&mut self, caller: Address, session_id: u64) {
-        let session = self.sessions.get_mut(&session_id).expect("DRC71: session not found");
+        let session = self
+            .sessions
+            .get_mut(&session_id)
+            .expect("DRC71: session not found");
         assert!(caller == session.coordinator, "DRC71: only coordinator");
-        assert!(session.status != TrainingStatus::Completed, "DRC71: already completed");
+        assert!(
+            session.status != TrainingStatus::Completed,
+            "DRC71: already completed"
+        );
         session.status = TrainingStatus::Completed;
     }
 
     pub fn session_metrics(&self, session_id: u64, round: u64) -> Vec<&ParticipantUpdate> {
-        let session = self.sessions.get(&session_id).expect("DRC71: session not found");
-        session.updates.iter()
+        let session = self
+            .sessions
+            .get(&session_id)
+            .expect("DRC71: session not found");
+        session
+            .updates
+            .iter()
             .filter(|u| u.round == round)
             .collect()
     }
 
     pub fn distribute_training_rewards(&self, session_id: u64) -> Vec<(Address, u64)> {
-        let session = self.sessions.get(&session_id).expect("DRC71: session not found");
+        let session = self
+            .sessions
+            .get(&session_id)
+            .expect("DRC71: session not found");
         let completed_rounds = session.aggregated_hashes.len() as u64;
-        let reward_each = session.reward_per_round * completed_rounds / session.participants.len() as u64;
-        session.participants.iter().map(|p| (*p, reward_each)).collect()
+        let reward_each =
+            session.reward_per_round * completed_rounds / session.participants.len() as u64;
+        session
+            .participants
+            .iter()
+            .map(|p| (*p, reward_each))
+            .collect()
     }
 }
 
@@ -197,17 +241,37 @@ impl TrainingState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateSessionArgs { model_hash: Vec<u8>, max_rounds: u64, min_participants: u64, aggregation_method: AggregationMethod, reward_per_round: u64 }
+struct CreateSessionArgs {
+    model_hash: Vec<u8>,
+    max_rounds: u64,
+    min_participants: u64,
+    aggregation_method: AggregationMethod,
+    reward_per_round: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct JoinArgs { session_id: u64 }
+struct JoinArgs {
+    session_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SubmitUpdateArgs { session_id: u64, gradient_hash: Vec<u8>, metrics: BTreeMap<String, u64> }
+struct SubmitUpdateArgs {
+    session_id: u64,
+    gradient_hash: Vec<u8>,
+    metrics: BTreeMap<String, u64>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AggregateArgs { session_id: u64, aggregated_hash: Vec<u8> }
+struct AggregateArgs {
+    session_id: u64,
+    aggregated_hash: Vec<u8>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SessionIdArgs { session_id: u64 }
+struct SessionIdArgs {
+    session_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SessionRoundArgs { session_id: u64, round: u64 }
+struct SessionRoundArgs {
+    session_id: u64,
+    round: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<TrainingState>,
@@ -224,7 +288,14 @@ pub fn dispatch(
         "create_session" => {
             let s = state.as_mut().expect("DRC71: not initialised");
             let a: CreateSessionArgs = serde_json::from_slice(args).expect("DRC71: bad args");
-            let id = s.create_session(caller, a.model_hash, a.max_rounds, a.min_participants, a.aggregation_method, a.reward_per_round);
+            let id = s.create_session(
+                caller,
+                a.model_hash,
+                a.max_rounds,
+                a.min_participants,
+                a.aggregation_method,
+                a.reward_per_round,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "join_training" => {
@@ -280,8 +351,12 @@ mod tests {
     fn setup_session() -> (TrainingState, u64) {
         let mut s = TrainingState::new(COORDINATOR);
         let sid = s.create_session(
-            COORDINATOR, vec![0xAA, 0xBB], 3, 2,
-            AggregationMethod::FedAvg, 1000,
+            COORDINATOR,
+            vec![0xAA, 0xBB],
+            3,
+            2,
+            AggregationMethod::FedAvg,
+            1000,
         );
         (s, sid)
     }
@@ -309,10 +384,16 @@ mod tests {
         m.insert("loss".into(), 2500);
 
         s.submit_update(PARTICIPANT_A, sid, vec![0x11], m.clone());
-        assert_eq!(s.sessions.get(&sid).unwrap().status, TrainingStatus::InProgress);
+        assert_eq!(
+            s.sessions.get(&sid).unwrap().status,
+            TrainingStatus::InProgress
+        );
 
         s.submit_update(PARTICIPANT_B, sid, vec![0x22], m);
-        assert_eq!(s.sessions.get(&sid).unwrap().status, TrainingStatus::Aggregating);
+        assert_eq!(
+            s.sessions.get(&sid).unwrap().status,
+            TrainingStatus::Aggregating
+        );
     }
 
     #[test]

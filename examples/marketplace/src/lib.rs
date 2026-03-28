@@ -181,21 +181,13 @@ impl MarketplaceState {
     ///
     /// # Returns
     /// The new hire's ID.
-    pub fn hire(
-        &mut self,
-        caller: [u8; 32],
-        listing_id: ListingId,
-        usdc_attached: u64,
-    ) -> HireId {
+    pub fn hire(&mut self, caller: [u8; 32], listing_id: ListingId, usdc_attached: u64) -> HireId {
         let listing = self
             .listings
             .get(&listing_id)
             .expect("Marketplace: listing not found");
 
-        assert!(
-            listing.available,
-            "Marketplace: listing is not available"
-        );
+        assert!(listing.available, "Marketplace: listing is not available");
         assert!(
             caller != listing.provider,
             "Marketplace: cannot hire yourself"
@@ -233,11 +225,7 @@ impl MarketplaceState {
     ///
     /// # Returns
     /// A tuple of (amount released, provider address) for the VM to transfer USDC.
-    pub fn complete_service(
-        &mut self,
-        caller: [u8; 32],
-        hire_id: HireId,
-    ) -> (u64, [u8; 32]) {
+    pub fn complete_service(&mut self, caller: [u8; 32], hire_id: HireId) -> (u64, [u8; 32]) {
         let hire = self
             .hires
             .get_mut(&hire_id)
@@ -290,12 +278,7 @@ impl MarketplaceState {
     ///
     /// Providers use this to go "offline" without deleting their listing.
     /// When unavailable, no new hires can be created for this listing.
-    pub fn set_available(
-        &mut self,
-        caller: [u8; 32],
-        listing_id: ListingId,
-        available: bool,
-    ) {
+    pub fn set_available(&mut self, caller: [u8; 32], listing_id: ListingId, available: bool) {
         let listing = self
             .listings
             .get_mut(&listing_id)
@@ -418,8 +401,7 @@ pub fn dispatch(
 
         "hire" => {
             let s = state.as_mut().expect("Marketplace: not initialised");
-            let a: HireArgs =
-                serde_json::from_slice(args).expect("Marketplace: bad hire args");
+            let a: HireArgs = serde_json::from_slice(args).expect("Marketplace: bad hire args");
             let id = s.hire(caller, a.listing_id, a.usdc_attached);
             serde_json::to_vec(&id).unwrap()
         }

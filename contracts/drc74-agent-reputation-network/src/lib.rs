@@ -13,10 +13,10 @@ pub struct Vouch {
     pub id: VouchId,
     pub from: Address,
     pub for_agent: Address,
-    pub score: u8,          // 1-100
+    pub score: u8, // 1-100
     pub category: String,
     pub timestamp: u64,
-    pub stake: u64,         // tokens staked behind this vouch
+    pub stake: u64, // tokens staked behind this vouch
     pub revoked: bool,
 }
 
@@ -80,10 +80,19 @@ impl ReputationState {
         *self.reputation_scores.entry(for_agent).or_insert(0) += (score as u64) * weight;
         *self.reputation_weights.entry(for_agent).or_insert(0) += weight;
 
-        self.vouches.insert(id, Vouch {
-            id, from: caller, for_agent, score, category,
-            timestamp, stake, revoked: false,
-        });
+        self.vouches.insert(
+            id,
+            Vouch {
+                id,
+                from: caller,
+                for_agent,
+                score,
+                category,
+                timestamp,
+                stake,
+                revoked: false,
+            },
+        );
 
         id
     }
@@ -136,7 +145,8 @@ impl ReputationState {
             }
         }
 
-        let mut results: Vec<(Address, u32)> = agents_in_category.keys()
+        let mut results: Vec<(Address, u32)> = agents_in_category
+            .keys()
             .map(|a| (*a, self.get_reputation(a)))
             .collect();
         results.sort_by(|a, b| b.1.cmp(&a.1));
@@ -146,7 +156,8 @@ impl ReputationState {
 
     /// Get all vouchers who have vouched for an agent.
     pub fn vouchers_of(&self, agent: &Address) -> Vec<&Vouch> {
-        self.vouches.values()
+        self.vouches
+            .values()
             .filter(|v| &v.for_agent == agent && !v.revoked)
             .collect()
     }
@@ -157,15 +168,30 @@ impl ReputationState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct VouchForArgs { for_agent: Address, score: u8, category: String, stake: u64, timestamp: u64 }
+struct VouchForArgs {
+    for_agent: Address,
+    score: u8,
+    category: String,
+    stake: u64,
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct RevokeArgs { vouch_id: VouchId }
+struct RevokeArgs {
+    vouch_id: VouchId,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AgentArgs { agent: Address }
+struct AgentArgs {
+    agent: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CategoryArgs { category: String, limit: usize }
+struct CategoryArgs {
+    category: String,
+    limit: usize,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<ReputationState>,
@@ -188,7 +214,14 @@ pub fn dispatch(
         "vouch_for" => {
             let s = state.as_mut().expect("DRC74: not initialised");
             let a: VouchForArgs = serde_json::from_slice(args).expect("DRC74: bad args");
-            let id = s.vouch_for(caller, a.for_agent, a.score, a.category, a.stake, a.timestamp);
+            let id = s.vouch_for(
+                caller,
+                a.for_agent,
+                a.score,
+                a.category,
+                a.stake,
+                a.timestamp,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "revoke_vouch" => {

@@ -30,11 +30,7 @@ impl SignatureVerifier {
 
     /// Check if `signer` is authorized for any contract and return the
     /// magic value or invalid sentinel.
-    pub fn is_valid_signature(
-        &self,
-        _hash: [u8; 32],
-        signer: Address,
-    ) -> u32 {
+    pub fn is_valid_signature(&self, _hash: [u8; 32], signer: Address) -> u32 {
         // Search all contracts for this signer
         for signers in self.authorized_signers.values() {
             if signers.contains(&signer) {
@@ -60,16 +56,8 @@ impl SignatureVerifier {
     }
 
     /// Add an authorized signer for a contract address. Owner only.
-    pub fn add_signer(
-        &mut self,
-        caller: Address,
-        contract_addr: Address,
-        signer: Address,
-    ) {
-        assert!(
-            caller == self.owner,
-            "DRC14: only owner can add signers"
-        );
+    pub fn add_signer(&mut self, caller: Address, contract_addr: Address, signer: Address) {
+        assert!(caller == self.owner, "DRC14: only owner can add signers");
         let signers = self.authorized_signers.entry(contract_addr).or_default();
         if !signers.contains(&signer) {
             signers.push(signer);
@@ -77,16 +65,8 @@ impl SignatureVerifier {
     }
 
     /// Remove an authorized signer for a contract address. Owner only.
-    pub fn remove_signer(
-        &mut self,
-        caller: Address,
-        contract_addr: Address,
-        signer: Address,
-    ) {
-        assert!(
-            caller == self.owner,
-            "DRC14: only owner can remove signers"
-        );
+    pub fn remove_signer(&mut self, caller: Address, contract_addr: Address, signer: Address) {
+        assert!(caller == self.owner, "DRC14: only owner can remove signers");
         if let Some(signers) = self.authorized_signers.get_mut(&contract_addr) {
             signers.retain(|s| s != &signer);
         }

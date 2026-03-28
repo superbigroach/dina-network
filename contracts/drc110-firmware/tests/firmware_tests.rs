@@ -13,14 +13,22 @@ fn init() -> Option<FirmwareRegistry> {
 fn register_manufacturer(state: &mut Option<FirmwareRegistry>, mfg: [u8; 32]) {
     let args = serde_json::to_vec(&serde_json::json!({
         "addr": mfg, "name": "TestMfg"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "register_manufacturer", &args, addr(1));
 }
 
-fn register_trusted(state: &mut Option<FirmwareRegistry>, mfg: [u8; 32], hash: [u8; 32], version: &str, ts: u64) {
+fn register_trusted(
+    state: &mut Option<FirmwareRegistry>,
+    mfg: [u8; 32],
+    hash: [u8; 32],
+    version: &str,
+    ts: u64,
+) {
     let args = serde_json::to_vec(&serde_json::json!({
         "hash": hash, "version": version, "timestamp": ts
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "register_trusted_firmware", &args, mfg);
 }
 
@@ -35,7 +43,8 @@ fn attest(state: &mut Option<FirmwareRegistry>, device_id: [u8; 32], fw_hash: [u
             "timestamp": 1000u64,
             "signature": [1, 2]
         }
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "attest_firmware", &args, addr(5));
 }
 
@@ -99,7 +108,8 @@ fn register_trusted_by_non_manufacturer_fails() {
     let hash = [42u8; 32];
     let args = serde_json::to_vec(&serde_json::json!({
         "hash": hash, "version": "1.0", "timestamp": 1000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "register_trusted_firmware", &args, addr(99));
 }
 
@@ -109,7 +119,8 @@ fn register_manufacturer_by_non_admin_fails() {
     let mut state = init();
     let args = serde_json::to_vec(&serde_json::json!({
         "addr": addr(5), "name": "X"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "register_manufacturer", &args, addr(99));
 }
 

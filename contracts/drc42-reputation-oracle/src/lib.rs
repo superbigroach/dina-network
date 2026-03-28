@@ -37,15 +37,21 @@ impl ReputationState {
         score: u64,
         timestamp: u64,
     ) {
-        assert!(caller == self.oracle, "DRC42: only oracle can update scores");
+        assert!(
+            caller == self.oracle,
+            "DRC42: only oracle can update scores"
+        );
         assert!(score <= 1000, "DRC42: score must be 0..=1000");
 
-        let record = self.records.entry(addr).or_insert_with(|| ReputationRecord {
-            address: addr,
-            scores: BTreeMap::new(),
-            aggregate_score: 0,
-            last_updated: 0,
-        });
+        let record = self
+            .records
+            .entry(addr)
+            .or_insert_with(|| ReputationRecord {
+                address: addr,
+                scores: BTreeMap::new(),
+                aggregate_score: 0,
+                last_updated: 0,
+            });
 
         record.scores.insert(source, score);
         record.last_updated = timestamp;
@@ -157,8 +163,7 @@ pub fn dispatch(
 
         "top_rated" => {
             let s = state.as_ref().expect("DRC42: not initialised");
-            let a: TopRatedArgs =
-                serde_json::from_slice(args).expect("DRC42: bad top_rated args");
+            let a: TopRatedArgs = serde_json::from_slice(args).expect("DRC42: bad top_rated args");
             let top = s.top_rated(a.limit);
             serde_json::to_vec(&top).unwrap()
         }
@@ -261,7 +266,7 @@ mod tests {
         let result = dispatch(&mut state, "top_rated", &args, ORACLE);
         let top: Vec<ReputationRecord> = serde_json::from_slice(&result).unwrap();
         assert_eq!(top.len(), 2);
-        assert_eq!(top[0].address, BOB);   // 900
+        assert_eq!(top[0].address, BOB); // 900
         assert_eq!(top[1].address, CAROL); // 600
     }
 
@@ -272,7 +277,13 @@ mod tests {
         update(&mut state, "b", ALICE, 800, 2);
 
         // Manually tamper aggregate to verify aggregate_all recomputes
-        state.as_mut().unwrap().records.get_mut(&ALICE).unwrap().aggregate_score = 0;
+        state
+            .as_mut()
+            .unwrap()
+            .records
+            .get_mut(&ALICE)
+            .unwrap()
+            .aggregate_score = 0;
 
         dispatch(&mut state, "aggregate_all", b"", ORACLE);
 

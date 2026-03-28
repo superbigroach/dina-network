@@ -31,7 +31,8 @@ fn set_script_uri_stores_scripts() {
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": id,
         "scripts": ["ipfs://script1", "ipfs://script2"]
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "set_script_uri", &args, addr(2));
 
     let query = serde_json::to_vec(&serde_json::json!({"token_id": id})).unwrap();
@@ -46,11 +47,13 @@ fn add_script_appends() {
     let id = create_token(&mut state, addr(2));
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": id, "script_uri": "ipfs://a"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "add_script", &args, addr(2));
     let args2 = serde_json::to_vec(&serde_json::json!({
         "token_id": id, "script_uri": "ipfs://b"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "add_script", &args2, addr(2));
 
     let query = serde_json::to_vec(&serde_json::json!({"token_id": id})).unwrap();
@@ -84,7 +87,8 @@ fn set_script_uri_by_non_creator_fails() {
     let id = create_token(&mut state, addr(2));
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": id, "scripts": ["x"]
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "set_script_uri", &args, addr(99));
 }
 
@@ -95,7 +99,8 @@ fn add_script_by_non_creator_fails() {
     let id = create_token(&mut state, addr(2));
     let args = serde_json::to_vec(&serde_json::json!({
         "token_id": id, "script_uri": "x"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "add_script", &args, addr(99));
 }
 

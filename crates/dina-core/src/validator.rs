@@ -72,7 +72,6 @@ pub struct ValidatorMetadata {
     pub logo_url: String,
 }
 
-
 /// The result of distributing rewards for a single epoch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EpochRewards {
@@ -100,7 +99,11 @@ impl ValidatorSet {
 
     /// Create a validator set with sensible defaults.
     pub fn default_config() -> Self {
-        Self::new(DEFAULT_MIN_STAKE, DEFAULT_MAX_VALIDATORS, DEFAULT_EPOCH_LENGTH)
+        Self::new(
+            DEFAULT_MIN_STAKE,
+            DEFAULT_MAX_VALIDATORS,
+            DEFAULT_EPOCH_LENGTH,
+        )
     }
 
     /// Register a new validator. Fails if stake is below minimum, if the
@@ -266,16 +269,9 @@ impl ValidatorSet {
         let treasury_amount = total_fees * treasury_bps / 10_000;
         let validator_pool = total_fees - treasury_amount;
 
-        let active: Vec<Address> = self
-            .active_validators()
-            .iter()
-            .map(|v| v.address)
-            .collect();
+        let active: Vec<Address> = self.active_validators().iter().map(|v| v.address).collect();
 
-        let total_stake: u64 = active
-            .iter()
-            .map(|a| self.validators[a].stake)
-            .sum();
+        let total_stake: u64 = active.iter().map(|a| self.validators[a].stake).sum();
 
         let mut rewards_map = BTreeMap::new();
 
@@ -408,8 +404,14 @@ mod tests {
     }
 
     fn register(set: &mut ValidatorSet, byte: u8, stake: u64) {
-        set.register_validator(addr(byte), [byte; 32], stake, 500, meta(&format!("V{byte}")))
-            .unwrap();
+        set.register_validator(
+            addr(byte),
+            [byte; 32],
+            stake,
+            500,
+            meta(&format!("V{byte}")),
+        )
+        .unwrap();
     }
 
     // -- Registration -------------------------------------------------------

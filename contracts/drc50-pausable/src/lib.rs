@@ -107,17 +107,33 @@ impl PausableTokenState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { name: String, symbol: String, decimals: u8 }
+struct InitArgs {
+    name: String,
+    symbol: String,
+    decimals: u8,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { to: Address, amount: u64 }
+struct TransferArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MintArgs { to: Address, amount: u64 }
+struct MintArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct BurnArgs { amount: u64 }
+struct BurnArgs {
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SetPauserArgs { pauser: Address }
+struct SetPauserArgs {
+    pauser: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<PausableTokenState>,
@@ -129,7 +145,9 @@ pub fn dispatch(
         "init" => {
             assert!(state.is_none(), "DRC50: already initialised");
             let a: InitArgs = serde_json::from_slice(args).expect("DRC50: bad init args");
-            *state = Some(PausableTokenState::new(a.name, a.symbol, a.decimals, caller));
+            *state = Some(PausableTokenState::new(
+                a.name, a.symbol, a.decimals, caller,
+            ));
             serde_json::to_vec("ok").unwrap()
         }
         "balance_of" => {
@@ -191,15 +209,24 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<PausableTokenState> {
         let mut state = None;
         let args = serde_json::to_vec(&InitArgs {
-            name: "PauseToken".into(), symbol: "PSE".into(), decimals: 6,
-        }).unwrap();
+            name: "PauseToken".into(),
+            symbol: "PSE".into(),
+            decimals: 6,
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, addr(1));
-        let mint = serde_json::to_vec(&MintArgs { to: addr(1), amount: 10_000 }).unwrap();
+        let mint = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            amount: 10_000,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &mint, addr(1));
         state
     }
@@ -207,7 +234,11 @@ mod tests {
     #[test]
     fn test_transfer_when_not_paused() {
         let mut state = setup();
-        let args = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 500 }).unwrap();
+        let args = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 500,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(2)), 500);
@@ -218,7 +249,11 @@ mod tests {
     fn test_transfer_when_paused() {
         let mut state = setup();
         dispatch(&mut state, "pause", b"", addr(1));
-        let args = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 100 }).unwrap();
+        let args = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &args, addr(1));
     }
 
@@ -231,7 +266,11 @@ mod tests {
         dispatch(&mut state, "unpause", b"", addr(1));
         assert!(!state.as_ref().unwrap().is_paused());
         // Transfer works again
-        let args = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 100 }).unwrap();
+        let args = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &args, addr(1));
         assert_eq!(state.as_ref().unwrap().balance_of(&addr(2)), 100);
     }
@@ -258,7 +297,11 @@ mod tests {
     fn test_mint_when_paused() {
         let mut state = setup();
         dispatch(&mut state, "pause", b"", addr(1));
-        let mint = serde_json::to_vec(&MintArgs { to: addr(2), amount: 100 }).unwrap();
+        let mint = serde_json::to_vec(&MintArgs {
+            to: addr(2),
+            amount: 100,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &mint, addr(1));
     }
 }

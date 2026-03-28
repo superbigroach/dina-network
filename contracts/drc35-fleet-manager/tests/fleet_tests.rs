@@ -47,9 +47,8 @@ fn remove_robot_from_fleet() {
     let mut state = init_fleet_mgr(owner);
     let fleet_id = create_fleet_with_robot(&mut state, owner, robot);
 
-    let args =
-        serde_json::to_vec(&serde_json::json!({ "fleet_id": fleet_id, "robot_id": robot }))
-            .unwrap();
+    let args = serde_json::to_vec(&serde_json::json!({ "fleet_id": fleet_id, "robot_id": robot }))
+        .unwrap();
     dispatch(&mut state, "remove_robot", &args, owner);
 
     let s = state.as_ref().unwrap();
@@ -153,8 +152,7 @@ fn duplicate_robot_add_fails() {
     let mut state = init_fleet_mgr(owner);
     let fleet_id = create_fleet_with_robot(&mut state, owner, robot);
 
-    let args =
-        serde_json::to_vec(&serde_json::json!({ "fleet_id": fleet_id, "robot_id": robot }))
-            .unwrap();
+    let args = serde_json::to_vec(&serde_json::json!({ "fleet_id": fleet_id, "robot_id": robot }))
+        .unwrap();
     dispatch(&mut state, "add_robot", &args, owner);
 }

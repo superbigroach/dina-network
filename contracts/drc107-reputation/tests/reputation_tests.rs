@@ -10,7 +10,13 @@ fn init() -> Option<ReputationState> {
     state
 }
 
-fn record(state: &mut Option<ReputationState>, subject: [u8; 32], counterparty: [u8; 32], outcome: &str, rating: u16) {
+fn record(
+    state: &mut Option<ReputationState>,
+    subject: [u8; 32],
+    counterparty: [u8; 32],
+    outcome: &str,
+    rating: u16,
+) {
     let args = serde_json::to_vec(&serde_json::json!({
         "subject": subject,
         "counterparty": counterparty,
@@ -19,7 +25,8 @@ fn record(state: &mut Option<ReputationState>, subject: [u8; 32], counterparty: 
         "volume": 1000u64,
         "timestamp": 1000u64,
         "category": "service"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "record_interaction", &args, addr(1));
 }
 
@@ -59,14 +66,16 @@ fn meets_threshold_returns_correct_result() {
 
     let args_high = serde_json::to_vec(&serde_json::json!({
         "account": addr(2), "threshold": 7000u16
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "meets_threshold", &args_high, addr(1));
     let meets: bool = serde_json::from_slice(&result).unwrap();
     assert!(meets);
 
     let args_low = serde_json::to_vec(&serde_json::json!({
         "account": addr(2), "threshold": 9500u16
-    })).unwrap();
+    }))
+    .unwrap();
     let result2 = dispatch(&mut state, "meets_threshold", &args_low, addr(1));
     let meets2: bool = serde_json::from_slice(&result2).unwrap();
     assert!(!meets2);
@@ -87,7 +96,8 @@ fn rating_over_10000_fails() {
         "subject": addr(2), "counterparty": addr(3),
         "outcome": "Success", "rating": 20000u16,
         "volume": 1000u64, "timestamp": 1000u64, "category": "service"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "record_interaction", &args, addr(1));
 }
 

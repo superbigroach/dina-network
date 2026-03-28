@@ -90,7 +90,10 @@ impl EscrowState {
     ) -> u64 {
         let total_amount: u64 = milestones.iter().map(|m| m.amount).sum();
         assert!(total_amount > 0, "DRC54: escrow amount must be positive");
-        assert!(!milestones.is_empty(), "DRC54: must have at least one milestone");
+        assert!(
+            !milestones.is_empty(),
+            "DRC54: must have at least one milestone"
+        );
         if let Some(arb) = &arbitrator {
             assert!(
                 self.arbitrators.contains_key(arb),
@@ -116,19 +119,46 @@ impl EscrowState {
     }
 
     pub fn complete_milestone(&mut self, caller: Address, escrow_id: u64, milestone_index: usize) {
-        let escrow = self.escrows.get_mut(&escrow_id).expect("DRC54: escrow not found");
-        assert!(escrow.status == EscrowStatus::Active, "DRC54: escrow not active");
-        assert!(caller == escrow.seller, "DRC54: only seller can complete milestones");
-        assert!(milestone_index < escrow.milestones.len(), "DRC54: invalid milestone index");
-        assert!(!escrow.milestones[milestone_index].completed, "DRC54: milestone already completed");
+        let escrow = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC54: escrow not found");
+        assert!(
+            escrow.status == EscrowStatus::Active,
+            "DRC54: escrow not active"
+        );
+        assert!(
+            caller == escrow.seller,
+            "DRC54: only seller can complete milestones"
+        );
+        assert!(
+            milestone_index < escrow.milestones.len(),
+            "DRC54: invalid milestone index"
+        );
+        assert!(
+            !escrow.milestones[milestone_index].completed,
+            "DRC54: milestone already completed"
+        );
         escrow.milestones[milestone_index].completed = true;
     }
 
     pub fn verify_milestone(&mut self, caller: Address, escrow_id: u64, milestone_index: usize) {
-        let escrow = self.escrows.get_mut(&escrow_id).expect("DRC54: escrow not found");
-        assert!(escrow.status == EscrowStatus::Active, "DRC54: escrow not active");
-        assert!(caller == escrow.buyer, "DRC54: only buyer can verify milestones");
-        assert!(milestone_index < escrow.milestones.len(), "DRC54: invalid milestone index");
+        let escrow = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC54: escrow not found");
+        assert!(
+            escrow.status == EscrowStatus::Active,
+            "DRC54: escrow not active"
+        );
+        assert!(
+            caller == escrow.buyer,
+            "DRC54: only buyer can verify milestones"
+        );
+        assert!(
+            milestone_index < escrow.milestones.len(),
+            "DRC54: invalid milestone index"
+        );
         let milestone = &mut escrow.milestones[milestone_index];
         assert!(milestone.completed, "DRC54: milestone not completed yet");
         assert!(!milestone.verified, "DRC54: milestone already verified");
@@ -142,8 +172,14 @@ impl EscrowState {
     }
 
     pub fn dispute(&mut self, caller: Address, escrow_id: u64) {
-        let escrow = self.escrows.get_mut(&escrow_id).expect("DRC54: escrow not found");
-        assert!(escrow.status == EscrowStatus::Active, "DRC54: escrow not active");
+        let escrow = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC54: escrow not found");
+        assert!(
+            escrow.status == EscrowStatus::Active,
+            "DRC54: escrow not active"
+        );
         assert!(
             caller == escrow.buyer || caller == escrow.seller,
             "DRC54: only buyer or seller can dispute"
@@ -153,13 +189,24 @@ impl EscrowState {
     }
 
     pub fn arbitrate(&mut self, caller: Address, escrow_id: u64, release_to_seller: bool) {
-        let escrow = self.escrows.get_mut(&escrow_id).expect("DRC54: escrow not found");
-        assert!(escrow.status == EscrowStatus::Disputed, "DRC54: escrow not disputed");
+        let escrow = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC54: escrow not found");
+        assert!(
+            escrow.status == EscrowStatus::Disputed,
+            "DRC54: escrow not disputed"
+        );
         let arb = escrow.arbitrator.expect("DRC54: no arbitrator");
-        assert!(caller == arb, "DRC54: only assigned arbitrator can arbitrate");
+        assert!(
+            caller == arb,
+            "DRC54: only assigned arbitrator can arbitrate"
+        );
 
         // Calculate unreleased funds
-        let released: u64 = escrow.milestones.iter()
+        let released: u64 = escrow
+            .milestones
+            .iter()
             .filter(|m| m.verified)
             .map(|m| m.amount)
             .sum();
@@ -182,11 +229,19 @@ impl EscrowState {
     }
 
     pub fn release_all(&mut self, caller: Address, escrow_id: u64) {
-        let escrow = self.escrows.get_mut(&escrow_id).expect("DRC54: escrow not found");
-        assert!(escrow.status == EscrowStatus::Active, "DRC54: escrow not active");
+        let escrow = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC54: escrow not found");
+        assert!(
+            escrow.status == EscrowStatus::Active,
+            "DRC54: escrow not active"
+        );
         assert!(caller == escrow.buyer, "DRC54: only buyer can release all");
 
-        let unreleased: u64 = escrow.milestones.iter()
+        let unreleased: u64 = escrow
+            .milestones
+            .iter()
             .filter(|m| !m.verified)
             .map(|m| m.amount)
             .sum();
@@ -201,12 +256,23 @@ impl EscrowState {
     }
 
     pub fn refund(&mut self, caller: Address, escrow_id: u64, current_time: u64) {
-        let escrow = self.escrows.get_mut(&escrow_id).expect("DRC54: escrow not found");
-        assert!(escrow.status == EscrowStatus::Active, "DRC54: escrow not active");
-        assert!(caller == escrow.buyer, "DRC54: only buyer can request refund");
+        let escrow = self
+            .escrows
+            .get_mut(&escrow_id)
+            .expect("DRC54: escrow not found");
+        assert!(
+            escrow.status == EscrowStatus::Active,
+            "DRC54: escrow not active"
+        );
+        assert!(
+            caller == escrow.buyer,
+            "DRC54: only buyer can request refund"
+        );
         assert!(current_time > escrow.deadline, "DRC54: deadline not passed");
 
-        let unreleased: u64 = escrow.milestones.iter()
+        let unreleased: u64 = escrow
+            .milestones
+            .iter()
             .filter(|m| !m.verified)
             .map(|m| m.amount)
             .sum();
@@ -229,7 +295,9 @@ impl EscrowState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RegisterArbitratorArgs { name: String }
+struct RegisterArbitratorArgs {
+    name: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CreateEscrowArgs {
@@ -242,25 +310,42 @@ struct CreateEscrowArgs {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct MilestoneArgs { escrow_id: u64, milestone_index: usize }
+struct MilestoneArgs {
+    escrow_id: u64,
+    milestone_index: usize,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DisputeArgs { escrow_id: u64 }
+struct DisputeArgs {
+    escrow_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ArbitrateArgs { escrow_id: u64, release_to_seller: bool }
+struct ArbitrateArgs {
+    escrow_id: u64,
+    release_to_seller: bool,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ReleaseAllArgs { escrow_id: u64 }
+struct ReleaseAllArgs {
+    escrow_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RefundArgs { escrow_id: u64, current_time: u64 }
+struct RefundArgs {
+    escrow_id: u64,
+    current_time: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct GetEscrowArgs { escrow_id: u64 }
+struct GetEscrowArgs {
+    escrow_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct GetReleasedArgs { addr: Address }
+struct GetReleasedArgs {
+    addr: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<EscrowState>,
@@ -283,7 +368,15 @@ pub fn dispatch(
         "create_escrow" => {
             let s = state.as_mut().expect("DRC54: not initialised");
             let a: CreateEscrowArgs = serde_json::from_slice(args).expect("DRC54: bad args");
-            let id = s.create_escrow(caller, a.seller, a.milestones, a.deadline, a.dispute_deadline, a.arbitrator, a.created_at);
+            let id = s.create_escrow(
+                caller,
+                a.seller,
+                a.milestones,
+                a.deadline,
+                a.dispute_deadline,
+                a.arbitrator,
+                a.created_at,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "complete_milestone" => {
@@ -356,8 +449,18 @@ mod tests {
 
     fn make_milestones() -> Vec<Milestone> {
         vec![
-            Milestone { description: "Design".into(), amount: 500, completed: false, verified: false },
-            Milestone { description: "Build".into(), amount: 1500, completed: false, verified: false },
+            Milestone {
+                description: "Design".into(),
+                amount: 500,
+                completed: false,
+                verified: false,
+            },
+            Milestone {
+                description: "Build".into(),
+                amount: 1500,
+                completed: false,
+                verified: false,
+            },
         ]
     }
 
@@ -406,7 +509,15 @@ mod tests {
         let mut state = init_state();
         let s = state.as_mut().unwrap();
         s.register_arbitrator(ARBITRATOR, "Judge Bot".into());
-        let id = s.create_escrow(BUYER, SELLER, make_milestones(), 1000, 1200, Some(ARBITRATOR), 100);
+        let id = s.create_escrow(
+            BUYER,
+            SELLER,
+            make_milestones(),
+            1000,
+            1200,
+            Some(ARBITRATOR),
+            100,
+        );
         s.dispute(BUYER, id);
         let escrow = s.get_escrow(id).unwrap();
         assert_eq!(escrow.status, EscrowStatus::Disputed);
@@ -420,7 +531,15 @@ mod tests {
         let mut state = init_state();
         let s = state.as_mut().unwrap();
         s.register_arbitrator(ARBITRATOR, "Judge Bot".into());
-        let id = s.create_escrow(BUYER, SELLER, make_milestones(), 1000, 1200, Some(ARBITRATOR), 100);
+        let id = s.create_escrow(
+            BUYER,
+            SELLER,
+            make_milestones(),
+            1000,
+            1200,
+            Some(ARBITRATOR),
+            100,
+        );
         s.dispute(SELLER, id);
         s.arbitrate(ARBITRATOR, id, false);
         assert_eq!(s.get_released(&BUYER), 2000);
@@ -443,6 +562,10 @@ mod tests {
         dispatch(&mut state, "init", b"{}", BUYER);
         let args = serde_json::to_vec(&RegisterArbitratorArgs { name: "Arb".into() }).unwrap();
         dispatch(&mut state, "register_arbitrator", &args, ARBITRATOR);
-        assert!(state.as_ref().unwrap().arbitrators.contains_key(&ARBITRATOR));
+        assert!(state
+            .as_ref()
+            .unwrap()
+            .arbitrators
+            .contains_key(&ARBITRATOR));
     }
 }

@@ -71,7 +71,8 @@ impl ModularAccountState {
     }
 
     pub fn get_module(&self, account: &Address, module_name: &str) -> Option<&ModuleInfo> {
-        self.installed_modules.get(&(*account, module_name.to_string()))
+        self.installed_modules
+            .get(&(*account, module_name.to_string()))
     }
 
     // -- Mutations -----------------------------------------------------------
@@ -81,11 +82,14 @@ impl ModularAccountState {
             !self.accounts.contains_key(&caller),
             "DRC46: account already exists"
         );
-        self.accounts.insert(caller, AccountInfo {
-            owner: caller,
-            created_at: timestamp,
-            nonce: 0,
-        });
+        self.accounts.insert(
+            caller,
+            AccountInfo {
+                owner: caller,
+                created_at: timestamp,
+                nonce: 0,
+            },
+        );
     }
 
     pub fn install_module(
@@ -97,8 +101,14 @@ impl ModularAccountState {
         permissions: Vec<String>,
         timestamp: u64,
     ) {
-        let acc = self.accounts.get(&account).expect("DRC46: account not found");
-        assert!(acc.owner == caller, "DRC46: only account owner can install modules");
+        let acc = self
+            .accounts
+            .get(&account)
+            .expect("DRC46: account not found");
+        assert!(
+            acc.owner == caller,
+            "DRC46: only account owner can install modules"
+        );
         assert!(
             !self.has_module(&account, &module_name),
             "DRC46: module already installed"
@@ -115,15 +125,17 @@ impl ModularAccountState {
         );
     }
 
-    pub fn uninstall_module(
-        &mut self,
-        caller: Address,
-        account: Address,
-        module_name: String,
-    ) {
-        let acc = self.accounts.get(&account).expect("DRC46: account not found");
-        assert!(acc.owner == caller, "DRC46: only account owner can uninstall");
-        let module = self.installed_modules
+    pub fn uninstall_module(&mut self, caller: Address, account: Address, module_name: String) {
+        let acc = self
+            .accounts
+            .get(&account)
+            .expect("DRC46: account not found");
+        assert!(
+            acc.owner == caller,
+            "DRC46: only account owner can uninstall"
+        );
+        let module = self
+            .installed_modules
             .get_mut(&(account, module_name.clone()))
             .expect("DRC46: module not found");
         assert!(module.active, "DRC46: module already inactive");
@@ -139,17 +151,22 @@ impl ModularAccountState {
         exec_args: Vec<u8>,
         timestamp: u64,
     ) -> Vec<u8> {
-        let acc = self.accounts.get_mut(&account).expect("DRC46: account not found");
+        let acc = self
+            .accounts
+            .get_mut(&account)
+            .expect("DRC46: account not found");
         assert!(acc.owner == caller, "DRC46: only account owner can execute");
 
-        let module = self.installed_modules
+        let module = self
+            .installed_modules
             .get(&(account, module_name.clone()))
             .expect("DRC46: module not found");
         assert!(module.active, "DRC46: module is not active");
 
         // Check permission
         assert!(
-            module.permissions.contains(&exec_method) || module.permissions.contains(&"*".to_string()),
+            module.permissions.contains(&exec_method)
+                || module.permissions.contains(&"*".to_string()),
             "DRC46: module does not have permission for '{exec_method}'"
         );
 
@@ -173,17 +190,39 @@ impl ModularAccountState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateAccountArgs { timestamp: u64 }
+struct CreateAccountArgs {
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct InstallModuleArgs { account: Address, module_name: String, version: String, permissions: Vec<String>, timestamp: u64 }
+struct InstallModuleArgs {
+    account: Address,
+    module_name: String,
+    version: String,
+    permissions: Vec<String>,
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct UninstallModuleArgs { account: Address, module_name: String }
+struct UninstallModuleArgs {
+    account: Address,
+    module_name: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ExecuteArgs { account: Address, module_name: String, method: String, args: Vec<u8>, timestamp: u64 }
+struct ExecuteArgs {
+    account: Address,
+    module_name: String,
+    method: String,
+    args: Vec<u8>,
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct HasModuleArgs { account: Address, module_name: String }
+struct HasModuleArgs {
+    account: Address,
+    module_name: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ListModulesArgs { account: Address }
+struct ListModulesArgs {
+    account: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<ModularAccountState>,
@@ -206,7 +245,14 @@ pub fn dispatch(
         "install_module" => {
             let s = state.as_mut().expect("DRC46: not initialised");
             let a: InstallModuleArgs = serde_json::from_slice(args).expect("DRC46: bad args");
-            s.install_module(caller, a.account, a.module_name, a.version, a.permissions, a.timestamp);
+            s.install_module(
+                caller,
+                a.account,
+                a.module_name,
+                a.version,
+                a.permissions,
+                a.timestamp,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "uninstall_module" => {
@@ -218,7 +264,14 @@ pub fn dispatch(
         "execute_via_module" => {
             let s = state.as_mut().expect("DRC46: not initialised");
             let a: ExecuteArgs = serde_json::from_slice(args).expect("DRC46: bad args");
-            let result = s.execute_via_module(caller, a.account, a.module_name, a.method, a.args, a.timestamp);
+            let result = s.execute_via_module(
+                caller,
+                a.account,
+                a.module_name,
+                a.method,
+                a.args,
+                a.timestamp,
+            );
             serde_json::to_vec(&result).unwrap()
         }
         "has_module" => {
@@ -244,7 +297,9 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<ModularAccountState> {
         let mut state = None;
@@ -264,7 +319,8 @@ mod tests {
             version: "1.0.0".into(),
             permissions: vec!["transfer".into(), "approve".into()],
             timestamp: 2000,
-        }).unwrap();
+        })
+        .unwrap();
         dispatch(&mut state, "install_module", &args, addr(1));
 
         let s = state.as_ref().unwrap();
@@ -276,15 +332,21 @@ mod tests {
     fn test_uninstall_module() {
         let mut state = setup();
         let install = serde_json::to_vec(&InstallModuleArgs {
-            account: addr(1), module_name: "logger".into(), version: "1.0".into(),
-            permissions: vec!["*".into()], timestamp: 2000,
-        }).unwrap();
+            account: addr(1),
+            module_name: "logger".into(),
+            version: "1.0".into(),
+            permissions: vec!["*".into()],
+            timestamp: 2000,
+        })
+        .unwrap();
         dispatch(&mut state, "install_module", &install, addr(1));
         assert!(state.as_ref().unwrap().has_module(&addr(1), "logger"));
 
         let uninstall = serde_json::to_vec(&UninstallModuleArgs {
-            account: addr(1), module_name: "logger".into(),
-        }).unwrap();
+            account: addr(1),
+            module_name: "logger".into(),
+        })
+        .unwrap();
         dispatch(&mut state, "uninstall_module", &uninstall, addr(1));
         assert!(!state.as_ref().unwrap().has_module(&addr(1), "logger"));
     }
@@ -293,15 +355,23 @@ mod tests {
     fn test_execute_via_module() {
         let mut state = setup();
         let install = serde_json::to_vec(&InstallModuleArgs {
-            account: addr(1), module_name: "swap".into(), version: "2.0".into(),
-            permissions: vec!["execute_swap".into()], timestamp: 3000,
-        }).unwrap();
+            account: addr(1),
+            module_name: "swap".into(),
+            version: "2.0".into(),
+            permissions: vec!["execute_swap".into()],
+            timestamp: 3000,
+        })
+        .unwrap();
         dispatch(&mut state, "install_module", &install, addr(1));
 
         let exec = serde_json::to_vec(&ExecuteArgs {
-            account: addr(1), module_name: "swap".into(),
-            method: "execute_swap".into(), args: vec![1, 2, 3], timestamp: 4000,
-        }).unwrap();
+            account: addr(1),
+            module_name: "swap".into(),
+            method: "execute_swap".into(),
+            args: vec![1, 2, 3],
+            timestamp: 4000,
+        })
+        .unwrap();
         dispatch(&mut state, "execute_via_module", &exec, addr(1));
 
         let s = state.as_ref().unwrap();
@@ -314,15 +384,23 @@ mod tests {
     fn test_execute_without_permission() {
         let mut state = setup();
         let install = serde_json::to_vec(&InstallModuleArgs {
-            account: addr(1), module_name: "limited".into(), version: "1.0".into(),
-            permissions: vec!["read".into()], timestamp: 3000,
-        }).unwrap();
+            account: addr(1),
+            module_name: "limited".into(),
+            version: "1.0".into(),
+            permissions: vec!["read".into()],
+            timestamp: 3000,
+        })
+        .unwrap();
         dispatch(&mut state, "install_module", &install, addr(1));
 
         let exec = serde_json::to_vec(&ExecuteArgs {
-            account: addr(1), module_name: "limited".into(),
-            method: "write".into(), args: vec![], timestamp: 4000,
-        }).unwrap();
+            account: addr(1),
+            module_name: "limited".into(),
+            method: "write".into(),
+            args: vec![],
+            timestamp: 4000,
+        })
+        .unwrap();
         dispatch(&mut state, "execute_via_module", &exec, addr(1));
     }
 
@@ -331,9 +409,13 @@ mod tests {
     fn test_install_non_owner() {
         let mut state = setup();
         let args = serde_json::to_vec(&InstallModuleArgs {
-            account: addr(1), module_name: "hacker".into(), version: "1.0".into(),
-            permissions: vec!["*".into()], timestamp: 5000,
-        }).unwrap();
+            account: addr(1),
+            module_name: "hacker".into(),
+            version: "1.0".into(),
+            permissions: vec!["*".into()],
+            timestamp: 5000,
+        })
+        .unwrap();
         dispatch(&mut state, "install_module", &args, addr(99));
     }
 }

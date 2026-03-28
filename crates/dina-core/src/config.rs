@@ -44,9 +44,9 @@ impl NetworkConfig {
         Self {
             chain_id: "dina-testnet-1".to_string(),
             block_time_ms: 100,
-            max_block_size_bytes: 1_048_576,       // 1 MB
+            max_block_size_bytes: 1_048_576, // 1 MB
             max_transactions_per_block: 1_000,
-            max_contract_size_bytes: 512_000,      // 500 KB
+            max_contract_size_bytes: 512_000,       // 500 KB
             channel_challenge_period_blocks: 1_000, // ~100 seconds at 100ms blocks
             channel_max_duration_blocks: 864_000,   // ~24 hours
             fee_schedule: FeeSchedule::default_testnet(),
@@ -80,12 +80,12 @@ impl NetworkConfig {
     pub fn development() -> Self {
         Self {
             chain_id: "dina-dev".to_string(),
-            block_time_ms: 50,                     // faster blocks
-            max_block_size_bytes: 4_194_304,       // 4 MB
+            block_time_ms: 50,               // faster blocks
+            max_block_size_bytes: 4_194_304, // 4 MB
             max_transactions_per_block: 5_000,
-            max_contract_size_bytes: 2_097_152,    // 2 MB
-            channel_challenge_period_blocks: 100,  // short for testing
-            channel_max_duration_blocks: 86_400,   // ~72 min at 50ms
+            max_contract_size_bytes: 2_097_152,   // 2 MB
+            channel_challenge_period_blocks: 100, // short for testing
+            channel_max_duration_blocks: 86_400,  // ~72 min at 50ms
             fee_schedule: FeeSchedule::development(),
             fee_distribution: FeeDistribution::default_split(),
             consensus: ConsensusConfig::development(),
@@ -126,7 +126,9 @@ impl NetworkConfig {
             return Err(DinaError::Custom("max_block_size_bytes must be > 0".into()));
         }
         if self.max_transactions_per_block == 0 {
-            return Err(DinaError::Custom("max_transactions_per_block must be > 0".into()));
+            return Err(DinaError::Custom(
+                "max_transactions_per_block must be > 0".into(),
+            ));
         }
         if !self.fee_distribution.is_valid() {
             return Err(DinaError::Custom(
@@ -149,11 +151,31 @@ impl fmt::Display for NetworkConfig {
         writeln!(f, "NetworkConfig {{")?;
         writeln!(f, "  chain_id              : {}", self.chain_id)?;
         writeln!(f, "  block_time            : {}ms", self.block_time_ms)?;
-        writeln!(f, "  max_block_size        : {} bytes", self.max_block_size_bytes)?;
-        writeln!(f, "  max_txns_per_block    : {}", self.max_transactions_per_block)?;
-        writeln!(f, "  max_contract_size     : {} bytes", self.max_contract_size_bytes)?;
-        writeln!(f, "  channel_challenge     : {} blocks", self.channel_challenge_period_blocks)?;
-        writeln!(f, "  channel_max_duration  : {} blocks", self.channel_max_duration_blocks)?;
+        writeln!(
+            f,
+            "  max_block_size        : {} bytes",
+            self.max_block_size_bytes
+        )?;
+        writeln!(
+            f,
+            "  max_txns_per_block    : {}",
+            self.max_transactions_per_block
+        )?;
+        writeln!(
+            f,
+            "  max_contract_size     : {} bytes",
+            self.max_contract_size_bytes
+        )?;
+        writeln!(
+            f,
+            "  channel_challenge     : {} blocks",
+            self.channel_challenge_period_blocks
+        )?;
+        writeln!(
+            f,
+            "  channel_max_duration  : {} blocks",
+            self.channel_max_duration_blocks
+        )?;
         writeln!(f, "  consensus             : {}", self.consensus)?;
         writeln!(f, "  privacy               : {}", self.privacy)?;
         writeln!(f, "  parallel_execution    : {}", self.parallel_execution)?;
@@ -557,7 +579,10 @@ mod tests {
 
     #[test]
     fn default_consensus_is_testnet() {
-        assert_eq!(ConsensusConfig::default(), ConsensusConfig::default_testnet());
+        assert_eq!(
+            ConsensusConfig::default(),
+            ConsensusConfig::default_testnet()
+        );
     }
 
     #[test]

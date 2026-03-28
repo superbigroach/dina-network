@@ -168,8 +168,7 @@ pub fn dispatch(
             assert!(state.is_none(), "HelloWorld: already initialised");
 
             // Parse the init arguments from JSON
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("HelloWorld: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("HelloWorld: bad init args");
 
             // Create the initial state. The `caller` (deployer) becomes owner.
             *state = Some(HelloWorldState::new(a.greeting, caller));

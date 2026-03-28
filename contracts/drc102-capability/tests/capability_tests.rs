@@ -1,4 +1,6 @@
-use drc102_capability::{dispatch, CapabilityRegistryState, Capability, CapabilityStatus, PricingModel};
+use drc102_capability::{
+    dispatch, Capability, CapabilityRegistryState, CapabilityStatus, PricingModel,
+};
 use std::collections::BTreeMap;
 
 fn addr(seed: u8) -> [u8; 32] {
@@ -27,7 +29,8 @@ fn register_cap(state: &mut Option<CapabilityRegistryState>, device: [u8; 32], c
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": device,
         "capabilities": [make_cap(cap_type)]
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "register_capabilities", &args, addr(2));
 }
 
@@ -70,7 +73,8 @@ fn update_status_changes_capability_status() {
         "capability_type": "compute",
         "new_status": "Offline",
         "timestamp": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "update_status", &args, addr(2));
 
     let caps = state.as_ref().unwrap().capabilities_of(&addr(10));
@@ -90,7 +94,8 @@ fn register_empty_capabilities_fails() {
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": addr(10),
         "capabilities": []
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "register_capabilities", &args, addr(2));
 }
 

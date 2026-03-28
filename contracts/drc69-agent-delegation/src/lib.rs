@@ -85,21 +85,27 @@ impl DelegationState {
         let id = self.next_id;
         self.next_id += 1;
 
-        self.delegate_index.entry(addr_key(&delegate)).or_default().push(id);
+        self.delegate_index
+            .entry(addr_key(&delegate))
+            .or_default()
+            .push(id);
 
-        self.delegations.insert(id, Delegation {
+        self.delegations.insert(
             id,
-            delegator: caller,
-            delegate,
-            permissions,
-            budget,
-            spent: 0,
-            expires_at,
-            revocable,
-            sub_delegations_allowed,
-            revoked: false,
-            parent_delegation_id: None,
-        });
+            Delegation {
+                id,
+                delegator: caller,
+                delegate,
+                permissions,
+                budget,
+                spent: 0,
+                expires_at,
+                revocable,
+                sub_delegations_allowed,
+                revoked: false,
+                parent_delegation_id: None,
+            },
+        );
         id
     }
 
@@ -112,51 +118,77 @@ impl DelegationState {
         budget: u64,
         expires_at: u64,
     ) -> u64 {
-        let parent = self.delegations.get(&parent_delegation_id)
+        let parent = self
+            .delegations
+            .get(&parent_delegation_id)
             .expect("DRC69: parent delegation not found");
         assert!(caller == parent.delegate, "DRC69: not the delegate");
-        assert!(parent.sub_delegations_allowed, "DRC69: sub-delegation not allowed");
+        assert!(
+            parent.sub_delegations_allowed,
+            "DRC69: sub-delegation not allowed"
+        );
         assert!(!parent.revoked, "DRC69: parent delegation revoked");
-        assert!(expires_at <= parent.expires_at, "DRC69: cannot exceed parent expiry");
-        assert!(budget <= parent.budget - parent.spent, "DRC69: sub-budget exceeds remaining");
+        assert!(
+            expires_at <= parent.expires_at,
+            "DRC69: cannot exceed parent expiry"
+        );
+        assert!(
+            budget <= parent.budget - parent.spent,
+            "DRC69: sub-budget exceeds remaining"
+        );
 
         // Verify permissions are a subset
         for p in &permissions {
-            assert!(parent.permissions.contains(p),
-                "DRC69: sub-permission not in parent scope");
+            assert!(
+                parent.permissions.contains(p),
+                "DRC69: sub-permission not in parent scope"
+            );
         }
 
         let id = self.next_id;
         self.next_id += 1;
 
-        self.delegate_index.entry(addr_key(&delegate)).or_default().push(id);
+        self.delegate_index
+            .entry(addr_key(&delegate))
+            .or_default()
+            .push(id);
 
-        self.delegations.insert(id, Delegation {
+        self.delegations.insert(
             id,
-            delegator: caller,
-            delegate,
-            permissions,
-            budget,
-            spent: 0,
-            expires_at,
-            revocable: true,
-            sub_delegations_allowed: false,
-            revoked: false,
-            parent_delegation_id: Some(parent_delegation_id),
-        });
+            Delegation {
+                id,
+                delegator: caller,
+                delegate,
+                permissions,
+                budget,
+                spent: 0,
+                expires_at,
+                revocable: true,
+                sub_delegations_allowed: false,
+                revoked: false,
+                parent_delegation_id: Some(parent_delegation_id),
+            },
+        );
         id
     }
 
     pub fn revoke(&mut self, caller: Address, delegation_id: u64) {
-        let del = self.delegations.get_mut(&delegation_id)
+        let del = self
+            .delegations
+            .get_mut(&delegation_id)
             .expect("DRC69: delegation not found");
-        assert!(caller == del.delegator || caller == self.owner, "DRC69: not authorised");
+        assert!(
+            caller == del.delegator || caller == self.owner,
+            "DRC69: not authorised"
+        );
         assert!(del.revocable, "DRC69: delegation is not revocable");
         assert!(!del.revoked, "DRC69: already revoked");
         del.revoked = true;
 
         // Recursively revoke sub-delegations
-        let sub_ids: Vec<u64> = self.delegations.iter()
+        let sub_ids: Vec<u64> = self
+            .delegations
+            .iter()
             .filter(|(_, d)| d.parent_delegation_id == Some(delegation_id) && !d.revoked)
             .map(|(id, _)| *id)
             .collect();
@@ -219,10 +251,15 @@ impl DelegationState {
         action: DelegatedActionKind,
         current_time: u64,
     ) -> bool {
-        let del = self.delegations.get(&delegation_id).expect("DRC69: delegation not found");
+        let del = self
+            .delegations
+            .get(&delegation_id)
+            .expect("DRC69: delegation not found");
         assert!(caller == del.delegate, "DRC69: not the delegate");
-        assert!(self.check_permission(delegation_id, &action, current_time),
-            "DRC69: permission denied");
+        assert!(
+            self.check_permission(delegation_id, &action, current_time),
+            "DRC69: permission denied"
+        );
 
         // Track spending for transfers
         if let DelegatedActionKind::Transfer { to: _, amount } = &action {
@@ -234,11 +271,14 @@ impl DelegationState {
 
     pub fn delegation_chain(&self, addr: Address) -> Vec<&Delegation> {
         let key = addr_key(&addr);
-        self.delegate_index.get(&key)
-            .map(|ids| ids.iter()
-                .filter_map(|id| self.delegations.get(id))
-                .filter(|d| !d.revoked)
-                .collect())
+        self.delegate_index
+            .get(&key)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.delegations.get(id))
+                    .filter(|d| !d.revoked)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
@@ -248,17 +288,42 @@ impl DelegationState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DelegateArgs { delegate: Address, permissions: Vec<Permission>, budget: u64, expires_at: u64, revocable: bool, sub_delegations_allowed: bool }
+struct DelegateArgs {
+    delegate: Address,
+    permissions: Vec<Permission>,
+    budget: u64,
+    expires_at: u64,
+    revocable: bool,
+    sub_delegations_allowed: bool,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SubDelegateArgs { parent_delegation_id: u64, delegate: Address, permissions: Vec<Permission>, budget: u64, expires_at: u64 }
+struct SubDelegateArgs {
+    parent_delegation_id: u64,
+    delegate: Address,
+    permissions: Vec<Permission>,
+    budget: u64,
+    expires_at: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DelegationIdArgs { delegation_id: u64 }
+struct DelegationIdArgs {
+    delegation_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CheckPermArgs { delegation_id: u64, action: DelegatedActionKind, current_time: u64 }
+struct CheckPermArgs {
+    delegation_id: u64,
+    action: DelegatedActionKind,
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ExecuteArgs { delegation_id: u64, action: DelegatedActionKind, current_time: u64 }
+struct ExecuteArgs {
+    delegation_id: u64,
+    action: DelegatedActionKind,
+    current_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArgs { address: Address }
+struct AddrArgs {
+    address: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<DelegationState>,
@@ -275,13 +340,28 @@ pub fn dispatch(
         "delegate" => {
             let s = state.as_mut().expect("DRC69: not initialised");
             let a: DelegateArgs = serde_json::from_slice(args).expect("DRC69: bad args");
-            let id = s.delegate(caller, a.delegate, a.permissions, a.budget, a.expires_at, a.revocable, a.sub_delegations_allowed);
+            let id = s.delegate(
+                caller,
+                a.delegate,
+                a.permissions,
+                a.budget,
+                a.expires_at,
+                a.revocable,
+                a.sub_delegations_allowed,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "sub_delegate" => {
             let s = state.as_mut().expect("DRC69: not initialised");
             let a: SubDelegateArgs = serde_json::from_slice(args).expect("DRC69: bad args");
-            let id = s.sub_delegate(caller, a.parent_delegation_id, a.delegate, a.permissions, a.budget, a.expires_at);
+            let id = s.sub_delegate(
+                caller,
+                a.parent_delegation_id,
+                a.delegate,
+                a.permissions,
+                a.budget,
+                a.expires_at,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "revoke" => {
@@ -327,9 +407,16 @@ mod tests {
     fn setup_delegation() -> (DelegationState, u64) {
         let mut s = DelegationState::new(PRINCIPAL);
         let id = s.delegate(
-            PRINCIPAL, AGENT_A,
-            vec![Permission::Transfer { max_amount: 1000 }, Permission::VectorQuery],
-            5000, 999999, true, true,
+            PRINCIPAL,
+            AGENT_A,
+            vec![
+                Permission::Transfer { max_amount: 1000 },
+                Permission::VectorQuery,
+            ],
+            5000,
+            999999,
+            true,
+            true,
         );
         (s, id)
     }
@@ -341,37 +428,56 @@ mod tests {
         assert_eq!(del.delegate, AGENT_A);
         assert!(!del.revoked);
 
-        assert!(s.check_permission(id,
-            &DelegatedActionKind::Transfer { to: TARGET, amount: 500 }, 100));
-        assert!(s.check_permission(id,
-            &DelegatedActionKind::VectorQuery { index_id: 1 }, 100));
+        assert!(s.check_permission(
+            id,
+            &DelegatedActionKind::Transfer {
+                to: TARGET,
+                amount: 500
+            },
+            100
+        ));
+        assert!(s.check_permission(id, &DelegatedActionKind::VectorQuery { index_id: 1 }, 100));
         // SwarmJoin not granted
-        assert!(!s.check_permission(id,
-            &DelegatedActionKind::SwarmJoin { swarm_id: 1 }, 100));
+        assert!(!s.check_permission(id, &DelegatedActionKind::SwarmJoin { swarm_id: 1 }, 100));
     }
 
     #[test]
     fn test_sub_delegation() {
         let (mut s, parent_id) = setup_delegation();
         let sub_id = s.sub_delegate(
-            AGENT_A, parent_id, AGENT_B,
+            AGENT_A,
+            parent_id,
+            AGENT_B,
             vec![Permission::VectorQuery],
-            1000, 999999,
+            1000,
+            999999,
         );
-        assert!(s.check_permission(sub_id,
-            &DelegatedActionKind::VectorQuery { index_id: 42 }, 100));
+        assert!(s.check_permission(
+            sub_id,
+            &DelegatedActionKind::VectorQuery { index_id: 42 },
+            100
+        ));
         // Transfer not sub-delegated
-        assert!(!s.check_permission(sub_id,
-            &DelegatedActionKind::Transfer { to: TARGET, amount: 100 }, 100));
+        assert!(!s.check_permission(
+            sub_id,
+            &DelegatedActionKind::Transfer {
+                to: TARGET,
+                amount: 100
+            },
+            100
+        ));
     }
 
     #[test]
     fn test_revoke_cascades() {
         let (mut s, parent_id) = setup_delegation();
         let sub_id = s.sub_delegate(
-            AGENT_A, parent_id, AGENT_B,
+            AGENT_A,
+            parent_id,
+            AGENT_B,
             vec![Permission::VectorQuery],
-            500, 999999,
+            500,
+            999999,
         );
         s.revoke(PRINCIPAL, parent_id);
         assert!(s.delegations.get(&parent_id).unwrap().revoked);
@@ -382,19 +488,36 @@ mod tests {
     fn test_expired_delegation_denied() {
         let (s, id) = setup_delegation();
         // expires_at = 999999, check at time 1_000_000
-        assert!(!s.check_permission(id,
-            &DelegatedActionKind::VectorQuery { index_id: 1 }, 1_000_000));
+        assert!(!s.check_permission(
+            id,
+            &DelegatedActionKind::VectorQuery { index_id: 1 },
+            1_000_000
+        ));
     }
 
     #[test]
     fn test_execute_tracks_spending() {
         let (mut s, id) = setup_delegation();
-        s.execute_delegated(AGENT_A, id,
-            DelegatedActionKind::Transfer { to: TARGET, amount: 300 }, 100);
+        s.execute_delegated(
+            AGENT_A,
+            id,
+            DelegatedActionKind::Transfer {
+                to: TARGET,
+                amount: 300,
+            },
+            100,
+        );
         assert_eq!(s.delegations.get(&id).unwrap().spent, 300);
 
-        s.execute_delegated(AGENT_A, id,
-            DelegatedActionKind::Transfer { to: TARGET, amount: 200 }, 200);
+        s.execute_delegated(
+            AGENT_A,
+            id,
+            DelegatedActionKind::Transfer {
+                to: TARGET,
+                amount: 200,
+            },
+            200,
+        );
         assert_eq!(s.delegations.get(&id).unwrap().spent, 500);
     }
 
@@ -410,7 +533,15 @@ mod tests {
     #[should_panic(expected = "cannot delegate to self")]
     fn test_self_delegation_rejected() {
         let mut s = DelegationState::new(PRINCIPAL);
-        s.delegate(PRINCIPAL, PRINCIPAL, vec![Permission::VectorQuery], 100, 9999, true, false);
+        s.delegate(
+            PRINCIPAL,
+            PRINCIPAL,
+            vec![Permission::VectorQuery],
+            100,
+            9999,
+            true,
+            false,
+        );
     }
 
     #[test]
@@ -420,8 +551,12 @@ mod tests {
         let args = serde_json::to_vec(&DelegateArgs {
             delegate: AGENT_A,
             permissions: vec![Permission::VectorQuery],
-            budget: 1000, expires_at: 99999, revocable: true, sub_delegations_allowed: false,
-        }).unwrap();
+            budget: 1000,
+            expires_at: 99999,
+            revocable: true,
+            sub_delegations_allowed: false,
+        })
+        .unwrap();
         let result = dispatch(&mut state, "delegate", &args, PRINCIPAL);
         let id: u64 = serde_json::from_slice(&result).unwrap();
         assert_eq!(id, 1);

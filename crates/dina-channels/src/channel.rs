@@ -1,5 +1,5 @@
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
 
 use crate::error::{ChannelError, Result};
@@ -56,12 +56,7 @@ impl PaymentChannel {
     ///
     /// The channel ID is derived deterministically from the two public keys
     /// and the current timestamp as a nonce.
-    pub fn open(
-        party_a: [u8; 32],
-        party_b: [u8; 32],
-        deposit_a: u64,
-        deposit_b: u64,
-    ) -> Self {
+    pub fn open(party_a: [u8; 32], party_b: [u8; 32], deposit_a: u64, deposit_b: u64) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
         let channel_id = derive_channel_id(&party_a, &party_b, now);
         // Use saturating_add to prevent panic on overflow. In practice the
@@ -71,9 +66,7 @@ impl PaymentChannel {
 
         debug!(
             channel_id = hex::encode(channel_id),
-            deposit_a,
-            deposit_b,
-            "opening payment channel"
+            deposit_a, deposit_b, "opening payment channel"
         );
 
         PaymentChannel {
@@ -151,7 +144,10 @@ impl PaymentChannel {
         }
 
         // Verify conservation of funds (with overflow protection)
-        let total = final_state.state.balance_a.checked_add(final_state.state.balance_b)
+        let total = final_state
+            .state
+            .balance_a
+            .checked_add(final_state.state.balance_b)
             .ok_or(ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
@@ -202,7 +198,10 @@ impl PaymentChannel {
         }
 
         // Verify conservation of funds (with overflow protection)
-        let total = signed_state.state.balance_a.checked_add(signed_state.state.balance_b)
+        let total = signed_state
+            .state
+            .balance_a
+            .checked_add(signed_state.state.balance_b)
             .ok_or(ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
@@ -231,11 +230,7 @@ impl PaymentChannel {
     ///
     /// During the challenge period, either party can submit a newer signed state
     /// to prove the submitted closing state was outdated.
-    pub fn challenge(
-        &mut self,
-        challenger: &[u8; 32],
-        signed_state: &SignedState,
-    ) -> Result<()> {
+    pub fn challenge(&mut self, challenger: &[u8; 32], signed_state: &SignedState) -> Result<()> {
         if self.status != ChannelStatus::Closing && self.status != ChannelStatus::Disputed {
             return Err(ChannelError::ChannelClosed);
         }
@@ -264,7 +259,10 @@ impl PaymentChannel {
         }
 
         // Verify conservation of funds (with overflow protection)
-        let total = signed_state.state.balance_a.checked_add(signed_state.state.balance_b)
+        let total = signed_state
+            .state
+            .balance_a
+            .checked_add(signed_state.state.balance_b)
             .ok_or(ChannelError::InvalidSignature)?;
         if total != self.total_locked {
             return Err(ChannelError::InsufficientBalance {
@@ -487,7 +485,9 @@ mod tests {
             signature_b: sig_b,
         };
 
-        let err = channel.close_unilateral(&outsider_pub, &signed).unwrap_err();
+        let err = channel
+            .close_unilateral(&outsider_pub, &signed)
+            .unwrap_err();
         assert!(matches!(err, ChannelError::NotPartyToChannel));
     }
 }

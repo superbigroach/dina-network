@@ -78,8 +78,12 @@ fn revoke_grant_works() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::FullAccess], 0, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::FullAccess],
+        0,
+        100,
     );
 
     assert_eq!(registry.grant_status(grant_id, 200), GrantStatus::Active);
@@ -96,8 +100,12 @@ fn non_grantor_cannot_revoke() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 0, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        0,
+        100,
     );
 
     // grantee tries to revoke
@@ -115,8 +123,12 @@ fn expired_grant_shows_expired_status() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 500, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        500,
+        100,
     );
 
     // Before expiry
@@ -186,9 +198,12 @@ fn verify_access_with_valid_scope_succeeds() {
     let grantee = addr(2);
 
     grant_basic(
-        &mut registry, grantor, grantee,
+        &mut registry,
+        grantor,
+        grantee,
         vec![ViewScope::Balances, ViewScope::TransactionAmounts],
-        1000, 100,
+        1000,
+        100,
     );
 
     let result = registry.verify_access(grantee, &ViewScope::Balances, 500);
@@ -209,8 +224,12 @@ fn verify_access_with_wrong_scope_fails() {
     let grantee = addr(2);
 
     grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 1000, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        1000,
+        100,
     );
 
     // Grantee does NOT have TransactionMemos scope
@@ -225,8 +244,12 @@ fn verify_access_fails_after_expiry() {
     let grantee = addr(2);
 
     grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 500, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        500,
+        100,
     );
 
     // After expiry
@@ -241,17 +264,25 @@ fn verify_access_fails_after_revocation() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 0, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        0,
+        100,
     );
 
     // Active before revocation
-    assert!(registry.verify_access(grantee, &ViewScope::Balances, 200).is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::Balances, 200)
+        .is_some());
 
     registry.revoke_grant(grantor, grant_id);
 
     // No access after revocation
-    assert!(registry.verify_access(grantee, &ViewScope::Balances, 200).is_none());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::Balances, 200)
+        .is_none());
 }
 
 // ============================================================
@@ -265,8 +296,12 @@ fn extend_grant_works() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 1000, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        1000,
+        100,
     );
 
     // Would have been expired at 1500
@@ -289,8 +324,12 @@ fn extend_grant_cannot_shorten() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 1000, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        1000,
+        100,
     );
 
     // Try to shorten from 1000 to 500
@@ -308,21 +347,31 @@ fn add_scopes_works() {
     let grantee = addr(2);
 
     let grant_id = grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::Balances], 1000, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::Balances],
+        1000,
+        100,
     );
 
     // Initially no TransactionHistory scope
-    assert!(registry.verify_access(grantee, &ViewScope::TransactionHistory, 500).is_none());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::TransactionHistory, 500)
+        .is_none());
 
     // Add new scope
     registry.add_scopes(grantor, grant_id, vec![ViewScope::TransactionHistory]);
 
     // Now has TransactionHistory
-    assert!(registry.verify_access(grantee, &ViewScope::TransactionHistory, 500).is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::TransactionHistory, 500)
+        .is_some());
 
     // Original scope still works
-    assert!(registry.verify_access(grantee, &ViewScope::Balances, 500).is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::Balances, 500)
+        .is_some());
 
     // Verify no duplicates when adding existing scope
     registry.add_scopes(grantor, grant_id, vec![ViewScope::Balances]);
@@ -337,13 +386,25 @@ fn full_access_grants_all_scopes() {
     let grantee = addr(2);
 
     grant_basic(
-        &mut registry, grantor, grantee,
-        vec![ViewScope::FullAccess], 1000, 100,
+        &mut registry,
+        grantor,
+        grantee,
+        vec![ViewScope::FullAccess],
+        1000,
+        100,
     );
 
     // FullAccess should give access to any scope
-    assert!(registry.verify_access(grantee, &ViewScope::Balances, 500).is_some());
-    assert!(registry.verify_access(grantee, &ViewScope::TransactionHistory, 500).is_some());
-    assert!(registry.verify_access(grantee, &ViewScope::TransactionMemos, 500).is_some());
-    assert!(registry.verify_access(grantee, &ViewScope::ContractCalls, 500).is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::Balances, 500)
+        .is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::TransactionHistory, 500)
+        .is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::TransactionMemos, 500)
+        .is_some());
+    assert!(registry
+        .verify_access(grantee, &ViewScope::ContractCalls, 500)
+        .is_some());
 }

@@ -104,7 +104,10 @@ impl ParallelWalletState {
         timestamp: u64,
     ) -> String {
         // L-5: Authority owner must be the caller — cannot create for someone else.
-        assert!(caller == owner, "DRC63: can only create authority for yourself");
+        assert!(
+            caller == owner,
+            "DRC63: can only create authority for yourself"
+        );
         let id = self.next_authority_id;
         self.next_authority_id += 1;
         let authority_id = format!("pa-{id}");
@@ -135,7 +138,9 @@ impl ParallelWalletState {
         count: u64,
         timestamp: u64,
     ) -> Vec<usize> {
-        let auth = self.authorities.get_mut(authority_id)
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
@@ -145,7 +150,9 @@ impl ParallelWalletState {
         assert!(
             current_len + count <= auth.max_wallets,
             "DRC63: would exceed max_wallets (current: {}, requested: {}, max: {})",
-            current_len, count, auth.max_wallets
+            current_len,
+            count,
+            auth.max_wallets
         );
 
         let mut indices = Vec::with_capacity(count as usize);
@@ -179,7 +186,9 @@ impl ParallelWalletState {
         needed_count: u64,
         timestamp: u64,
     ) -> Vec<usize> {
-        let auth = self.authorities.get(authority_id)
+        let auth = self
+            .authorities
+            .get(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
@@ -195,19 +204,18 @@ impl ParallelWalletState {
     }
 
     /// Distribute total_amount evenly across all active sub-wallets.
-    pub fn fund_all(
-        &mut self,
-        caller: &str,
-        authority_id: &str,
-        total_amount: u64,
-    ) {
-        let auth = self.authorities.get_mut(authority_id)
+    pub fn fund_all(&mut self, caller: &str, authority_id: &str, total_amount: u64) {
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
         assert!(total_amount > 0, "DRC63: amount must be > 0");
 
-        let active_indices: Vec<usize> = auth.sub_wallets.iter()
+        let active_indices: Vec<usize> = auth
+            .sub_wallets
+            .iter()
             .enumerate()
             .filter(|(_, w)| w.active)
             .map(|(i, _)| i)
@@ -235,12 +243,17 @@ impl ParallelWalletState {
         wallet_index: usize,
         amount: u64,
     ) {
-        let auth = self.authorities.get_mut(authority_id)
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
         assert!(amount > 0, "DRC63: amount must be > 0");
-        assert!(wallet_index < auth.sub_wallets.len(), "DRC63: wallet index out of bounds");
+        assert!(
+            wallet_index < auth.sub_wallets.len(),
+            "DRC63: wallet index out of bounds"
+        );
 
         let wallet = &mut auth.sub_wallets[wallet_index];
         assert!(wallet.active, "DRC63: wallet is not active");
@@ -250,12 +263,10 @@ impl ParallelWalletState {
     }
 
     /// Drain all sub-wallets back to the owner. Returns total drained.
-    pub fn consolidate(
-        &mut self,
-        caller: &str,
-        authority_id: &str,
-    ) -> u64 {
-        let auth = self.authorities.get_mut(authority_id)
+    pub fn consolidate(&mut self, caller: &str, authority_id: &str) -> u64 {
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
@@ -277,11 +288,16 @@ impl ParallelWalletState {
         authority_id: &str,
         wallet_index: usize,
     ) -> u64 {
-        let auth = self.authorities.get_mut(authority_id)
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
-        assert!(wallet_index < auth.sub_wallets.len(), "DRC63: wallet index out of bounds");
+        assert!(
+            wallet_index < auth.sub_wallets.len(),
+            "DRC63: wallet index out of bounds"
+        );
 
         let wallet = &mut auth.sub_wallets[wallet_index];
         let drained = wallet.balance;
@@ -292,20 +308,18 @@ impl ParallelWalletState {
     }
 
     /// Change the safety cap for max wallets. Owner only.
-    pub fn set_max_wallets(
-        &mut self,
-        caller: &str,
-        authority_id: &str,
-        new_max: u64,
-    ) {
-        let auth = self.authorities.get_mut(authority_id)
+    pub fn set_max_wallets(&mut self, caller: &str, authority_id: &str, new_max: u64) {
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(new_max > 0, "DRC63: max must be > 0");
         assert!(
             new_max >= auth.sub_wallets.len() as u64,
             "DRC63: new max ({}) cannot be less than current wallet count ({})",
-            new_max, auth.sub_wallets.len()
+            new_max,
+            auth.sub_wallets.len()
         );
 
         auth.max_wallets = new_max;
@@ -318,13 +332,16 @@ impl ParallelWalletState {
 
     /// Read a specific sub-wallet.
     pub fn get_sub_wallet(&self, authority_id: &str, index: usize) -> Option<&SubWallet> {
-        self.authorities.get(authority_id)
+        self.authorities
+            .get(authority_id)
             .and_then(|auth| auth.sub_wallets.get(index))
     }
 
     /// Return stats for an authority.
     pub fn get_stats(&self, authority_id: &str) -> ParallelStats {
-        let auth = self.authorities.get(authority_id)
+        let auth = self
+            .authorities
+            .get(authority_id)
             .expect("DRC63: authority not found");
 
         let active_wallets = auth.sub_wallets.iter().filter(|w| w.active).count() as u64;
@@ -346,7 +363,9 @@ impl ParallelWalletState {
 
     /// Pause all operations on an authority. Owner only.
     pub fn pause(&mut self, caller: &str, authority_id: &str) {
-        let auth = self.authorities.get_mut(authority_id)
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         auth.paused = true;
@@ -354,24 +373,26 @@ impl ParallelWalletState {
 
     /// Unpause an authority. Owner only.
     pub fn unpause(&mut self, caller: &str, authority_id: &str) {
-        let auth = self.authorities.get_mut(authority_id)
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         auth.paused = false;
     }
 
     /// Deactivate and drain a single wallet. Owner only.
-    pub fn remove_wallet(
-        &mut self,
-        caller: &str,
-        authority_id: &str,
-        index: usize,
-    ) -> u64 {
-        let auth = self.authorities.get_mut(authority_id)
+    pub fn remove_wallet(&mut self, caller: &str, authority_id: &str, index: usize) -> u64 {
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
-        assert!(index < auth.sub_wallets.len(), "DRC63: wallet index out of bounds");
+        assert!(
+            index < auth.sub_wallets.len(),
+            "DRC63: wallet index out of bounds"
+        );
 
         let wallet = &mut auth.sub_wallets[index];
         assert!(wallet.active, "DRC63: wallet already inactive");
@@ -393,11 +414,16 @@ impl ParallelWalletState {
         wallet_index: usize,
         amount: u64,
     ) {
-        let auth = self.authorities.get_mut(authority_id)
+        let auth = self
+            .authorities
+            .get_mut(authority_id)
             .expect("DRC63: authority not found");
         assert!(auth.owner == caller, "DRC63: not owner");
         assert!(!auth.paused, "DRC63: authority is paused");
-        assert!(wallet_index < auth.sub_wallets.len(), "DRC63: wallet index out of bounds");
+        assert!(
+            wallet_index < auth.sub_wallets.len(),
+            "DRC63: wallet index out of bounds"
+        );
 
         let wallet = &mut auth.sub_wallets[wallet_index];
         assert!(wallet.active, "DRC63: wallet is not active");
@@ -819,8 +845,8 @@ mod tests {
         let stats = state.get_stats(&auth_id);
         assert_eq!(stats.active_wallets, 4);
         assert_eq!(stats.total_balance, 400); // 50 + 50 + 300 + 0
-        assert_eq!(stats.avg_balance, 100);   // 400 / 4
-        assert_eq!(stats.total_txs, 3);       // 1 + 2 + 0 + 0
+        assert_eq!(stats.avg_balance, 100); // 400 / 4
+        assert_eq!(stats.total_txs, 3); // 1 + 2 + 0 + 0
     }
 
     // Test 11: Unpause restores operations
@@ -908,7 +934,8 @@ mod tests {
             owner: OWNER.to_string(),
             max_wallets: Some(100),
             timestamp: 1000,
-        }).unwrap();
+        })
+        .unwrap();
         let result = dispatch(&mut contract_state, "create_authority", &args, OWNER);
         let auth_id: String = serde_json::from_slice(&result).unwrap();
         assert!(auth_id.starts_with("pa-"));
@@ -918,7 +945,8 @@ mod tests {
             authority_id: auth_id.clone(),
             count: 3,
             timestamp: 2000,
-        }).unwrap();
+        })
+        .unwrap();
         let result = dispatch(&mut contract_state, "create_wallets", &args, OWNER);
         let indices: Vec<usize> = serde_json::from_slice(&result).unwrap();
         assert_eq!(indices.len(), 3);
@@ -927,13 +955,15 @@ mod tests {
         let args = serde_json::to_vec(&FundAllArgs {
             authority_id: auth_id.clone(),
             total_amount: 3000,
-        }).unwrap();
+        })
+        .unwrap();
         dispatch(&mut contract_state, "fund_all", &args, OWNER);
 
         // Get stats
         let args = serde_json::to_vec(&AuthorityIdArgs {
             authority_id: auth_id.clone(),
-        }).unwrap();
+        })
+        .unwrap();
         let result = dispatch(&mut contract_state, "get_stats", &args, OWNER);
         let stats: ParallelStats = serde_json::from_slice(&result).unwrap();
         assert_eq!(stats.active_wallets, 3);
@@ -943,7 +973,8 @@ mod tests {
         // Consolidate
         let args = serde_json::to_vec(&AuthorityIdArgs {
             authority_id: auth_id,
-        }).unwrap();
+        })
+        .unwrap();
         let result = dispatch(&mut contract_state, "consolidate", &args, OWNER);
         let total: u64 = serde_json::from_slice(&result).unwrap();
         assert_eq!(total, 3000);

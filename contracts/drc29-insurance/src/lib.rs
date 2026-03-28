@@ -48,7 +48,10 @@ impl InsuranceState {
         start: u64,
         end: u64,
     ) -> u64 {
-        assert!(caller == self.admin, "DRC29: only admin can create policies");
+        assert!(
+            caller == self.admin,
+            "DRC29: only admin can create policies"
+        );
         assert!(premium > 0, "DRC29: premium must be positive");
         assert!(coverage > 0, "DRC29: coverage must be positive");
         assert!(end > start, "DRC29: end must be after start");
@@ -76,12 +79,12 @@ impl InsuranceState {
             .policies
             .get_mut(&policy_id)
             .expect("DRC29: policy not found");
-        assert!(caller == policy.holder, "DRC29: only holder can pay premium");
-        assert!(policy.active, "DRC29: policy is not active");
         assert!(
-            amount == policy.premium,
-            "DRC29: amount must equal premium"
+            caller == policy.holder,
+            "DRC29: only holder can pay premium"
         );
+        assert!(policy.active, "DRC29: policy is not active");
+        assert!(amount == policy.premium, "DRC29: amount must equal premium");
 
         policy.premiums_paid += amount;
         self.pool_balance += amount;
@@ -99,10 +102,7 @@ impl InsuranceState {
             current_time >= policy.start && current_time <= policy.end,
             "DRC29: claim outside policy period"
         );
-        assert!(
-            policy.premiums_paid > 0,
-            "DRC29: no premiums paid"
-        );
+        assert!(policy.premiums_paid > 0, "DRC29: no premiums paid");
 
         policy.claimed = true;
     }
@@ -241,8 +241,7 @@ pub fn dispatch(
         }
         "get_policy" => {
             let s = state.as_ref().expect("DRC29: not initialised");
-            let a: PolicyIdArgs =
-                serde_json::from_slice(args).expect("DRC29: bad get_policy args");
+            let a: PolicyIdArgs = serde_json::from_slice(args).expect("DRC29: bad get_policy args");
             let policy = s.get_policy(a.policy_id);
             serde_json::to_vec(policy).unwrap()
         }
@@ -445,7 +444,11 @@ mod tests {
         dispatch(
             &mut state,
             "pay_premium",
-            &serde_json::to_vec(&PayPremiumArgs { policy_id: 0, amount: 50 }).unwrap(),
+            &serde_json::to_vec(&PayPremiumArgs {
+                policy_id: 0,
+                amount: 50,
+            })
+            .unwrap(),
             holder,
         );
 
@@ -486,14 +489,22 @@ mod tests {
         dispatch(
             &mut state,
             "pay_premium",
-            &serde_json::to_vec(&PayPremiumArgs { policy_id: 0, amount: 10 }).unwrap(),
+            &serde_json::to_vec(&PayPremiumArgs {
+                policy_id: 0,
+                amount: 10,
+            })
+            .unwrap(),
             holder,
         );
 
         dispatch(
             &mut state,
             "file_claim",
-            &serde_json::to_vec(&FileClaimArgs { policy_id: 0, current_time: 100 }).unwrap(),
+            &serde_json::to_vec(&FileClaimArgs {
+                policy_id: 0,
+                current_time: 100,
+            })
+            .unwrap(),
             holder,
         );
 

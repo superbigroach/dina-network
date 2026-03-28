@@ -1,4 +1,4 @@
-use drc103_service_agreement::{dispatch, ServiceAgreementState, AgreementStatus};
+use drc103_service_agreement::{dispatch, AgreementStatus, ServiceAgreementState};
 
 fn addr(seed: u8) -> [u8; 32] {
     [seed; 32]
@@ -10,7 +10,12 @@ fn init() -> Option<ServiceAgreementState> {
     state
 }
 
-fn propose(state: &mut Option<ServiceAgreementState>, client: [u8; 32], provider: [u8; 32], amount: u64) -> u64 {
+fn propose(
+    state: &mut Option<ServiceAgreementState>,
+    client: [u8; 32],
+    provider: [u8; 32],
+    amount: u64,
+) -> u64 {
     let args = serde_json::to_vec(&serde_json::json!({
         "terms": {
             "client": client,
@@ -23,7 +28,8 @@ fn propose(state: &mut Option<ServiceAgreementState>, client: [u8; 32], provider
         },
         "timestamp": 1000u64,
         "client_balance": 10000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "propose", &args, client);
     serde_json::from_slice(&result).unwrap()
 }
@@ -55,7 +61,8 @@ fn deliver_transitions_to_delivered() {
     dispatch(&mut state, "accept", &accept, addr(3));
     let deliver = serde_json::to_vec(&serde_json::json!({
         "agreement_id": id, "proof": "done", "timestamp": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "deliver", &deliver, addr(3));
     let ag = state.as_ref().unwrap().get_agreement(id).unwrap();
     assert_eq!(ag.status, AgreementStatus::Delivered);
@@ -69,11 +76,13 @@ fn confirm_completes_and_returns_payout() {
     dispatch(&mut state, "accept", &accept, addr(3));
     let deliver = serde_json::to_vec(&serde_json::json!({
         "agreement_id": id, "proof": "done", "timestamp": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "deliver", &deliver, addr(3));
     let confirm = serde_json::to_vec(&serde_json::json!({
         "agreement_id": id, "timestamp": 3000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "confirm", &confirm, addr(2));
     let res: serde_json::Value = serde_json::from_slice(&result).unwrap();
     assert_eq!(res["payout"], 500);
@@ -84,9 +93,28 @@ fn full_lifecycle_propose_accept_deliver_confirm() {
     let mut state = init();
     let id = propose(&mut state, addr(2), addr(3), 1000);
 
-    dispatch(&mut state, "accept", &serde_json::to_vec(&serde_json::json!({"agreement_id": id})).unwrap(), addr(3));
-    dispatch(&mut state, "deliver", &serde_json::to_vec(&serde_json::json!({"agreement_id": id, "proof": "proof", "timestamp": 2000u64})).unwrap(), addr(3));
-    dispatch(&mut state, "confirm", &serde_json::to_vec(&serde_json::json!({"agreement_id": id, "timestamp": 3000u64})).unwrap(), addr(2));
+    dispatch(
+        &mut state,
+        "accept",
+        &serde_json::to_vec(&serde_json::json!({"agreement_id": id})).unwrap(),
+        addr(3),
+    );
+    dispatch(
+        &mut state,
+        "deliver",
+        &serde_json::to_vec(
+            &serde_json::json!({"agreement_id": id, "proof": "proof", "timestamp": 2000u64}),
+        )
+        .unwrap(),
+        addr(3),
+    );
+    dispatch(
+        &mut state,
+        "confirm",
+        &serde_json::to_vec(&serde_json::json!({"agreement_id": id, "timestamp": 3000u64}))
+            .unwrap(),
+        addr(2),
+    );
 
     let ag = state.as_ref().unwrap().get_agreement(id).unwrap();
     assert_eq!(ag.status, AgreementStatus::Completed);
@@ -115,10 +143,16 @@ fn cancel_returns_escrow() {
 fn dispute_transitions_to_disputed() {
     let mut state = init();
     let id = propose(&mut state, addr(2), addr(3), 500);
-    dispatch(&mut state, "accept", &serde_json::to_vec(&serde_json::json!({"agreement_id": id})).unwrap(), addr(3));
+    dispatch(
+        &mut state,
+        "accept",
+        &serde_json::to_vec(&serde_json::json!({"agreement_id": id})).unwrap(),
+        addr(3),
+    );
     let args = serde_json::to_vec(&serde_json::json!({
         "agreement_id": id, "reason": "bad quality"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "dispute", &args, addr(2));
     let ag = state.as_ref().unwrap().get_agreement(id).unwrap();
     assert_eq!(ag.status, AgreementStatus::Disputed);
@@ -136,6 +170,7 @@ fn propose_by_non_client_fails() {
             "auto_confirm_after": 3600u64
         },
         "timestamp": 1000u64, "client_balance": 10000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "propose", &args, addr(99));
 }

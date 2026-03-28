@@ -238,7 +238,11 @@ pub fn dispatch(
         "init" => {
             assert!(state.is_none(), "DRC24: already initialised");
             let a: InitArgs = serde_json::from_slice(args).expect("DRC24: bad init args");
-            *state = Some(DaoState::new(caller, a.initial_voting_power, a.proposal_threshold));
+            *state = Some(DaoState::new(
+                caller,
+                a.initial_voting_power,
+                a.proposal_threshold,
+            ));
             serde_json::to_vec("ok").unwrap()
         }
 

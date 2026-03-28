@@ -349,7 +349,10 @@ mod tests {
         // 6th request should fail — daily limit reached.
         let time = base_time + 5 * 61;
         let result = f.request_funds(user_addr(), time);
-        assert!(matches!(result, Err(FaucetError::DailyLimitExceeded { .. })));
+        assert!(matches!(
+            result,
+            Err(FaucetError::DailyLimitExceeded { .. })
+        ));
     }
 
     #[test]
@@ -434,7 +437,10 @@ mod tests {
 
         // Third request: exceeds 100 USDC daily limit.
         let result = f.request_funds(user_addr(), 1062);
-        assert!(matches!(result, Err(FaucetError::DailyLimitExceeded { .. })));
+        assert!(matches!(
+            result,
+            Err(FaucetError::DailyLimitExceeded { .. })
+        ));
     }
 
     #[test]

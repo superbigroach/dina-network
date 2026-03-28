@@ -193,7 +193,7 @@ mod tests {
 
         CctpMessage {
             version: 2,
-            source_domain: 6, // Base
+            source_domain: 6,       // Base
             destination_domain: 99, // Dina
             nonce: 42,
             sender: [0x11; 32],

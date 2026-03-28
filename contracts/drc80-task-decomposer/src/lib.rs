@@ -101,12 +101,18 @@ impl TaskDecomposerState {
 
         let id = self.next_task_id;
         self.next_task_id += 1;
-        self.tasks.insert(id, ComplexTask {
-            id, creator: caller, description, budget,
-            subtasks: Vec::new(),
-            status: TaskStatus::Created,
-            final_result_hash: None,
-        });
+        self.tasks.insert(
+            id,
+            ComplexTask {
+                id,
+                creator: caller,
+                description,
+                budget,
+                subtasks: Vec::new(),
+                status: TaskStatus::Created,
+                final_result_hash: None,
+            },
+        );
         id
     }
 
@@ -119,21 +125,35 @@ impl TaskDecomposerState {
     ) {
         let task = self.tasks.get(&task_id).expect("DRC80: task not found");
         assert!(task.creator == caller, "DRC80: only creator can decompose");
-        assert!(task.status == TaskStatus::Created, "DRC80: task already decomposed");
+        assert!(
+            task.status == TaskStatus::Created,
+            "DRC80: task already decomposed"
+        );
 
         let total_reward: u64 = subtask_defs.iter().map(|(_, _, r, _)| r).sum();
-        assert!(total_reward <= task.budget, "DRC80: subtask rewards exceed budget");
+        assert!(
+            total_reward <= task.budget,
+            "DRC80: subtask rewards exceed budget"
+        );
 
         let mut subtask_ids = Vec::new();
         for (desc, cap, reward, deps) in subtask_defs {
             let sid = self.next_subtask_id;
             self.next_subtask_id += 1;
-            self.subtasks.insert(sid, Subtask {
-                id: sid, parent_task: task_id, description: desc,
-                required_capability: cap, assigned_to: None, reward,
-                status: SubtaskStatus::Pending, result_hash: None,
-                dependencies: deps,
-            });
+            self.subtasks.insert(
+                sid,
+                Subtask {
+                    id: sid,
+                    parent_task: task_id,
+                    description: desc,
+                    required_capability: cap,
+                    assigned_to: None,
+                    reward,
+                    status: SubtaskStatus::Pending,
+                    result_hash: None,
+                    dependencies: deps,
+                },
+            );
             subtask_ids.push(sid);
         }
 
@@ -143,10 +163,22 @@ impl TaskDecomposerState {
     }
 
     pub fn assign_subtask(&mut self, caller: Address, subtask_id: SubtaskId, agent: Address) {
-        let subtask = self.subtasks.get(&subtask_id).expect("DRC80: subtask not found");
-        let task = self.tasks.get(&subtask.parent_task).expect("DRC80: parent task not found");
-        assert!(task.creator == caller, "DRC80: only task creator can assign");
-        assert!(subtask.status == SubtaskStatus::Pending, "DRC80: subtask not pending");
+        let subtask = self
+            .subtasks
+            .get(&subtask_id)
+            .expect("DRC80: subtask not found");
+        let task = self
+            .tasks
+            .get(&subtask.parent_task)
+            .expect("DRC80: parent task not found");
+        assert!(
+            task.creator == caller,
+            "DRC80: only task creator can assign"
+        );
+        assert!(
+            subtask.status == SubtaskStatus::Pending,
+            "DRC80: subtask not pending"
+        );
 
         let subtask = self.subtasks.get_mut(&subtask_id).unwrap();
         subtask.assigned_to = Some(agent);
@@ -161,9 +193,13 @@ impl TaskDecomposerState {
 
     /// Check if all dependencies of a subtask are completed.
     pub fn check_dependencies(&self, subtask_id: SubtaskId) -> bool {
-        let subtask = self.subtasks.get(&subtask_id).expect("DRC80: subtask not found");
+        let subtask = self
+            .subtasks
+            .get(&subtask_id)
+            .expect("DRC80: subtask not found");
         subtask.dependencies.iter().all(|dep_id| {
-            self.subtasks.get(dep_id)
+            self.subtasks
+                .get(dep_id)
                 .map_or(false, |d| d.status == SubtaskStatus::Completed)
         })
     }
@@ -174,10 +210,22 @@ impl TaskDecomposerState {
         subtask_id: SubtaskId,
         result_hash: [u8; 32],
     ) {
-        let subtask = self.subtasks.get(&subtask_id).expect("DRC80: subtask not found");
-        assert!(subtask.status == SubtaskStatus::Assigned, "DRC80: subtask not assigned");
-        assert!(subtask.assigned_to == Some(caller), "DRC80: only assigned agent can complete");
-        assert!(self.check_dependencies(subtask_id), "DRC80: dependencies not met");
+        let subtask = self
+            .subtasks
+            .get(&subtask_id)
+            .expect("DRC80: subtask not found");
+        assert!(
+            subtask.status == SubtaskStatus::Assigned,
+            "DRC80: subtask not assigned"
+        );
+        assert!(
+            subtask.assigned_to == Some(caller),
+            "DRC80: only assigned agent can complete"
+        );
+        assert!(
+            self.check_dependencies(subtask_id),
+            "DRC80: dependencies not met"
+        );
 
         let reward = subtask.reward;
         let subtask = self.subtasks.get_mut(&subtask_id).unwrap();
@@ -192,7 +240,9 @@ impl TaskDecomposerState {
     pub fn aggregate_results(&mut self, task_id: TaskId, final_hash: [u8; 32]) -> bool {
         let task = self.tasks.get(&task_id).expect("DRC80: task not found");
         let all_done = task.subtasks.iter().all(|sid| {
-            self.subtasks.get(sid).map_or(false, |s| s.status == SubtaskStatus::Completed)
+            self.subtasks
+                .get(sid)
+                .map_or(false, |s| s.status == SubtaskStatus::Completed)
         });
 
         if all_done {
@@ -201,7 +251,9 @@ impl TaskDecomposerState {
             task.final_result_hash = Some(final_hash);
 
             // Refund unused budget
-            let total_rewards: u64 = task.subtasks.iter()
+            let total_rewards: u64 = task
+                .subtasks
+                .iter()
                 .filter_map(|sid| self.subtasks.get(sid))
                 .map(|s| s.reward)
                 .sum();
@@ -218,7 +270,10 @@ impl TaskDecomposerState {
         let task = self.tasks.get(&task_id).expect("DRC80: task not found");
         let mut progress = TaskProgress {
             total_subtasks: task.subtasks.len(),
-            completed: 0, failed: 0, pending: 0, assigned: 0,
+            completed: 0,
+            failed: 0,
+            pending: 0,
+            assigned: 0,
         };
         for sid in &task.subtasks {
             if let Some(st) = self.subtasks.get(sid) {
@@ -239,21 +294,42 @@ impl TaskDecomposerState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateTaskArgs { description: String, budget: u64 }
+struct CreateTaskArgs {
+    description: String,
+    budget: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DecomposeArgs { task_id: TaskId, subtask_defs: Vec<(String, String, u64, Vec<SubtaskId>)> }
+struct DecomposeArgs {
+    task_id: TaskId,
+    subtask_defs: Vec<(String, String, u64, Vec<SubtaskId>)>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AssignArgs { subtask_id: SubtaskId, agent: Address }
+struct AssignArgs {
+    subtask_id: SubtaskId,
+    agent: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct CompleteArgs { subtask_id: SubtaskId, result_hash: [u8; 32] }
+struct CompleteArgs {
+    subtask_id: SubtaskId,
+    result_hash: [u8; 32],
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AggregateArgs { task_id: TaskId, final_hash: [u8; 32] }
+struct AggregateArgs {
+    task_id: TaskId,
+    final_hash: [u8; 32],
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TaskIdArgs { task_id: TaskId }
+struct TaskIdArgs {
+    task_id: TaskId,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SubtaskIdArgs { subtask_id: SubtaskId }
+struct SubtaskIdArgs {
+    subtask_id: SubtaskId,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<TaskDecomposerState>,
@@ -334,13 +410,29 @@ mod tests {
         let mut s = TaskDecomposerState::new(OWNER);
         s.deposit(CREATOR, 100_000);
         let tid = s.create_complex_task(
-            CREATOR, "Analyze satellite imagery and generate report".into(), 5000,
+            CREATOR,
+            "Analyze satellite imagery and generate report".into(),
+            5000,
         );
-        s.decompose(CREATOR, tid, vec![
-            ("Download imagery".into(), "data-access".into(), 1000, vec![]),
-            ("Run ML model".into(), "ml-inference".into(), 2500, vec![1]), // depends on subtask 1
-            ("Generate report".into(), "text-generation".into(), 1000, vec![2]), // depends on subtask 2
-        ]);
+        s.decompose(
+            CREATOR,
+            tid,
+            vec![
+                (
+                    "Download imagery".into(),
+                    "data-access".into(),
+                    1000,
+                    vec![],
+                ),
+                ("Run ML model".into(), "ml-inference".into(), 2500, vec![1]), // depends on subtask 1
+                (
+                    "Generate report".into(),
+                    "text-generation".into(),
+                    1000,
+                    vec![2],
+                ), // depends on subtask 2
+            ],
+        );
         (s, tid)
     }
 

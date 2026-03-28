@@ -54,11 +54,17 @@ impl PayableTokenState {
     }
 
     pub fn allowance(&self, owner: &Address, spender: &Address) -> u64 {
-        self.allowances.get(&(*owner, *spender)).copied().unwrap_or(0)
+        self.allowances
+            .get(&(*owner, *spender))
+            .copied()
+            .unwrap_or(0)
     }
 
     pub fn is_receiver(&self, addr: &Address) -> bool {
-        self.registered_receivers.get(addr).copied().unwrap_or(false)
+        self.registered_receivers
+            .get(addr)
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn callback_count(&self) -> usize {
@@ -106,13 +112,7 @@ impl PayableTokenState {
 
     /// Transfer tokens and notify recipient via callback.
     /// If recipient is a registered receiver, the callback is logged.
-    pub fn transfer_and_call(
-        &mut self,
-        caller: Address,
-        to: Address,
-        amount: u64,
-        data: Vec<u8>,
-    ) {
+    pub fn transfer_and_call(&mut self, caller: Address, to: Address, amount: u64, data: Vec<u8>) {
         self.transfer(caller, to, amount);
         if self.is_receiver(&to) {
             self.callback_log.push(TransferCallback {
@@ -151,21 +151,48 @@ impl PayableTokenState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct InitArgs { name: String, symbol: String, decimals: u8 }
+struct InitArgs {
+    name: String,
+    symbol: String,
+    decimals: u8,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferArgs { to: Address, amount: u64 }
+struct TransferArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ApproveArgs { spender: Address, amount: u64 }
+struct ApproveArgs {
+    spender: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferFromArgs { from: Address, to: Address, amount: u64 }
+struct TransferFromArgs {
+    from: Address,
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct MintArgs { to: Address, amount: u64 }
+struct MintArgs {
+    to: Address,
+    amount: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TransferAndCallArgs { to: Address, amount: u64, data: Vec<u8> }
+struct TransferAndCallArgs {
+    to: Address,
+    amount: u64,
+    data: Vec<u8>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ApproveAndCallArgs { spender: Address, amount: u64, data: Vec<u8> }
+struct ApproveAndCallArgs {
+    spender: Address,
+    amount: u64,
+    data: Vec<u8>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { account: Address }
+struct AddrArg {
+    account: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<PayableTokenState>,
@@ -256,16 +283,25 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn setup() -> Option<PayableTokenState> {
         let mut state = None;
         let args = serde_json::to_vec(&InitArgs {
-            name: "PayToken".into(), symbol: "PAY".into(), decimals: 6,
-        }).unwrap();
+            name: "PayToken".into(),
+            symbol: "PAY".into(),
+            decimals: 6,
+        })
+        .unwrap();
         dispatch(&mut state, "init", &args, addr(1));
         // Mint 1000 to addr(1)
-        let mint = serde_json::to_vec(&MintArgs { to: addr(1), amount: 1000 }).unwrap();
+        let mint = serde_json::to_vec(&MintArgs {
+            to: addr(1),
+            amount: 1000,
+        })
+        .unwrap();
         dispatch(&mut state, "mint", &mint, addr(1));
         state
     }
@@ -276,8 +312,11 @@ mod tests {
         // Register addr(2) as receiver
         dispatch(&mut state, "register_receiver", b"", addr(2));
         let args = serde_json::to_vec(&TransferAndCallArgs {
-            to: addr(2), amount: 100, data: vec![1, 2, 3],
-        }).unwrap();
+            to: addr(2),
+            amount: 100,
+            data: vec![1, 2, 3],
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_and_call", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(1)), 900);
@@ -291,8 +330,11 @@ mod tests {
         let mut state = setup();
         // addr(2) is NOT registered — no callback
         let args = serde_json::to_vec(&TransferAndCallArgs {
-            to: addr(2), amount: 50, data: vec![],
-        }).unwrap();
+            to: addr(2),
+            amount: 50,
+            data: vec![],
+        })
+        .unwrap();
         dispatch(&mut state, "transfer_and_call", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(2)), 50);
@@ -304,8 +346,11 @@ mod tests {
         let mut state = setup();
         dispatch(&mut state, "register_receiver", b"", addr(3));
         let args = serde_json::to_vec(&ApproveAndCallArgs {
-            spender: addr(3), amount: 500, data: vec![9],
-        }).unwrap();
+            spender: addr(3),
+            amount: 500,
+            data: vec![9],
+        })
+        .unwrap();
         dispatch(&mut state, "approve_and_call", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.allowance(&addr(1), &addr(3)), 500);
@@ -326,7 +371,11 @@ mod tests {
     #[test]
     fn test_standard_transfer_and_mint() {
         let mut state = setup();
-        let args = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 200 }).unwrap();
+        let args = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 200,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &args, addr(1));
         let s = state.as_ref().unwrap();
         assert_eq!(s.balance_of(&addr(1)), 800);
@@ -338,7 +387,11 @@ mod tests {
     #[should_panic(expected = "insufficient balance")]
     fn test_transfer_insufficient() {
         let mut state = setup();
-        let args = serde_json::to_vec(&TransferArgs { to: addr(2), amount: 9999 }).unwrap();
+        let args = serde_json::to_vec(&TransferArgs {
+            to: addr(2),
+            amount: 9999,
+        })
+        .unwrap();
         dispatch(&mut state, "transfer", &args, addr(1));
     }
 }

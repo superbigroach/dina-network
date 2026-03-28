@@ -171,7 +171,7 @@ impl RelayScanner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blob::{DEFAULT_BLOB_TTL_SECS, RelayBlob};
+    use crate::blob::{RelayBlob, DEFAULT_BLOB_TTL_SECS};
     use dina_core::crypto;
     use dina_core::transaction::Sig64;
     use dina_core::types::{Address, Hash};

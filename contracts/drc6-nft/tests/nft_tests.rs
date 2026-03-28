@@ -9,7 +9,8 @@ fn init() -> Option<NftState> {
     let args = serde_json::to_vec(&serde_json::json!({
         "name": "TestNFT",
         "symbol": "TNFT"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "init", &args, addr(1));
     state
 }
@@ -18,7 +19,8 @@ fn mint(state: &mut Option<NftState>, to: [u8; 32]) -> u64 {
     let args = serde_json::to_vec(&serde_json::json!({
         "to": to,
         "metadata": {"name": "Token", "description": "A test token", "attributes": {}}
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "mint", &args, addr(1));
     serde_json::from_slice(&result).unwrap()
 }
@@ -48,7 +50,8 @@ fn transfer_from_changes_ownership() {
     let id = mint(&mut state, addr(2));
     let args = serde_json::to_vec(&serde_json::json!({
         "from": addr(2), "to": addr(3), "token_id": id
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_from", &args, addr(2));
     assert_eq!(state.as_ref().unwrap().owner_of(id), addr(3));
 }
@@ -59,12 +62,14 @@ fn approve_and_transfer_by_approved() {
     let id = mint(&mut state, addr(2));
     let approve_args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "token_id": id
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "approve", &approve_args, addr(2));
 
     let transfer_args = serde_json::to_vec(&serde_json::json!({
         "from": addr(2), "to": addr(4), "token_id": id
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_from", &transfer_args, addr(3));
     assert_eq!(state.as_ref().unwrap().owner_of(id), addr(4));
 }
@@ -76,7 +81,8 @@ fn transfer_by_unauthorized_fails() {
     let id = mint(&mut state, addr(2));
     let args = serde_json::to_vec(&serde_json::json!({
         "from": addr(2), "to": addr(3), "token_id": id
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_from", &args, addr(5));
 }
 
@@ -121,6 +127,7 @@ fn mint_by_non_minter_fails() {
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(2),
         "metadata": {"name": "T", "description": "D", "attributes": {}}
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "mint", &args, addr(5));
 }

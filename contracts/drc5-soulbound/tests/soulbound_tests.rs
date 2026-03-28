@@ -11,12 +11,19 @@ fn init() -> Option<CredentialRegistry> {
     state
 }
 
-fn authorize_and_issue(state: &mut Option<CredentialRegistry>, issuer: [u8; 32], holder: [u8; 32], cred_type: &str, expires_at: Option<u64>) -> u64 {
+fn authorize_and_issue(
+    state: &mut Option<CredentialRegistry>,
+    issuer: [u8; 32],
+    holder: [u8; 32],
+    cred_type: &str,
+    expires_at: Option<u64>,
+) -> u64 {
     // Owner authorizes issuer
     let auth_args = serde_json::to_vec(&serde_json::json!({
         "credential_type": cred_type,
         "issuer": issuer
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "add_authorized_issuer", &auth_args, addr(1));
 
     // Issuer issues credential
@@ -26,7 +33,8 @@ fn authorize_and_issue(state: &mut Option<CredentialRegistry>, issuer: [u8; 32],
         "data": {},
         "issued_at": 1000u64,
         "expires_at": expires_at
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "issue", &issue_args, issuer);
     serde_json::from_slice(&result).unwrap()
 }
@@ -45,7 +53,8 @@ fn has_credential_returns_true_for_valid_credential() {
     let args = serde_json::to_vec(&serde_json::json!({
         "holder": addr(3),
         "credential_type": "KYC"
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "has_credential", &args, addr(1));
     let has: bool = serde_json::from_slice(&result).unwrap();
     assert!(has);
@@ -57,7 +66,8 @@ fn has_credential_returns_false_for_unknown() {
     let args = serde_json::to_vec(&serde_json::json!({
         "holder": addr(99),
         "credential_type": "KYC"
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "has_credential", &args, addr(1));
     let has: bool = serde_json::from_slice(&result).unwrap();
     assert!(!has);
@@ -70,7 +80,8 @@ fn verify_returns_valid_for_active_credential() {
     let args = serde_json::to_vec(&serde_json::json!({
         "credential_id": id,
         "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "verify", &args, addr(1));
     let status: CredentialStatus = serde_json::from_slice(&result).unwrap();
     assert_eq!(status, CredentialStatus::Valid);
@@ -83,7 +94,8 @@ fn verify_returns_expired_for_expired_credential() {
     let args = serde_json::to_vec(&serde_json::json!({
         "credential_id": id,
         "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "verify", &args, addr(1));
     let status: CredentialStatus = serde_json::from_slice(&result).unwrap();
     assert_eq!(status, CredentialStatus::Expired);
@@ -99,7 +111,8 @@ fn revoke_makes_credential_revoked() {
     let verify_args = serde_json::to_vec(&serde_json::json!({
         "credential_id": id,
         "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "verify", &verify_args, addr(1));
     let status: CredentialStatus = serde_json::from_slice(&result).unwrap();
     assert_eq!(status, CredentialStatus::Revoked);
@@ -115,7 +128,8 @@ fn has_credential_returns_false_after_revoke() {
     let args = serde_json::to_vec(&serde_json::json!({
         "holder": addr(3),
         "credential_type": "KYC"
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "has_credential", &args, addr(1));
     let has: bool = serde_json::from_slice(&result).unwrap();
     assert!(!has);
@@ -127,7 +141,8 @@ fn verify_returns_not_found_for_nonexistent() {
     let args = serde_json::to_vec(&serde_json::json!({
         "credential_id": 999u64,
         "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "verify", &args, addr(1));
     let status: CredentialStatus = serde_json::from_slice(&result).unwrap();
     assert_eq!(status, CredentialStatus::NotFound);
@@ -141,7 +156,8 @@ fn issue_by_unauthorized_issuer_fails() {
     let auth_args = serde_json::to_vec(&serde_json::json!({
         "credential_type": "KYC",
         "issuer": addr(2)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "add_authorized_issuer", &auth_args, addr(1));
 
     let issue_args = serde_json::to_vec(&serde_json::json!({
@@ -150,6 +166,7 @@ fn issue_by_unauthorized_issuer_fails() {
         "data": {},
         "issued_at": 1000u64,
         "expires_at": null
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "issue", &issue_args, addr(3));
 }

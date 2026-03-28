@@ -160,6 +160,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -428,6 +440,7 @@ dependencies = [
  "borsh",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -444,6 +457,8 @@ name = "bridge-base"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ed25519-dalek",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sha2",
@@ -454,6 +469,8 @@ name = "bridge-cctp"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ed25519-dalek",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sha2",
@@ -491,6 +508,8 @@ name = "bridge-wormhole"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ed25519-dalek",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sha2",
@@ -1105,6 +1124,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "dev-events"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dev-factory"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dev-multicall"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dev-timelock"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "dex-swap"
 version = "0.1.0"
 dependencies = [
@@ -1176,6 +1231,8 @@ name = "dina-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "argon2",
+ "chacha20poly1305",
  "chrono",
  "clap",
  "colored",
@@ -1378,7 +1435,9 @@ name = "dina-rpc"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "dina-core",
+ "dina-monitoring",
  "hex",
  "jsonrpsee",
  "serde",
@@ -1669,8 +1728,10 @@ name = "drc15-meta-tx"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ed25519-dalek",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1680,6 +1741,7 @@ dependencies = [
  "borsh",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1903,6 +1965,7 @@ name = "drc4-permit"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ed25519-dalek",
  "serde",
  "serde_json",
  "sha2",
@@ -4579,6 +4642,17 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]

@@ -25,10 +25,10 @@ pub struct Triple {
 pub struct KnowledgeGraphState {
     pub owner: Address,
     pub triples: Vec<Triple>,
-    pub subject_index: BTreeMap<String, Vec<u64>>,  // subject -> triple ids
+    pub subject_index: BTreeMap<String, Vec<u64>>, // subject -> triple ids
     pub predicate_index: BTreeMap<String, Vec<u64>>, // predicate -> triple ids
-    pub object_index: BTreeMap<String, Vec<u64>>,    // object -> triple ids
-    pub source_index: BTreeMap<String, Vec<u64>>,    // hex(source) -> triple ids
+    pub object_index: BTreeMap<String, Vec<u64>>,  // object -> triple ids
+    pub source_index: BTreeMap<String, Vec<u64>>,  // hex(source) -> triple ids
     pub next_id: u64,
 }
 
@@ -66,10 +66,22 @@ impl KnowledgeGraphState {
         let id = self.next_id;
         self.next_id += 1;
 
-        self.subject_index.entry(subject.clone()).or_default().push(id);
-        self.predicate_index.entry(predicate.clone()).or_default().push(id);
-        self.object_index.entry(object.clone()).or_default().push(id);
-        self.source_index.entry(addr_key(&caller)).or_default().push(id);
+        self.subject_index
+            .entry(subject.clone())
+            .or_default()
+            .push(id);
+        self.predicate_index
+            .entry(predicate.clone())
+            .or_default()
+            .push(id);
+        self.object_index
+            .entry(object.clone())
+            .or_default()
+            .push(id);
+        self.source_index
+            .entry(addr_key(&caller))
+            .or_default()
+            .push(id);
 
         self.triples.push(Triple {
             id,
@@ -85,26 +97,35 @@ impl KnowledgeGraphState {
     }
 
     pub fn query_by_subject(&self, subject: &str) -> Vec<&Triple> {
-        self.subject_index.get(subject)
-            .map(|ids| ids.iter()
-                .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
-                .collect())
+        self.subject_index
+            .get(subject)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
     pub fn query_by_predicate(&self, predicate: &str) -> Vec<&Triple> {
-        self.predicate_index.get(predicate)
-            .map(|ids| ids.iter()
-                .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
-                .collect())
+        self.predicate_index
+            .get(predicate)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
     pub fn query_by_object(&self, object: &str) -> Vec<&Triple> {
-        self.object_index.get(object)
-            .map(|ids| ids.iter()
-                .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
-                .collect())
+        self.object_index
+            .get(object)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -147,10 +168,16 @@ impl KnowledgeGraphState {
     }
 
     pub fn remove_triple(&mut self, caller: Address, triple_id: u64) {
-        let pos = self.triples.iter().position(|t| t.id == triple_id)
+        let pos = self
+            .triples
+            .iter()
+            .position(|t| t.id == triple_id)
             .expect("DRC68: triple not found");
         let triple = &self.triples[pos];
-        assert!(caller == triple.source || caller == self.owner, "DRC68: not authorised");
+        assert!(
+            caller == triple.source || caller == self.owner,
+            "DRC68: not authorised"
+        );
 
         // Remove from indexes
         if let Some(ids) = self.subject_index.get_mut(&triple.subject) {
@@ -170,25 +197,29 @@ impl KnowledgeGraphState {
         self.triples.remove(pos);
     }
 
-    pub fn update_confidence(
-        &mut self,
-        caller: Address,
-        triple_id: u64,
-        new_confidence: u64,
-    ) {
+    pub fn update_confidence(&mut self, caller: Address, triple_id: u64, new_confidence: u64) {
         assert!(new_confidence <= 10000, "DRC68: confidence max 10000");
-        let triple = self.triples.iter_mut().find(|t| t.id == triple_id)
+        let triple = self
+            .triples
+            .iter_mut()
+            .find(|t| t.id == triple_id)
             .expect("DRC68: triple not found");
-        assert!(caller == triple.source || caller == self.owner, "DRC68: not authorised");
+        assert!(
+            caller == triple.source || caller == self.owner,
+            "DRC68: not authorised"
+        );
         triple.confidence = new_confidence;
     }
 
     pub fn triples_by_source(&self, source: Address) -> Vec<&Triple> {
         let key = addr_key(&source);
-        self.source_index.get(&key)
-            .map(|ids| ids.iter()
-                .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
-                .collect())
+        self.source_index
+            .get(&key)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.triples.iter().find(|t| t.id == *id))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
@@ -198,17 +229,35 @@ impl KnowledgeGraphState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AddTripleArgs { subject: String, predicate: String, object: String, confidence: u64, timestamp: u64 }
+struct AddTripleArgs {
+    subject: String,
+    predicate: String,
+    object: String,
+    confidence: u64,
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct QueryArgs { value: String }
+struct QueryArgs {
+    value: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct RelatedArgs { entity: String, depth: u32 }
+struct RelatedArgs {
+    entity: String,
+    depth: u32,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TripleIdArgs { triple_id: u64 }
+struct TripleIdArgs {
+    triple_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct UpdateConfidenceArgs { triple_id: u64, new_confidence: u64 }
+struct UpdateConfidenceArgs {
+    triple_id: u64,
+    new_confidence: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SourceArgs { source: Address }
+struct SourceArgs {
+    source: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<KnowledgeGraphState>,
@@ -225,7 +274,14 @@ pub fn dispatch(
         "add_triple" => {
             let s = state.as_mut().expect("DRC68: not initialised");
             let a: AddTripleArgs = serde_json::from_slice(args).expect("DRC68: bad args");
-            let id = s.add_triple(caller, a.subject, a.predicate, a.object, a.confidence, a.timestamp);
+            let id = s.add_triple(
+                caller,
+                a.subject,
+                a.predicate,
+                a.object,
+                a.confidence,
+                a.timestamp,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "query_by_subject" => {
@@ -283,10 +339,38 @@ mod tests {
 
     fn build_graph() -> KnowledgeGraphState {
         let mut s = KnowledgeGraphState::new(OWNER);
-        s.add_triple(AGENT_A, "Rust".into(), "is_a".into(), "Language".into(), 9500, 100);
-        s.add_triple(AGENT_A, "Rust".into(), "used_by".into(), "Dina".into(), 9000, 200);
-        s.add_triple(AGENT_B, "Dina".into(), "is_a".into(), "Blockchain".into(), 8500, 300);
-        s.add_triple(AGENT_B, "Blockchain".into(), "enables".into(), "DeFi".into(), 8000, 400);
+        s.add_triple(
+            AGENT_A,
+            "Rust".into(),
+            "is_a".into(),
+            "Language".into(),
+            9500,
+            100,
+        );
+        s.add_triple(
+            AGENT_A,
+            "Rust".into(),
+            "used_by".into(),
+            "Dina".into(),
+            9000,
+            200,
+        );
+        s.add_triple(
+            AGENT_B,
+            "Dina".into(),
+            "is_a".into(),
+            "Blockchain".into(),
+            8500,
+            300,
+        );
+        s.add_triple(
+            AGENT_B,
+            "Blockchain".into(),
+            "enables".into(),
+            "DeFi".into(),
+            8000,
+            400,
+        );
         s
     }
 
@@ -360,9 +444,13 @@ mod tests {
         let mut state = None;
         dispatch(&mut state, "init", b"{}", OWNER);
         let args = serde_json::to_vec(&AddTripleArgs {
-            subject: "A".into(), predicate: "knows".into(), object: "B".into(),
-            confidence: 9000, timestamp: 100,
-        }).unwrap();
+            subject: "A".into(),
+            predicate: "knows".into(),
+            object: "B".into(),
+            confidence: 9000,
+            timestamp: 100,
+        })
+        .unwrap();
         let result = dispatch(&mut state, "add_triple", &args, AGENT_A);
         let id: u64 = serde_json::from_slice(&result).unwrap();
         assert_eq!(id, 1);

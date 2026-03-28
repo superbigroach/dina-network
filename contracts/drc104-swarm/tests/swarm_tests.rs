@@ -1,4 +1,4 @@
-use drc104_swarm::{dispatch, SwarmRegistry, SwarmConfig, SpendingLimits};
+use drc104_swarm::{dispatch, SpendingLimits, SwarmConfig, SwarmRegistry};
 
 fn addr(seed: u8) -> [u8; 32] {
     [seed; 32]
@@ -26,15 +26,22 @@ fn default_config(admin: [u8; 32]) -> SwarmConfig {
 fn create_swarm(state: &mut Option<SwarmRegistry>, admin: [u8; 32]) -> [u8; 32] {
     let args = serde_json::to_vec(&serde_json::json!({
         "config": default_config(admin)
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "create_swarm", &args, admin);
     serde_json::from_slice(&result).unwrap()
 }
 
-fn add_member(state: &mut Option<SwarmRegistry>, admin: [u8; 32], swarm_id: [u8; 32], device: [u8; 32]) {
+fn add_member(
+    state: &mut Option<SwarmRegistry>,
+    admin: [u8; 32],
+    swarm_id: [u8; 32],
+    device: [u8; 32],
+) {
     let args = serde_json::to_vec(&serde_json::json!({
         "swarm_id": swarm_id, "device_id": device
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "add_member", &args, admin);
 }
 
@@ -53,7 +60,8 @@ fn add_member_makes_device_a_member() {
 
     let args = serde_json::to_vec(&serde_json::json!({
         "swarm_id": id, "device_id": addr(10)
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "is_member", &args, addr(1));
     let is_member: bool = serde_json::from_slice(&result).unwrap();
     assert!(is_member);
@@ -93,7 +101,8 @@ fn swarm_execute_with_quorum_succeeds() {
             {"member": addr(10), "signature": [1u8]},
             {"member": addr(11), "signature": [2u8]}
         ]
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "swarm_execute", &args, addr(1));
 
     assert_eq!(state.as_ref().unwrap().swarm_wallet(&id), 4900);
@@ -116,7 +125,8 @@ fn swarm_execute_without_quorum_fails() {
         "swarm_id": id,
         "action": {"Transfer": {"to": addr(20), "amount": 100u64}},
         "signatures": [{"member": addr(10), "signature": [1u8]}]
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "swarm_execute", &args, addr(1));
 }
 
@@ -127,7 +137,8 @@ fn remove_member_works() {
     add_member(&mut state, addr(2), id, addr(10));
     let rm_args = serde_json::to_vec(&serde_json::json!({
         "swarm_id": id, "device_id": addr(10)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "remove_member", &rm_args, addr(2));
     assert!(!state.as_ref().unwrap().is_member(&id, &addr(10)));
 }

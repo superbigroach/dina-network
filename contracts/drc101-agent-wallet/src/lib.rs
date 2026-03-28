@@ -134,11 +134,7 @@ impl AgentWalletState {
     ) {
         assert!(!self.frozen, "DRC101: wallet is frozen");
         assert!(
-            caller == self.rules.owner
-                || self
-                    .rules
-                    .approved_interfaces
-                    .contains(&caller),
+            caller == self.rules.owner || self.rules.approved_interfaces.contains(&caller),
             "DRC101: caller not authorised"
         );
 
@@ -257,10 +253,7 @@ impl AgentWalletState {
     }
 
     pub fn resume(&mut self, caller: [u8; 32]) {
-        assert!(
-            caller == self.rules.owner,
-            "DRC101: only owner can resume"
-        );
+        assert!(caller == self.rules.owner, "DRC101: only owner can resume");
         self.frozen = false;
     }
 
@@ -429,16 +422,15 @@ pub fn dispatch(
 
         "remove_approved_counterparty" => {
             let s = state.as_mut().expect("DRC101: not initialised");
-            let a: CounterpartyArgs =
-                serde_json::from_slice(args).expect("DRC101: bad remove_approved_counterparty args");
+            let a: CounterpartyArgs = serde_json::from_slice(args)
+                .expect("DRC101: bad remove_approved_counterparty args");
             s.remove_approved_counterparty(caller, a.counterparty);
             serde_json::to_vec("ok").unwrap()
         }
 
         "deposit" => {
             let s = state.as_mut().expect("DRC101: not initialised");
-            let a: DepositArgs =
-                serde_json::from_slice(args).expect("DRC101: bad deposit args");
+            let a: DepositArgs = serde_json::from_slice(args).expect("DRC101: bad deposit args");
             s.deposit(a.amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -465,7 +457,10 @@ pub fn dispatch(
 
         "set_guardian" => {
             let s = state.as_mut().expect("DRC101: not initialised");
-            assert!(caller == s.rules.owner, "DRC101: only owner can set guardian");
+            assert!(
+                caller == s.rules.owner,
+                "DRC101: only owner can set guardian"
+            );
             let a: SetGuardianArgs =
                 serde_json::from_slice(args).expect("DRC101: bad set_guardian args");
             s.rules.guardian = Some(a.guardian);

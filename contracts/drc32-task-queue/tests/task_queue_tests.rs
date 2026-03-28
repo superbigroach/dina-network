@@ -141,15 +141,13 @@ fn my_tasks_returns_poster_and_worker_tasks() {
     // my_tasks via dispatch for poster (should see both tasks they posted)
     let poster_args = serde_json::to_vec(&serde_json::json!({ "address": poster })).unwrap();
     let poster_result = dispatch(&mut state, "my_tasks", &poster_args, poster);
-    let poster_tasks: Vec<serde_json::Value> =
-        serde_json::from_slice(&poster_result).unwrap();
+    let poster_tasks: Vec<serde_json::Value> = serde_json::from_slice(&poster_result).unwrap();
     assert_eq!(poster_tasks.len(), 2);
 
     // my_tasks via dispatch for worker (should see 1 task they claimed)
     let worker_args = serde_json::to_vec(&serde_json::json!({ "address": worker })).unwrap();
     let worker_result = dispatch(&mut state, "my_tasks", &worker_args, worker);
-    let worker_tasks: Vec<serde_json::Value> =
-        serde_json::from_slice(&worker_result).unwrap();
+    let worker_tasks: Vec<serde_json::Value> = serde_json::from_slice(&worker_result).unwrap();
     assert_eq!(worker_tasks.len(), 1);
 }
 

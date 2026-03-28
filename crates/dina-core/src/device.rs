@@ -67,7 +67,6 @@ pub struct DeviceMetadata {
     pub extra: std::collections::HashMap<String, String>,
 }
 
-
 /// On-chain identity of a registered device.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeviceIdentity {

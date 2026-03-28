@@ -38,7 +38,8 @@ impl VestingSchedule {
 
     /// Amount that can be released right now.
     pub fn releasable_amount(&self, current_time: u64) -> u64 {
-        self.vested_amount(current_time).saturating_sub(self.released)
+        self.vested_amount(current_time)
+            .saturating_sub(self.released)
     }
 }
 
@@ -126,18 +127,12 @@ impl VestingState {
     }
 
     pub fn vested_amount(&self, id: u64, current_time: u64) -> u64 {
-        let schedule = self
-            .vestings
-            .get(&id)
-            .expect("DRC22: vesting not found");
+        let schedule = self.vestings.get(&id).expect("DRC22: vesting not found");
         schedule.vested_amount(current_time)
     }
 
     pub fn releasable_amount(&self, id: u64, current_time: u64) -> u64 {
-        let schedule = self
-            .vestings
-            .get(&id)
-            .expect("DRC22: vesting not found");
+        let schedule = self.vestings.get(&id).expect("DRC22: vesting not found");
         schedule.releasable_amount(current_time)
     }
 }
@@ -215,16 +210,14 @@ pub fn dispatch(
 
         "release" => {
             let s = state.as_mut().expect("DRC22: not initialised");
-            let a: ReleaseArgs =
-                serde_json::from_slice(args).expect("DRC22: bad release args");
+            let a: ReleaseArgs = serde_json::from_slice(args).expect("DRC22: bad release args");
             let amount = s.release(caller, a.id, a.current_time);
             serde_json::to_vec(&amount).unwrap()
         }
 
         "revoke" => {
             let s = state.as_mut().expect("DRC22: not initialised");
-            let a: RevokeArgs =
-                serde_json::from_slice(args).expect("DRC22: bad revoke args");
+            let a: RevokeArgs = serde_json::from_slice(args).expect("DRC22: bad revoke args");
             s.revoke(caller, a.id);
             serde_json::to_vec("ok").unwrap()
         }

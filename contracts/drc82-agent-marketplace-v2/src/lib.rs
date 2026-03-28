@@ -24,7 +24,7 @@ pub struct AgentListing {
     pub price_per_task: u64,
     pub price_per_hour: u64,
     pub availability_hours: Vec<(u64, u64)>, // (start, end) time windows
-    pub rating_avg: u32,                      // bps, 0-10000 => 0-5 stars * 2000
+    pub rating_avg: u32,                     // bps, 0-10000 => 0-5 stars * 2000
     pub total_completed: u64,
     pub total_reviews: u64,
     pub device_id: Option<Address>,
@@ -103,17 +103,34 @@ impl AgentMarketplaceState {
         device_id: Option<Address>,
     ) -> u64 {
         assert!(!service_type.is_empty(), "DRC82: service type required");
-        assert!(!capabilities.is_empty(), "DRC82: at least one capability required");
-        assert!(price_per_task > 0 || price_per_hour > 0, "DRC82: must set a price");
+        assert!(
+            !capabilities.is_empty(),
+            "DRC82: at least one capability required"
+        );
+        assert!(
+            price_per_task > 0 || price_per_hour > 0,
+            "DRC82: must set a price"
+        );
 
         let id = self.next_listing_id;
         self.next_listing_id += 1;
-        self.listings.insert(id, AgentListing {
-            id, agent: caller, service_type, capabilities,
-            price_per_task, price_per_hour, availability_hours,
-            rating_avg: 0, total_completed: 0, total_reviews: 0,
-            device_id, active: true,
-        });
+        self.listings.insert(
+            id,
+            AgentListing {
+                id,
+                agent: caller,
+                service_type,
+                capabilities,
+                price_per_task,
+                price_per_hour,
+                availability_hours,
+                rating_avg: 0,
+                total_completed: 0,
+                total_reviews: 0,
+                device_id,
+                active: true,
+            },
+        );
         id
     }
 
@@ -125,11 +142,23 @@ impl AgentMarketplaceState {
         price_per_hour: Option<u64>,
         active: Option<bool>,
     ) {
-        let listing = self.listings.get_mut(&listing_id).expect("DRC82: listing not found");
-        assert!(listing.agent == caller, "DRC82: only agent can update listing");
-        if let Some(p) = price_per_task { listing.price_per_task = p; }
-        if let Some(p) = price_per_hour { listing.price_per_hour = p; }
-        if let Some(a) = active { listing.active = a; }
+        let listing = self
+            .listings
+            .get_mut(&listing_id)
+            .expect("DRC82: listing not found");
+        assert!(
+            listing.agent == caller,
+            "DRC82: only agent can update listing"
+        );
+        if let Some(p) = price_per_task {
+            listing.price_per_task = p;
+        }
+        if let Some(p) = price_per_hour {
+            listing.price_per_hour = p;
+        }
+        if let Some(a) = active {
+            listing.active = a;
+        }
     }
 
     pub fn hire_agent(
@@ -139,7 +168,10 @@ impl AgentMarketplaceState {
         budget: u64,
         start_time: u64,
     ) -> u64 {
-        let listing = self.listings.get(&listing_id).expect("DRC82: listing not found");
+        let listing = self
+            .listings
+            .get(&listing_id)
+            .expect("DRC82: listing not found");
         assert!(listing.active, "DRC82: listing not active");
         assert!(caller != listing.agent, "DRC82: cannot hire yourself");
 
@@ -150,23 +182,41 @@ impl AgentMarketplaceState {
         let agent = listing.agent;
         let id = self.next_hire_id;
         self.next_hire_id += 1;
-        self.hires.insert(id, Hire {
-            id, client: caller, agent, listing_id, budget,
-            tasks_completed: 0, start_time, end_time: None,
-            status: HireStatus::Active,
-        });
+        self.hires.insert(
+            id,
+            Hire {
+                id,
+                client: caller,
+                agent,
+                listing_id,
+                budget,
+                tasks_completed: 0,
+                start_time,
+                end_time: None,
+                status: HireStatus::Active,
+            },
+        );
         id
     }
 
     pub fn complete_task_in_hire(&mut self, caller: Address, hire_id: u64) {
         let hire = self.hires.get_mut(&hire_id).expect("DRC82: hire not found");
         assert!(hire.status == HireStatus::Active, "DRC82: hire not active");
-        assert!(hire.agent == caller, "DRC82: only hired agent can complete tasks");
+        assert!(
+            hire.agent == caller,
+            "DRC82: only hired agent can complete tasks"
+        );
 
-        let listing = self.listings.get(&hire.listing_id).expect("DRC82: listing not found");
+        let listing = self
+            .listings
+            .get(&hire.listing_id)
+            .expect("DRC82: listing not found");
         let task_cost = listing.price_per_task;
         let remaining = hire.budget - (hire.tasks_completed * task_cost);
-        assert!(remaining >= task_cost, "DRC82: insufficient budget for task");
+        assert!(
+            remaining >= task_cost,
+            "DRC82: insufficient budget for task"
+        );
 
         hire.tasks_completed += 1;
         // Pay the agent immediately per task
@@ -177,7 +227,10 @@ impl AgentMarketplaceState {
     pub fn end_hire(&mut self, caller: Address, hire_id: u64, end_time: u64) {
         let hire = self.hires.get_mut(&hire_id).expect("DRC82: hire not found");
         assert!(hire.status == HireStatus::Active, "DRC82: hire not active");
-        assert!(hire.client == caller || hire.agent == caller, "DRC82: not authorized");
+        assert!(
+            hire.client == caller || hire.agent == caller,
+            "DRC82: not authorized"
+        );
 
         hire.status = HireStatus::Completed;
         hire.end_time = Some(end_time);
@@ -206,13 +259,22 @@ impl AgentMarketplaceState {
     ) {
         assert!(rating >= 1 && rating <= 5, "DRC82: rating must be 1-5");
         let hire = self.hires.get(&hire_id).expect("DRC82: hire not found");
-        assert!(hire.status == HireStatus::Completed, "DRC82: hire not completed");
+        assert!(
+            hire.status == HireStatus::Completed,
+            "DRC82: hire not completed"
+        );
         assert!(hire.client == caller, "DRC82: only client can review");
 
         let reviews = self.reviews.entry(hire_id).or_default();
         assert!(reviews.is_empty(), "DRC82: already reviewed");
 
-        reviews.push(Review { hire_id, reviewer: caller, rating, comment_hash, timestamp });
+        reviews.push(Review {
+            hire_id,
+            reviewer: caller,
+            rating,
+            comment_hash,
+            timestamp,
+        });
 
         // Update agent listing rating (rolling average in bps)
         let listing = self.listings.get_mut(&hire.listing_id).unwrap();
@@ -228,19 +290,22 @@ impl AgentMarketplaceState {
         max_price: Option<u64>,
         min_rating: Option<u32>,
     ) -> Vec<&AgentListing> {
-        self.listings.values()
+        self.listings
+            .values()
             .filter(|l| {
                 l.active
-                && l.capabilities.iter().any(|c| c == capability)
-                && max_price.map_or(true, |mp| l.price_per_task <= mp)
-                && min_rating.map_or(true, |mr| l.rating_avg >= mr)
+                    && l.capabilities.iter().any(|c| c == capability)
+                    && max_price.map_or(true, |mp| l.price_per_task <= mp)
+                    && min_rating.map_or(true, |mr| l.rating_avg >= mr)
             })
             .collect()
     }
 
     pub fn agent_profile(&self, agent: &Address) -> Option<AgentProfile> {
         let listing = self.listings.values().find(|l| &l.agent == agent)?;
-        let active_hires = self.hires.values()
+        let active_hires = self
+            .hires
+            .values()
             .filter(|h| &h.agent == agent && h.status == HireStatus::Active)
             .count();
         let total_earned = self.earnings.get(agent).copied().unwrap_or(0);
@@ -259,11 +324,14 @@ impl AgentMarketplaceState {
     }
 
     pub fn top_agents(&self, limit: usize) -> Vec<&AgentListing> {
-        let mut listings: Vec<&AgentListing> = self.listings.values()
+        let mut listings: Vec<&AgentListing> = self
+            .listings
+            .values()
             .filter(|l| l.active && l.total_reviews > 0)
             .collect();
         listings.sort_by(|a, b| {
-            b.rating_avg.cmp(&a.rating_avg)
+            b.rating_avg
+                .cmp(&a.rating_avg)
                 .then(b.total_completed.cmp(&a.total_completed))
         });
         listings.truncate(limit);
@@ -277,28 +345,60 @@ impl AgentMarketplaceState {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ListServiceArgs {
-    service_type: String, capabilities: Vec<String>,
-    price_per_task: u64, price_per_hour: u64,
-    availability_hours: Vec<(u64, u64)>, device_id: Option<Address>,
+    service_type: String,
+    capabilities: Vec<String>,
+    price_per_task: u64,
+    price_per_hour: u64,
+    availability_hours: Vec<(u64, u64)>,
+    device_id: Option<Address>,
 }
 #[derive(Serialize, Deserialize, Debug)]
-struct UpdateListingArgs { listing_id: u64, price_per_task: Option<u64>, price_per_hour: Option<u64>, active: Option<bool> }
+struct UpdateListingArgs {
+    listing_id: u64,
+    price_per_task: Option<u64>,
+    price_per_hour: Option<u64>,
+    active: Option<bool>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct HireArgs { listing_id: u64, budget: u64, start_time: u64 }
+struct HireArgs {
+    listing_id: u64,
+    budget: u64,
+    start_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct HireIdArgs { hire_id: u64 }
+struct HireIdArgs {
+    hire_id: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct EndHireArgs { hire_id: u64, end_time: u64 }
+struct EndHireArgs {
+    hire_id: u64,
+    end_time: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ReviewArgs { hire_id: u64, rating: u8, comment_hash: [u8; 32], timestamp: u64 }
+struct ReviewArgs {
+    hire_id: u64,
+    rating: u8,
+    comment_hash: [u8; 32],
+    timestamp: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct SearchArgs { capability: String, max_price: Option<u64>, min_rating: Option<u32> }
+struct SearchArgs {
+    capability: String,
+    max_price: Option<u64>,
+    min_rating: Option<u32>,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AgentArgs { agent: Address }
+struct AgentArgs {
+    agent: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TopArgs { limit: usize }
+struct TopArgs {
+    limit: usize,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<AgentMarketplaceState>,
@@ -321,13 +421,27 @@ pub fn dispatch(
         "list_service" => {
             let s = state.as_mut().expect("DRC82: not initialised");
             let a: ListServiceArgs = serde_json::from_slice(args).expect("DRC82: bad args");
-            let id = s.list_service(caller, a.service_type, a.capabilities, a.price_per_task, a.price_per_hour, a.availability_hours, a.device_id);
+            let id = s.list_service(
+                caller,
+                a.service_type,
+                a.capabilities,
+                a.price_per_task,
+                a.price_per_hour,
+                a.availability_hours,
+                a.device_id,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "update_listing" => {
             let s = state.as_mut().expect("DRC82: not initialised");
             let a: UpdateListingArgs = serde_json::from_slice(args).expect("DRC82: bad args");
-            s.update_listing(caller, a.listing_id, a.price_per_task, a.price_per_hour, a.active);
+            s.update_listing(
+                caller,
+                a.listing_id,
+                a.price_per_task,
+                a.price_per_hour,
+                a.active,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "hire_agent" => {
@@ -390,14 +504,22 @@ mod tests {
         let mut s = AgentMarketplaceState::new(OWNER);
         s.deposit(CLIENT, 100_000);
         s.list_service(
-            AGENT_A, "ml-inference".into(),
+            AGENT_A,
+            "ml-inference".into(),
             vec!["text-generation".into(), "summarization".into()],
-            100, 500, vec![(0, 86400)], None,
+            100,
+            500,
+            vec![(0, 86400)],
+            None,
         );
         s.list_service(
-            AGENT_B, "data-processing".into(),
+            AGENT_B,
+            "data-processing".into(),
             vec!["text-generation".into(), "translation".into()],
-            80, 400, vec![(0, 86400)], Some([0xDD; 32]),
+            80,
+            400,
+            vec![(0, 86400)],
+            Some([0xDD; 32]),
         );
         s
     }

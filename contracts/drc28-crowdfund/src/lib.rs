@@ -40,12 +40,7 @@ impl CrowdfundState {
 
     // -- Mutations -----------------------------------------------------------
 
-    pub fn create_campaign(
-        &mut self,
-        caller: Address,
-        goal: u64,
-        deadline: u64,
-    ) -> u64 {
+    pub fn create_campaign(&mut self, caller: Address, goal: u64, deadline: u64) -> u64 {
         assert!(goal > 0, "DRC28: goal must be positive");
         assert!(deadline > 0, "DRC28: deadline must be positive");
         let id = self.next_id;
@@ -94,14 +89,8 @@ impl CrowdfundState {
             .campaigns
             .get_mut(&campaign_id)
             .expect("DRC28: campaign not found");
-        assert!(
-            caller == campaign.creator,
-            "DRC28: only creator can claim"
-        );
-        assert!(
-            campaign.raised >= campaign.goal,
-            "DRC28: goal not met"
-        );
+        assert!(caller == campaign.creator, "DRC28: only creator can claim");
+        assert!(campaign.raised >= campaign.goal, "DRC28: goal not met");
         assert!(
             current_time > campaign.deadline,
             "DRC28: campaign still active"
@@ -113,12 +102,7 @@ impl CrowdfundState {
         campaign.raised
     }
 
-    pub fn refund(
-        &mut self,
-        caller: Address,
-        campaign_id: u64,
-        current_time: u64,
-    ) -> u64 {
+    pub fn refund(&mut self, caller: Address, campaign_id: u64, current_time: u64) -> u64 {
         let campaign = self
             .campaigns
             .get_mut(&campaign_id)
@@ -224,15 +208,13 @@ pub fn dispatch(
         }
         "claim" => {
             let s = state.as_mut().expect("DRC28: not initialised");
-            let a: ClaimArgs =
-                serde_json::from_slice(args).expect("DRC28: bad claim args");
+            let a: ClaimArgs = serde_json::from_slice(args).expect("DRC28: bad claim args");
             let amount = s.claim(caller, a.campaign_id, a.current_time);
             serde_json::to_vec(&amount).unwrap()
         }
         "refund" => {
             let s = state.as_mut().expect("DRC28: not initialised");
-            let a: RefundArgs =
-                serde_json::from_slice(args).expect("DRC28: bad refund args");
+            let a: RefundArgs = serde_json::from_slice(args).expect("DRC28: bad refund args");
             let amount = s.refund(caller, a.campaign_id, a.current_time);
             serde_json::to_vec(&amount).unwrap()
         }
@@ -275,7 +257,11 @@ mod tests {
         let result = dispatch(
             &mut state,
             "create_campaign",
-            &serde_json::to_vec(&CreateCampaignArgs { goal: 1000, deadline: 100 }).unwrap(),
+            &serde_json::to_vec(&CreateCampaignArgs {
+                goal: 1000,
+                deadline: 100,
+            })
+            .unwrap(),
             creator,
         );
         let id: u64 = serde_json::from_slice(&result).unwrap();
@@ -309,7 +295,11 @@ mod tests {
         dispatch(
             &mut state,
             "create_campaign",
-            &serde_json::to_vec(&CreateCampaignArgs { goal: 500, deadline: 100 }).unwrap(),
+            &serde_json::to_vec(&CreateCampaignArgs {
+                goal: 500,
+                deadline: 100,
+            })
+            .unwrap(),
             creator,
         );
 
@@ -349,7 +339,11 @@ mod tests {
         dispatch(
             &mut state,
             "create_campaign",
-            &serde_json::to_vec(&CreateCampaignArgs { goal: 1000, deadline: 100 }).unwrap(),
+            &serde_json::to_vec(&CreateCampaignArgs {
+                goal: 1000,
+                deadline: 100,
+            })
+            .unwrap(),
             creator,
         );
 
@@ -391,7 +385,11 @@ mod tests {
         dispatch(
             &mut state,
             "create_campaign",
-            &serde_json::to_vec(&CreateCampaignArgs { goal: 1000, deadline: 100 }).unwrap(),
+            &serde_json::to_vec(&CreateCampaignArgs {
+                goal: 1000,
+                deadline: 100,
+            })
+            .unwrap(),
             creator,
         );
 
@@ -428,7 +426,11 @@ mod tests {
         dispatch(
             &mut state,
             "create_campaign",
-            &serde_json::to_vec(&CreateCampaignArgs { goal: 1000, deadline: 100 }).unwrap(),
+            &serde_json::to_vec(&CreateCampaignArgs {
+                goal: 1000,
+                deadline: 100,
+            })
+            .unwrap(),
             addr(1),
         );
 
@@ -464,7 +466,11 @@ mod tests {
         dispatch(
             &mut state,
             "create_campaign",
-            &serde_json::to_vec(&CreateCampaignArgs { goal: 1000, deadline: 100 }).unwrap(),
+            &serde_json::to_vec(&CreateCampaignArgs {
+                goal: 1000,
+                deadline: 100,
+            })
+            .unwrap(),
             addr(1),
         );
 
@@ -496,13 +502,21 @@ mod tests {
         let r1 = dispatch(
             &mut state,
             "refund",
-            &serde_json::to_vec(&RefundArgs { campaign_id: 0, current_time: 101 }).unwrap(),
+            &serde_json::to_vec(&RefundArgs {
+                campaign_id: 0,
+                current_time: 101,
+            })
+            .unwrap(),
             addr(2),
         );
         let r2 = dispatch(
             &mut state,
             "refund",
-            &serde_json::to_vec(&RefundArgs { campaign_id: 0, current_time: 101 }).unwrap(),
+            &serde_json::to_vec(&RefundArgs {
+                campaign_id: 0,
+                current_time: 101,
+            })
+            .unwrap(),
             addr(3),
         );
 

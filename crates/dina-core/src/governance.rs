@@ -175,9 +175,7 @@ impl GovernanceModule {
         }
 
         if voter_stake == 0 {
-            return Err(DinaError::GovernanceError(
-                "voter has no stake".to_string(),
-            ));
+            return Err(DinaError::GovernanceError("voter has no stake".to_string()));
         }
 
         proposal.voters.insert(voter);
@@ -423,10 +421,7 @@ mod tests {
         g.finalize_proposal(id, 101, 10_000).unwrap();
         let executed = g.execute_proposal(id).unwrap();
         assert_eq!(executed, pt);
-        assert_eq!(
-            g.get_proposal(id).unwrap().status,
-            ProposalStatus::Executed
-        );
+        assert_eq!(g.get_proposal(id).unwrap().status, ProposalStatus::Executed);
     }
 
     #[test]

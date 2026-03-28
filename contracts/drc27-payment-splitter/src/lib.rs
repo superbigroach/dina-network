@@ -102,7 +102,6 @@ struct ReceiveArgs {
     amount: u64,
 }
 
-
 pub fn dispatch(
     state: &mut Option<SplitterState>,
     method: &str,
@@ -119,22 +118,19 @@ pub fn dispatch(
         // -- Mutations -------------------------------------------------------
         "add_payee" => {
             let s = state.as_mut().expect("DRC27: not initialised");
-            let a: AddPayeeArgs =
-                serde_json::from_slice(args).expect("DRC27: bad add_payee args");
+            let a: AddPayeeArgs = serde_json::from_slice(args).expect("DRC27: bad add_payee args");
             s.add_payee(caller, a.payee, a.shares);
             serde_json::to_vec("ok").unwrap()
         }
         "receive" => {
             let s = state.as_mut().expect("DRC27: not initialised");
-            let a: ReceiveArgs =
-                serde_json::from_slice(args).expect("DRC27: bad receive args");
+            let a: ReceiveArgs = serde_json::from_slice(args).expect("DRC27: bad receive args");
             s.receive_funds(a.amount);
             serde_json::to_vec("ok").unwrap()
         }
         "release" => {
             let s = state.as_mut().expect("DRC27: not initialised");
-            let a: AddrArgs =
-                serde_json::from_slice(args).expect("DRC27: bad release args");
+            let a: AddrArgs = serde_json::from_slice(args).expect("DRC27: bad release args");
             let amount = s.release(a.addr);
             serde_json::to_vec(&amount).unwrap()
         }
@@ -142,14 +138,12 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "releasable" => {
             let s = state.as_ref().expect("DRC27: not initialised");
-            let a: AddrArgs =
-                serde_json::from_slice(args).expect("DRC27: bad releasable args");
+            let a: AddrArgs = serde_json::from_slice(args).expect("DRC27: bad releasable args");
             serde_json::to_vec(&s.releasable(&a.addr)).unwrap()
         }
         "shares_of" => {
             let s = state.as_ref().expect("DRC27: not initialised");
-            let a: AddrArgs =
-                serde_json::from_slice(args).expect("DRC27: bad shares_of args");
+            let a: AddrArgs = serde_json::from_slice(args).expect("DRC27: bad shares_of args");
             serde_json::to_vec(&s.shares_of(&a.addr)).unwrap()
         }
         "total_received" => {
@@ -212,13 +206,21 @@ mod tests {
         dispatch(
             &mut state,
             "add_payee",
-            &serde_json::to_vec(&AddPayeeArgs { payee: addr(2), shares: 70 }).unwrap(),
+            &serde_json::to_vec(&AddPayeeArgs {
+                payee: addr(2),
+                shares: 70,
+            })
+            .unwrap(),
             owner,
         );
         dispatch(
             &mut state,
             "add_payee",
-            &serde_json::to_vec(&AddPayeeArgs { payee: addr(3), shares: 30 }).unwrap(),
+            &serde_json::to_vec(&AddPayeeArgs {
+                payee: addr(3),
+                shares: 30,
+            })
+            .unwrap(),
             owner,
         );
 
@@ -262,13 +264,21 @@ mod tests {
         dispatch(
             &mut state,
             "add_payee",
-            &serde_json::to_vec(&AddPayeeArgs { payee: addr(2), shares: 50 }).unwrap(),
+            &serde_json::to_vec(&AddPayeeArgs {
+                payee: addr(2),
+                shares: 50,
+            })
+            .unwrap(),
             owner,
         );
         dispatch(
             &mut state,
             "add_payee",
-            &serde_json::to_vec(&AddPayeeArgs { payee: addr(3), shares: 50 }).unwrap(),
+            &serde_json::to_vec(&AddPayeeArgs {
+                payee: addr(3),
+                shares: 50,
+            })
+            .unwrap(),
             owner,
         );
 
@@ -285,7 +295,16 @@ mod tests {
             &serde_json::to_vec(&AddrArgs { addr: addr(2) }).unwrap(),
             addr(99),
         );
-        assert_eq!(state.as_ref().unwrap().released.get(&addr(2)).copied().unwrap(), 100);
+        assert_eq!(
+            state
+                .as_ref()
+                .unwrap()
+                .released
+                .get(&addr(2))
+                .copied()
+                .unwrap(),
+            100
+        );
 
         // Second receive -- payee 2 should only get the new portion
         dispatch(
@@ -329,7 +348,11 @@ mod tests {
         dispatch(
             &mut state,
             "add_payee",
-            &serde_json::to_vec(&AddPayeeArgs { payee: addr(2), shares: 50 }).unwrap(),
+            &serde_json::to_vec(&AddPayeeArgs {
+                payee: addr(2),
+                shares: 50,
+            })
+            .unwrap(),
             owner,
         );
 

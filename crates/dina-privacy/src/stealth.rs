@@ -77,10 +77,7 @@ pub fn derive_stealth_address(meta: &StealthMetaAddress) -> StealthAddress {
     let shared_secret = ephemeral_secret.diffie_hellman(&scan_pk);
 
     // Derive the one-time address bytes
-    let address_bytes = derive_stealth_address_bytes(
-        shared_secret.as_bytes(),
-        &meta.spend_pubkey,
-    );
+    let address_bytes = derive_stealth_address_bytes(shared_secret.as_bytes(), &meta.spend_pubkey);
 
     StealthAddress {
         address: Address(address_bytes),
@@ -197,16 +194,10 @@ mod tests {
         let (meta, scan_secret, spend_secret) = generate_meta_address();
         let stealth = derive_stealth_address(&meta);
 
-        let key1 = derive_stealth_spending_key(
-            &scan_secret,
-            &spend_secret,
-            &stealth.ephemeral_pubkey,
-        );
-        let key2 = derive_stealth_spending_key(
-            &scan_secret,
-            &spend_secret,
-            &stealth.ephemeral_pubkey,
-        );
+        let key1 =
+            derive_stealth_spending_key(&scan_secret, &spend_secret, &stealth.ephemeral_pubkey);
+        let key2 =
+            derive_stealth_spending_key(&scan_secret, &spend_secret, &stealth.ephemeral_pubkey);
 
         assert_eq!(key1, key2);
     }
@@ -276,33 +267,27 @@ mod tests {
             &stealth.ephemeral_pubkey,
             &stealth.address,
         );
-        assert!(detected, "recipient should detect their own stealth address");
+        assert!(
+            detected,
+            "recipient should detect their own stealth address"
+        );
 
         // Step 4: Recipient derives the spending key for this stealth address
-        let spending_key = derive_stealth_spending_key(
-            &scan_secret,
-            &spend_secret,
-            &stealth.ephemeral_pubkey,
-        );
+        let spending_key =
+            derive_stealth_spending_key(&scan_secret, &spend_secret, &stealth.ephemeral_pubkey);
 
         // The spending key should be non-zero (valid key material)
         assert_ne!(spending_key, [0u8; 32]);
 
         // The spending key should be deterministic
-        let spending_key2 = derive_stealth_spending_key(
-            &scan_secret,
-            &spend_secret,
-            &stealth.ephemeral_pubkey,
-        );
+        let spending_key2 =
+            derive_stealth_spending_key(&scan_secret, &spend_secret, &stealth.ephemeral_pubkey);
         assert_eq!(spending_key, spending_key2);
 
         // A different ephemeral pubkey should yield a different spending key
         let stealth2 = derive_stealth_address(&meta);
-        let spending_key3 = derive_stealth_spending_key(
-            &scan_secret,
-            &spend_secret,
-            &stealth2.ephemeral_pubkey,
-        );
+        let spending_key3 =
+            derive_stealth_spending_key(&scan_secret, &spend_secret, &stealth2.ephemeral_pubkey);
         assert_ne!(spending_key, spending_key3);
     }
 

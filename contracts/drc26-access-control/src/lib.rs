@@ -74,7 +74,9 @@ impl AccessControlState {
             role
         );
         assert!(
-            !(role == DEFAULT_ADMIN_ROLE && account == self.admin && self.role_member_count(role) <= 1),
+            !(role == DEFAULT_ADMIN_ROLE
+                && account == self.admin
+                && self.role_member_count(role) <= 1),
             "DRC26: cannot revoke last default admin"
         );
 
@@ -132,10 +134,7 @@ impl AccessControlState {
     }
 
     fn role_member_count(&self, role: &str) -> usize {
-        self.roles
-            .get(role)
-            .map(|r| r.members.len())
-            .unwrap_or(0)
+        self.roles.get(role).map(|r| r.members.len()).unwrap_or(0)
     }
 }
 
@@ -193,8 +192,7 @@ pub fn dispatch(
 
         "has_role" => {
             let s = state.as_ref().expect("DRC26: not initialised");
-            let a: HasRoleArgs =
-                serde_json::from_slice(args).expect("DRC26: bad has_role args");
+            let a: HasRoleArgs = serde_json::from_slice(args).expect("DRC26: bad has_role args");
             serde_json::to_vec(&s.has_role(&a.role, &a.account)).unwrap()
         }
 

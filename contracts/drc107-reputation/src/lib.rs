@@ -162,18 +162,12 @@ impl ReputationState {
         category: String,
     ) {
         assert!(rating <= 10000, "DRC107: rating must be 0-10000");
-        assert!(
-            subject != counterparty,
-            "DRC107: cannot rate yourself"
-        );
+        assert!(subject != counterparty, "DRC107: cannot rate yourself");
         // In a real deployment, `caller` would be verified as an authorised
         // oracle or the service-agreement contract. For now we accept any caller.
         let _ = caller;
 
-        let details = self
-            .reputations
-            .entry(subject)
-            .or_default();
+        let details = self.reputations.entry(subject).or_default();
 
         details.total_interactions += 1;
         details.total_volume += volume;

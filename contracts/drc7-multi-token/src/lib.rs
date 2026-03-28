@@ -43,11 +43,7 @@ impl MultiTokenState {
             .unwrap_or(0)
     }
 
-    pub fn balance_of_batch(
-        &self,
-        accounts: &[Address],
-        token_ids: &[u64],
-    ) -> Vec<u64> {
+    pub fn balance_of_batch(&self, accounts: &[Address], token_ids: &[u64]) -> Vec<u64> {
         assert!(
             accounts.len() == token_ids.len(),
             "DRC7: accounts and token_ids length mismatch"
@@ -172,15 +168,9 @@ impl MultiTokenState {
         }
     }
 
-    pub fn set_approval_for_all(
-        &mut self,
-        caller: Address,
-        operator: Address,
-        approved: bool,
-    ) {
+    pub fn set_approval_for_all(&mut self, caller: Address, operator: Address, approved: bool) {
         assert!(caller != operator, "DRC7: setting approval for self");
-        self.operator_approvals
-            .insert((caller, operator), approved);
+        self.operator_approvals.insert((caller, operator), approved);
     }
 
     pub fn set_uri(&mut self, caller: Address, token_id: u64, new_uri: String) {
@@ -282,8 +272,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "balance_of" => {
             let s = state.as_ref().expect("DRC7: not initialised");
-            let a: BalanceOfArgs =
-                serde_json::from_slice(args).expect("DRC7: bad balance_of args");
+            let a: BalanceOfArgs = serde_json::from_slice(args).expect("DRC7: bad balance_of args");
             serde_json::to_vec(&s.balance_of(&a.account, a.token_id)).unwrap()
         }
         "balance_of_batch" => {
@@ -314,15 +303,13 @@ pub fn dispatch(
         }
         "mint_batch" => {
             let s = state.as_mut().expect("DRC7: not initialised");
-            let a: MintBatchArgs =
-                serde_json::from_slice(args).expect("DRC7: bad mint_batch args");
+            let a: MintBatchArgs = serde_json::from_slice(args).expect("DRC7: bad mint_batch args");
             s.mint_batch(caller, a.to, &a.token_ids, &a.amounts, &a.uris);
             serde_json::to_vec("ok").unwrap()
         }
         "transfer" => {
             let s = state.as_mut().expect("DRC7: not initialised");
-            let a: TransferArgs =
-                serde_json::from_slice(args).expect("DRC7: bad transfer args");
+            let a: TransferArgs = serde_json::from_slice(args).expect("DRC7: bad transfer args");
             s.transfer(caller, a.from, a.to, a.token_id, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -342,8 +329,7 @@ pub fn dispatch(
         }
         "set_uri" => {
             let s = state.as_mut().expect("DRC7: not initialised");
-            let a: SetUriArgs =
-                serde_json::from_slice(args).expect("DRC7: bad set_uri args");
+            let a: SetUriArgs = serde_json::from_slice(args).expect("DRC7: bad set_uri args");
             s.set_uri(caller, a.token_id, a.uri);
             serde_json::to_vec("ok").unwrap()
         }

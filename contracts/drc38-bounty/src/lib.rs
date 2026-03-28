@@ -238,9 +238,14 @@ pub fn dispatch(
         }
         "submit" => {
             let s = state.as_mut().expect("DRC38: not initialised");
-            let a: SubmitArgs =
-                serde_json::from_slice(args).expect("DRC38: bad submit args");
-            s.submit(caller, a.bounty_id, a.proof_hash, a.description, a.submitted_at);
+            let a: SubmitArgs = serde_json::from_slice(args).expect("DRC38: bad submit args");
+            s.submit(
+                caller,
+                a.bounty_id,
+                a.proof_hash,
+                a.description,
+                a.submitted_at,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "select_winner" => {
@@ -252,8 +257,7 @@ pub fn dispatch(
         }
         "cancel" => {
             let s = state.as_mut().expect("DRC38: not initialised");
-            let a: CancelArgs =
-                serde_json::from_slice(args).expect("DRC38: bad cancel args");
+            let a: CancelArgs = serde_json::from_slice(args).expect("DRC38: bad cancel args");
             s.cancel(caller, a.bounty_id);
             serde_json::to_vec("ok").unwrap()
         }

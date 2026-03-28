@@ -78,13 +78,7 @@ impl SftState {
     }
 
     /// Transfer value from one token to another (same slot required).
-    pub fn transfer_value(
-        &mut self,
-        caller: Address,
-        from_token: u64,
-        to_token: u64,
-        amount: u64,
-    ) {
+    pub fn transfer_value(&mut self, caller: Address, from_token: u64, to_token: u64, amount: u64) {
         assert!(amount > 0, "DRC11: amount must be positive");
         let from = self
             .tokens
@@ -150,7 +144,10 @@ impl SftState {
             metadata,
         };
         self.tokens.insert(new_id, new_token);
-        self.owner_tokens.entry(to_address).or_default().push(new_id);
+        self.owner_tokens
+            .entry(to_address)
+            .or_default()
+            .push(new_id);
         new_id
     }
 
@@ -159,10 +156,7 @@ impl SftState {
             .tokens
             .get(&token_id)
             .expect("DRC11: token does not exist");
-        assert!(
-            token.owner == caller,
-            "DRC11: caller is not owner of token"
-        );
+        assert!(token.owner == caller, "DRC11: caller is not owner of token");
         let owner = token.owner;
         self.tokens.remove(&token_id);
         if let Some(ids) = self.owner_tokens.get_mut(&owner) {
@@ -224,22 +218,19 @@ pub fn dispatch(
 
         "value_of" => {
             let s = state.as_ref().expect("DRC11: not initialised");
-            let a: TokenIdArgs =
-                serde_json::from_slice(args).expect("DRC11: bad value_of args");
+            let a: TokenIdArgs = serde_json::from_slice(args).expect("DRC11: bad value_of args");
             serde_json::to_vec(&s.value_of(a.token_id)).unwrap()
         }
 
         "slot_of" => {
             let s = state.as_ref().expect("DRC11: not initialised");
-            let a: TokenIdArgs =
-                serde_json::from_slice(args).expect("DRC11: bad slot_of args");
+            let a: TokenIdArgs = serde_json::from_slice(args).expect("DRC11: bad slot_of args");
             serde_json::to_vec(&s.slot_of(a.token_id)).unwrap()
         }
 
         "owner_of" => {
             let s = state.as_ref().expect("DRC11: not initialised");
-            let a: TokenIdArgs =
-                serde_json::from_slice(args).expect("DRC11: bad owner_of args");
+            let a: TokenIdArgs = serde_json::from_slice(args).expect("DRC11: bad owner_of args");
             serde_json::to_vec(&s.owner_of(a.token_id)).unwrap()
         }
 

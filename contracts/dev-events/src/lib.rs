@@ -170,8 +170,7 @@ pub fn dispatch(
 
         "emit" => {
             let s = state.as_mut().expect("Events: not initialised");
-            let a: EmitArgs =
-                serde_json::from_slice(args).expect("Events: bad emit args");
+            let a: EmitArgs = serde_json::from_slice(args).expect("Events: bad emit args");
             let id = s.emit(caller, a.topic, a.data, a.block_height, a.timestamp);
             serde_json::to_vec(&id).unwrap()
         }

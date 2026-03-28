@@ -117,11 +117,7 @@ impl TbaRegistry {
 
         // Deduct from TBA's internal balance
         let from_key = (account, asset_key.clone());
-        let from_bal = self
-            .account_assets
-            .get(&from_key)
-            .copied()
-            .unwrap_or(0);
+        let from_bal = self.account_assets.get(&from_key).copied().unwrap_or(0);
         assert!(
             from_bal >= amount,
             "DRC8: insufficient TBA balance ({from_bal} < {amount})"
@@ -155,12 +151,7 @@ impl TbaRegistry {
     }
 
     /// Query the balance of an asset in a token-bound account.
-    pub fn account_balance(
-        &self,
-        nft_contract: &Address,
-        token_id: u64,
-        asset_key: &str,
-    ) -> u64 {
+    pub fn account_balance(&self, nft_contract: &Address, token_id: u64, asset_key: &str) -> u64 {
         let key = (*nft_contract, token_id);
         match self.accounts.get(&key) {
             Some(account) => self
@@ -268,8 +259,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "account_of" => {
             let s = state.as_ref().expect("DRC8: not initialised");
-            let a: AccountOfArgs =
-                serde_json::from_slice(args).expect("DRC8: bad account_of args");
+            let a: AccountOfArgs = serde_json::from_slice(args).expect("DRC8: bad account_of args");
             serde_json::to_vec(&s.account_of(&a.nft_contract, a.token_id)).unwrap()
         }
         "is_token_bound" => {
@@ -280,8 +270,7 @@ pub fn dispatch(
         }
         "token_of" => {
             let s = state.as_ref().expect("DRC8: not initialised");
-            let a: TokenOfArgs =
-                serde_json::from_slice(args).expect("DRC8: bad token_of args");
+            let a: TokenOfArgs = serde_json::from_slice(args).expect("DRC8: bad token_of args");
             serde_json::to_vec(&s.token_of(&a.account)).unwrap()
         }
         "account_balance" => {
@@ -302,8 +291,7 @@ pub fn dispatch(
         }
         "execute" => {
             let s = state.as_mut().expect("DRC8: not initialised");
-            let a: ExecuteArgs =
-                serde_json::from_slice(args).expect("DRC8: bad execute args");
+            let a: ExecuteArgs = serde_json::from_slice(args).expect("DRC8: bad execute args");
             s.execute(
                 caller,
                 a.nft_contract,
@@ -316,8 +304,7 @@ pub fn dispatch(
         }
         "deposit" => {
             let s = state.as_mut().expect("DRC8: not initialised");
-            let a: DepositArgs =
-                serde_json::from_slice(args).expect("DRC8: bad deposit args");
+            let a: DepositArgs = serde_json::from_slice(args).expect("DRC8: bad deposit args");
             s.deposit(a.nft_contract, a.token_id, a.asset_key, a.amount);
             serde_json::to_vec("ok").unwrap()
         }

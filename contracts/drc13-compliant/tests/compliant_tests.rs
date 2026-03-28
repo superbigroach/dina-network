@@ -8,7 +8,8 @@ fn init() -> Option<CompliantTokenState> {
     let mut state: Option<CompliantTokenState> = None;
     let args = serde_json::to_vec(&serde_json::json!({
         "name": "CompToken", "symbol": "CT", "decimals": 18u8
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "init", &args, addr(1));
     state
 }
@@ -17,7 +18,8 @@ fn verify_addr(state: &mut Option<CompliantTokenState>, target: [u8; 32], countr
     let args = serde_json::to_vec(&serde_json::json!({
         "addr": target,
         "info": {"country": country, "credentials": ["KYC"], "verified_at": 1000u64}
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "verify_address", &args, addr(1));
 }
 
@@ -35,7 +37,8 @@ fn compliant_transfer_succeeds_with_verified_parties() {
 
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 400u64, "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "compliant_transfer", &args, addr(2));
 
     let s = state.as_ref().unwrap();
@@ -56,7 +59,8 @@ fn transfer_by_frozen_sender_fails() {
 
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "compliant_transfer", &args, addr(2));
 }
 
@@ -74,7 +78,8 @@ fn freeze_and_unfreeze_allows_transfer() {
 
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "compliant_transfer", &args, addr(2));
     assert_eq!(state.as_ref().unwrap().balance_of(&addr(3)), 100);
 }
@@ -87,7 +92,8 @@ fn transfer_by_unverified_sender_fails() {
 
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "compliant_transfer", &args, addr(2));
 }
 
@@ -100,7 +106,8 @@ fn transfer_to_unverified_recipient_fails() {
 
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "compliant_transfer", &args, addr(2));
 }
 
@@ -109,7 +116,8 @@ fn compliance_rule_require_credential() {
     let mut state = init();
     let rule_args = serde_json::to_vec(&serde_json::json!({
         "rule": {"RequireCredential": "KYC"}
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "add_compliance", &rule_args, addr(1));
 
     verify_addr(&mut state, addr(2), "US");
@@ -119,7 +127,8 @@ fn compliance_rule_require_credential() {
     // Transfer should work since addr(3) has KYC credential
     let args = serde_json::to_vec(&serde_json::json!({
         "to": addr(3), "amount": 100u64, "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "compliant_transfer", &args, addr(2));
     assert_eq!(state.as_ref().unwrap().balance_of(&addr(3)), 100);
 }

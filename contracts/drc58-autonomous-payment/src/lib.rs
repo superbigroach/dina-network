@@ -68,33 +68,48 @@ impl PaymentState {
     ) -> u64 {
         assert!(max_amount > 0, "DRC58: max_amount must be positive");
         assert!(frequency_seconds > 0, "DRC58: frequency must be positive");
-        assert!(total_budget >= max_amount, "DRC58: budget must cover at least one payment");
+        assert!(
+            total_budget >= max_amount,
+            "DRC58: budget must cover at least one payment"
+        );
 
         let id = self.next_auth_id;
         self.next_auth_id += 1;
-        self.authorizations.insert(id, PaymentAuthorization {
+        self.authorizations.insert(
             id,
-            payer: caller,
-            payee,
-            max_amount,
-            frequency_seconds,
-            total_budget,
-            spent: 0,
-            active: true,
-            last_payment: 0,
-            created_at,
-            payment_count: 0,
-        });
+            PaymentAuthorization {
+                id,
+                payer: caller,
+                payee,
+                max_amount,
+                frequency_seconds,
+                total_budget,
+                spent: 0,
+                active: true,
+                last_payment: 0,
+                created_at,
+                payment_count: 0,
+            },
+        );
         id
     }
 
     /// Called by the payee to charge the payer. Checks frequency and budget constraints.
     pub fn charge(&mut self, caller: Address, auth_id: u64, amount: u64, current_time: u64) {
-        let auth = self.authorizations.get_mut(&auth_id).expect("DRC58: authorization not found");
+        let auth = self
+            .authorizations
+            .get_mut(&auth_id)
+            .expect("DRC58: authorization not found");
         assert!(auth.active, "DRC58: authorization inactive");
         assert!(caller == auth.payee, "DRC58: only payee can charge");
-        assert!(amount <= auth.max_amount, "DRC58: amount exceeds max_amount");
-        assert!(auth.spent + amount <= auth.total_budget, "DRC58: budget exceeded");
+        assert!(
+            amount <= auth.max_amount,
+            "DRC58: amount exceeds max_amount"
+        );
+        assert!(
+            auth.spent + amount <= auth.total_budget,
+            "DRC58: budget exceeded"
+        );
 
         if auth.last_payment > 0 {
             assert!(
@@ -126,24 +141,37 @@ impl PaymentState {
     }
 
     pub fn cancel(&mut self, caller: Address, auth_id: u64) {
-        let auth = self.authorizations.get_mut(&auth_id).expect("DRC58: authorization not found");
+        let auth = self
+            .authorizations
+            .get_mut(&auth_id)
+            .expect("DRC58: authorization not found");
         assert!(caller == auth.payer, "DRC58: only payer can cancel");
         auth.active = false;
     }
 
     pub fn modify_budget(&mut self, caller: Address, auth_id: u64, new_budget: u64) {
-        let auth = self.authorizations.get_mut(&auth_id).expect("DRC58: authorization not found");
+        let auth = self
+            .authorizations
+            .get_mut(&auth_id)
+            .expect("DRC58: authorization not found");
         assert!(caller == auth.payer, "DRC58: only payer can modify budget");
-        assert!(new_budget >= auth.spent, "DRC58: new budget less than already spent");
+        assert!(
+            new_budget >= auth.spent,
+            "DRC58: new budget less than already spent"
+        );
         auth.total_budget = new_budget;
     }
 
     pub fn payment_history_for(&self, auth_id: u64) -> Vec<&PaymentRecord> {
-        self.payment_history.iter().filter(|r| r.auth_id == auth_id).collect()
+        self.payment_history
+            .iter()
+            .filter(|r| r.auth_id == auth_id)
+            .collect()
     }
 
     pub fn active_authorizations(&self, payer: Address) -> Vec<&PaymentAuthorization> {
-        self.authorizations.values()
+        self.authorizations
+            .values()
             .filter(|a| a.payer == payer && a.active)
             .collect()
     }
@@ -158,28 +186,51 @@ impl PaymentState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CreateAuthArgs { payee: Address, max_amount: u64, frequency_seconds: u64, total_budget: u64, created_at: u64 }
+struct CreateAuthArgs {
+    payee: Address,
+    max_amount: u64,
+    frequency_seconds: u64,
+    total_budget: u64,
+    created_at: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ChargeArgs { auth_id: u64, amount: u64, current_time: u64 }
+struct ChargeArgs {
+    auth_id: u64,
+    amount: u64,
+    current_time: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CancelArgs { auth_id: u64 }
+struct CancelArgs {
+    auth_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct ModifyBudgetArgs { auth_id: u64, new_budget: u64 }
+struct ModifyBudgetArgs {
+    auth_id: u64,
+    new_budget: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AuthIdArgs { auth_id: u64 }
+struct AuthIdArgs {
+    auth_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct PayerArgs { payer: Address }
+struct PayerArgs {
+    payer: Address,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-struct BalanceArgs { addr: Address }
+struct BalanceArgs {
+    addr: Address,
+}
 
 pub fn dispatch(
     state: &mut Option<PaymentState>,
@@ -202,7 +253,14 @@ pub fn dispatch(
         "create_authorization" => {
             let s = state.as_mut().expect("DRC58: not initialised");
             let a: CreateAuthArgs = serde_json::from_slice(args).expect("DRC58: bad args");
-            let id = s.create_authorization(caller, a.payee, a.max_amount, a.frequency_seconds, a.total_budget, a.created_at);
+            let id = s.create_authorization(
+                caller,
+                a.payee,
+                a.max_amount,
+                a.frequency_seconds,
+                a.total_budget,
+                a.created_at,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "charge" => {

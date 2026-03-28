@@ -62,17 +62,20 @@ impl EmbeddingState {
 
         let id = self.next_id;
         self.next_id += 1;
-        self.embeddings.insert(id, EmbeddingRecord {
+        self.embeddings.insert(
             id,
-            owner: caller,
-            dimensions,
-            model_used,
-            content_hash,
-            semantic_label,
-            created_at,
-            access_count: 0,
-            price_per_access,
-        });
+            EmbeddingRecord {
+                id,
+                owner: caller,
+                dimensions,
+                model_used,
+                content_hash,
+                semantic_label,
+                created_at,
+                access_count: 0,
+                price_per_access,
+            },
+        );
         id
     }
 
@@ -82,7 +85,10 @@ impl EmbeddingState {
         id: EmbeddingId,
         payment: u64,
     ) -> &EmbeddingRecord {
-        let record = self.embeddings.get(&id).expect("DRC73: embedding not found");
+        let record = self
+            .embeddings
+            .get(&id)
+            .expect("DRC73: embedding not found");
         let price = record.price_per_access;
         let emb_owner = record.owner;
 
@@ -100,25 +106,31 @@ impl EmbeddingState {
     }
 
     pub fn search_by_label(&self, label: &str) -> Vec<&EmbeddingRecord> {
-        self.embeddings.values()
+        self.embeddings
+            .values()
             .filter(|e| e.semantic_label.contains(label))
             .collect()
     }
 
     pub fn search_by_model(&self, model: &str) -> Vec<&EmbeddingRecord> {
-        self.embeddings.values()
+        self.embeddings
+            .values()
             .filter(|e| e.model_used == model)
             .collect()
     }
 
     pub fn embeddings_by_owner(&self, owner: &Address) -> Vec<&EmbeddingRecord> {
-        self.embeddings.values()
+        self.embeddings
+            .values()
             .filter(|e| &e.owner == owner)
             .collect()
     }
 
     pub fn update_price(&mut self, caller: Address, id: EmbeddingId, new_price: u64) {
-        let record = self.embeddings.get_mut(&id).expect("DRC73: embedding not found");
+        let record = self
+            .embeddings
+            .get_mut(&id)
+            .expect("DRC73: embedding not found");
         assert!(record.owner == caller, "DRC73: only owner can update price");
         record.price_per_access = new_price;
     }
@@ -134,21 +146,39 @@ impl EmbeddingState {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RegisterArgs {
-    dimensions: u16, model_used: String, content_hash: [u8; 32],
-    semantic_label: String, created_at: u64, price_per_access: u64,
+    dimensions: u16,
+    model_used: String,
+    content_hash: [u8; 32],
+    semantic_label: String,
+    created_at: u64,
+    price_per_access: u64,
 }
 #[derive(Serialize, Deserialize, Debug)]
-struct AccessArgs { id: EmbeddingId, payment: u64 }
+struct AccessArgs {
+    id: EmbeddingId,
+    payment: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct LabelArgs { label: String }
+struct LabelArgs {
+    label: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct ModelArgs { model: String }
+struct ModelArgs {
+    model: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct OwnerArgs { owner: Address }
+struct OwnerArgs {
+    owner: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct UpdatePriceArgs { id: EmbeddingId, new_price: u64 }
+struct UpdatePriceArgs {
+    id: EmbeddingId,
+    new_price: u64,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct DepositArgs { amount: u64 }
+struct DepositArgs {
+    amount: u64,
+}
 
 pub fn dispatch(
     state: &mut Option<EmbeddingState>,
@@ -171,7 +201,15 @@ pub fn dispatch(
         "register_embedding" => {
             let s = state.as_mut().expect("DRC73: not initialised");
             let a: RegisterArgs = serde_json::from_slice(args).expect("DRC73: bad args");
-            let id = s.register_embedding(caller, a.dimensions, a.model_used, a.content_hash, a.semantic_label, a.created_at, a.price_per_access);
+            let id = s.register_embedding(
+                caller,
+                a.dimensions,
+                a.model_used,
+                a.content_hash,
+                a.semantic_label,
+                a.created_at,
+                a.price_per_access,
+            );
             serde_json::to_vec(&id).unwrap()
         }
         "access_embedding" => {
@@ -224,16 +262,31 @@ mod tests {
     fn setup() -> EmbeddingState {
         let mut s = EmbeddingState::new(OWNER);
         s.register_embedding(
-            ALICE, 768, "text-embedding-ada-002".into(), [0xAA; 32],
-            "product-reviews".into(), 1000, 10,
+            ALICE,
+            768,
+            "text-embedding-ada-002".into(),
+            [0xAA; 32],
+            "product-reviews".into(),
+            1000,
+            10,
         );
         s.register_embedding(
-            ALICE, 1536, "text-embedding-ada-002".into(), [0xBB; 32],
-            "customer-support".into(), 1001, 20,
+            ALICE,
+            1536,
+            "text-embedding-ada-002".into(),
+            [0xBB; 32],
+            "customer-support".into(),
+            1001,
+            20,
         );
         s.register_embedding(
-            BOB, 384, "all-MiniLM-L6".into(), [0xCC; 32],
-            "product-descriptions".into(), 1002, 5,
+            BOB,
+            384,
+            "all-MiniLM-L6".into(),
+            [0xCC; 32],
+            "product-descriptions".into(),
+            1002,
+            5,
         );
         s.deposit(BOB, 1000);
         s
@@ -299,10 +352,14 @@ mod tests {
         let mut state: Option<EmbeddingState> = None;
         dispatch(&mut state, "init", b"", OWNER);
         let args = serde_json::to_vec(&RegisterArgs {
-            dimensions: 512, model_used: "bert-base".into(),
-            content_hash: [0xDD; 32], semantic_label: "sentiment".into(),
-            created_at: 5000, price_per_access: 15,
-        }).unwrap();
+            dimensions: 512,
+            model_used: "bert-base".into(),
+            content_hash: [0xDD; 32],
+            semantic_label: "sentiment".into(),
+            created_at: 5000,
+            price_per_access: 15,
+        })
+        .unwrap();
         let id_bytes = dispatch(&mut state, "register_embedding", &args, ALICE);
         let id: u64 = serde_json::from_slice(&id_bytes).unwrap();
         assert_eq!(id, 1);

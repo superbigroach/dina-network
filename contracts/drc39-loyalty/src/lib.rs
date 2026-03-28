@@ -40,8 +40,14 @@ impl LoyaltyState {
         points_per_usdc: u64,
         redemption_rate: u64,
     ) -> ProgramId {
-        assert!(points_per_usdc > 0, "DRC39: points_per_usdc must be positive");
-        assert!(redemption_rate > 0, "DRC39: redemption_rate must be positive");
+        assert!(
+            points_per_usdc > 0,
+            "DRC39: points_per_usdc must be positive"
+        );
+        assert!(
+            redemption_rate > 0,
+            "DRC39: redemption_rate must be positive"
+        );
         let id = self.next_id;
         self.next_id += 1;
         self.programs.insert(
@@ -64,23 +70,34 @@ impl LoyaltyState {
         user: Address,
         usdc_amount: u64,
     ) {
-        let program = self.programs.get(&program_id).expect("DRC39: program not found");
-        assert!(program.business == caller, "DRC39: only business can award points");
+        let program = self
+            .programs
+            .get(&program_id)
+            .expect("DRC39: program not found");
+        assert!(
+            program.business == caller,
+            "DRC39: only business can award points"
+        );
         let points = usdc_amount * program.points_per_usdc;
         let balance = self.balances.get(&(program_id, user)).copied().unwrap_or(0);
         self.balances.insert((program_id, user), balance + points);
     }
 
-    pub fn redeem_points(
-        &mut self,
-        caller: Address,
-        program_id: ProgramId,
-        points: u64,
-    ) -> u64 {
-        let program = self.programs.get(&program_id).expect("DRC39: program not found");
+    pub fn redeem_points(&mut self, caller: Address, program_id: ProgramId, points: u64) -> u64 {
+        let program = self
+            .programs
+            .get(&program_id)
+            .expect("DRC39: program not found");
         assert!(points > 0, "DRC39: must redeem positive points");
-        let balance = self.balances.get(&(program_id, caller)).copied().unwrap_or(0);
-        assert!(balance >= points, "DRC39: insufficient points ({balance} < {points})");
+        let balance = self
+            .balances
+            .get(&(program_id, caller))
+            .copied()
+            .unwrap_or(0);
+        assert!(
+            balance >= points,
+            "DRC39: insufficient points ({balance} < {points})"
+        );
         self.balances.insert((program_id, caller), balance - points);
         points / program.redemption_rate
     }
@@ -97,19 +114,25 @@ impl LoyaltyState {
         amount: u64,
     ) {
         assert!(amount > 0, "DRC39: transfer amount must be positive");
-        let _ = self.programs.get(&program_id).expect("DRC39: program not found");
+        let _ = self
+            .programs
+            .get(&program_id)
+            .expect("DRC39: program not found");
         let from_balance = self.balance(program_id, caller);
         assert!(
             from_balance >= amount,
             "DRC39: insufficient points for transfer ({from_balance} < {amount})"
         );
-        self.balances.insert((program_id, caller), from_balance - amount);
+        self.balances
+            .insert((program_id, caller), from_balance - amount);
         let to_balance = self.balance(program_id, to);
         self.balances.insert((program_id, to), to_balance + amount);
     }
 
     pub fn program_info(&self, program_id: ProgramId) -> &LoyaltyProgram {
-        self.programs.get(&program_id).expect("DRC39: program not found")
+        self.programs
+            .get(&program_id)
+            .expect("DRC39: program not found")
     }
 }
 
@@ -198,8 +221,7 @@ pub fn dispatch(
 
         "balance" => {
             let s = state.as_ref().expect("DRC39: not initialised");
-            let a: BalanceArgs =
-                serde_json::from_slice(args).expect("DRC39: bad balance args");
+            let a: BalanceArgs = serde_json::from_slice(args).expect("DRC39: bad balance args");
             serde_json::to_vec(&s.balance(a.program_id, a.user)).unwrap()
         }
 

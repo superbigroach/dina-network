@@ -112,13 +112,7 @@ impl TokenWithHooks {
     /// 1) If sender has a send_hook, a HookCall is queued for it.
     /// 2) If receiver has a receive_hook, a HookCall is queued for it.
     ///    The actual token transfer is performed immediately.
-    pub fn send(
-        &mut self,
-        caller: Address,
-        to: Address,
-        amount: u64,
-        data: Vec<u8>,
-    ) {
+    pub fn send(&mut self, caller: Address, to: Address, amount: u64, data: Vec<u8>) {
         assert!(amount > 0, "DRC17: send amount must be positive");
         let from_bal = self.balance_of(&caller);
         assert!(
@@ -250,23 +244,20 @@ pub fn dispatch(
         }
         "allowance" => {
             let s = state.as_ref().expect("DRC17: not initialised");
-            let a: AllowanceArgs =
-                serde_json::from_slice(args).expect("DRC17: bad allowance args");
+            let a: AllowanceArgs = serde_json::from_slice(args).expect("DRC17: bad allowance args");
             serde_json::to_vec(&s.allowance(&a.owner, &a.spender)).unwrap()
         }
 
         // -- Mutations -------------------------------------------------------
         "transfer" => {
             let s = state.as_mut().expect("DRC17: not initialised");
-            let a: TransferArgs =
-                serde_json::from_slice(args).expect("DRC17: bad transfer args");
+            let a: TransferArgs = serde_json::from_slice(args).expect("DRC17: bad transfer args");
             s.transfer(caller, a.to, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
         "approve" => {
             let s = state.as_mut().expect("DRC17: not initialised");
-            let a: ApproveArgs =
-                serde_json::from_slice(args).expect("DRC17: bad approve args");
+            let a: ApproveArgs = serde_json::from_slice(args).expect("DRC17: bad approve args");
             s.approve(caller, a.spender, a.amount);
             serde_json::to_vec("ok").unwrap()
         }

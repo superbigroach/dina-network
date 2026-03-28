@@ -423,12 +423,7 @@ impl CctpBridge {
     // -----------------------------------------------------------------------
 
     /// Compute a deterministic transfer ID by hashing the key fields.
-    fn compute_transfer_id(
-        sender: &[u8],
-        recipient: &[u8],
-        amount: u64,
-        nonce: u64,
-    ) -> [u8; 32] {
+    fn compute_transfer_id(sender: &[u8], recipient: &[u8], amount: u64, nonce: u64) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(sender);
         hasher.update(recipient);
@@ -510,10 +505,7 @@ mod tests {
     fn register_custom_domain() {
         let mut bridge = CctpBridge::new();
         bridge.register_domain(100, ChainId::ArcMainnet);
-        assert_eq!(
-            bridge.chain_for_domain(100),
-            Some(&ChainId::ArcMainnet)
-        );
+        assert_eq!(bridge.chain_for_domain(100), Some(&ChainId::ArcMainnet));
     }
 
     #[test]
@@ -537,7 +529,13 @@ mod tests {
         let recipient = vec![0xbb; 20]; // EVM address
 
         let transfer = bridge
-            .initiate_bridge_out(from, ChainId::BaseMainnet, recipient.clone(), 1_000_000, 1700000000)
+            .initiate_bridge_out(
+                from,
+                ChainId::BaseMainnet,
+                recipient.clone(),
+                1_000_000,
+                1700000000,
+            )
             .unwrap();
 
         assert_eq!(transfer.from_chain, ChainId::DinaMainnet);

@@ -220,7 +220,7 @@ mod tests {
         let est = estimator().estimate_contract_call("swap", 256);
         assert_eq!(est.breakdown.base_fee, 10_000);
         assert_eq!(est.breakdown.data_fee, 256); // 256 * 1
-        // execution: gas_price(1) * (1000 + 256*10) = 3560
+                                                 // execution: gas_price(1) * (1000 + 256*10) = 3560
         assert_eq!(est.breakdown.execution_fee, 3_560);
         assert_eq!(est.fee_usdc, 10_000 + 256 + 3_560);
     }
@@ -239,7 +239,7 @@ mod tests {
         let est = estimator().estimate_deploy(1_000);
         assert_eq!(est.breakdown.base_fee, 1_000_000);
         assert_eq!(est.breakdown.data_fee, 1_000); // 1000 * 1
-        // execution: 1 * (10_000 + 1000*5) = 15_000
+                                                   // execution: 1 * (10_000 + 1000*5) = 15_000
         assert_eq!(est.breakdown.execution_fee, 15_000);
         assert_eq!(est.fee_usdc, 1_000_000 + 1_000 + 15_000);
     }

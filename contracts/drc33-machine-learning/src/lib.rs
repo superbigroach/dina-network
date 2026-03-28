@@ -80,7 +80,10 @@ impl MLRegistryState {
         model_hash: Option<String>,
         accuracy_score: Option<u64>,
     ) {
-        let model = self.models.get_mut(&model_id).expect("DRC33: model not found");
+        let model = self
+            .models
+            .get_mut(&model_id)
+            .expect("DRC33: model not found");
         assert!(model.owner == caller, "DRC33: only owner can update model");
         assert!(!model.deprecated, "DRC33: model is deprecated");
         if let Some(v) = version {
@@ -106,13 +109,14 @@ impl MLRegistryState {
     }
 
     pub fn verify_model_hash(&self, id: u64, hash: &str) -> bool {
-        self.models
-            .get(&id)
-            .is_some_and(|m| m.model_hash == hash)
+        self.models.get(&id).is_some_and(|m| m.model_hash == hash)
     }
 
     pub fn deprecate_model(&mut self, caller: Address, model_id: u64) {
-        let model = self.models.get_mut(&model_id).expect("DRC33: model not found");
+        let model = self
+            .models
+            .get_mut(&model_id)
+            .expect("DRC33: model not found");
         assert!(
             model.owner == caller || caller == self.admin,
             "DRC33: not authorized"
@@ -211,13 +215,18 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC33: not initialised");
             let a: UpdateModelArgs =
                 serde_json::from_slice(args).expect("DRC33: bad update_model args");
-            s.update_model(caller, a.model_id, a.version, a.model_hash, a.accuracy_score);
+            s.update_model(
+                caller,
+                a.model_id,
+                a.version,
+                a.model_hash,
+                a.accuracy_score,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "get_model" => {
             let s = state.as_ref().expect("DRC33: not initialised");
-            let a: GetModelArgs =
-                serde_json::from_slice(args).expect("DRC33: bad get_model args");
+            let a: GetModelArgs = serde_json::from_slice(args).expect("DRC33: bad get_model args");
             serde_json::to_vec(&s.get_model(a.id)).unwrap()
         }
         "models_by_owner" => {

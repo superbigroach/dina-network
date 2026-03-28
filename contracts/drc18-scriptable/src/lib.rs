@@ -46,10 +46,7 @@ impl ScriptableTokenState {
             .creators
             .get(&token_id)
             .expect("DRC18: token does not exist");
-        assert!(
-            caller == *creator,
-            "DRC18: only creator can set script URI"
-        );
+        assert!(caller == *creator, "DRC18: only creator can set script URI");
         self.scripts.insert(token_id, scripts);
     }
 
@@ -59,10 +56,7 @@ impl ScriptableTokenState {
             .get(&token_id)
             .expect("DRC18: token does not exist");
         assert!(caller == *creator, "DRC18: only creator can add script");
-        self.scripts
-            .entry(token_id)
-            .or_default()
-            .push(script_uri);
+        self.scripts.entry(token_id).or_default().push(script_uri);
     }
 
     pub fn remove_script(&mut self, caller: Address, token_id: u64, index: usize) {
@@ -70,10 +64,7 @@ impl ScriptableTokenState {
             .creators
             .get(&token_id)
             .expect("DRC18: token does not exist");
-        assert!(
-            caller == *creator,
-            "DRC18: only creator can remove script"
-        );
+        assert!(caller == *creator, "DRC18: only creator can remove script");
         let scripts = self
             .scripts
             .get_mut(&token_id)

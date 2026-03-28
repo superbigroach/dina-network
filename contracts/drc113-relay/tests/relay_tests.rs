@@ -36,9 +36,14 @@ fn submit_settlement_stores_pending() {
     let mut state = init();
     let args = serde_json::to_vec(&serde_json::json!({
         "blob": make_blob(channel(1), 1, 1000)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &args, addr(5));
-    assert!(state.as_ref().unwrap().pending_settlements.contains_key(&channel(1)));
+    assert!(state
+        .as_ref()
+        .unwrap()
+        .pending_settlements
+        .contains_key(&channel(1)));
 }
 
 #[test]
@@ -46,16 +51,22 @@ fn challenge_replaces_with_higher_sequence() {
     let mut state = init();
     let submit = serde_json::to_vec(&serde_json::json!({
         "blob": make_blob(channel(1), 1, 1000)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &submit, addr(5));
 
     let challenge = serde_json::to_vec(&serde_json::json!({
         "channel_id": channel(1),
         "newer_blob": make_blob(channel(1), 2, 1500)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "challenge_settlement", &challenge, addr(6));
 
-    let pending = state.as_ref().unwrap().pending_for_channel(&channel(1)).unwrap();
+    let pending = state
+        .as_ref()
+        .unwrap()
+        .pending_for_channel(&channel(1))
+        .unwrap();
     assert_eq!(pending.sequence, 2);
 }
 
@@ -65,13 +76,15 @@ fn challenge_with_lower_sequence_fails() {
     let mut state = init();
     let submit = serde_json::to_vec(&serde_json::json!({
         "blob": make_blob(channel(1), 5, 1000)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &submit, addr(5));
 
     let challenge = serde_json::to_vec(&serde_json::json!({
         "channel_id": channel(1),
         "newer_blob": make_blob(channel(1), 3, 1500)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "challenge_settlement", &challenge, addr(6));
 }
 
@@ -80,19 +93,26 @@ fn finalize_after_challenge_period() {
     let mut state = init();
     let submit = serde_json::to_vec(&serde_json::json!({
         "blob": make_blob(channel(1), 1, 1000)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &submit, addr(5));
 
     // Register relay and finalize after challenge period
-    let reg = serde_json::to_vec(&serde_json::json!({"addr": addr(5), "timestamp": 500u64})).unwrap();
+    let reg =
+        serde_json::to_vec(&serde_json::json!({"addr": addr(5), "timestamp": 500u64})).unwrap();
     dispatch(&mut state, "register_relay", &reg, addr(1));
 
     let finalize = serde_json::to_vec(&serde_json::json!({
         "channel_id": channel(1), "current_time": 5000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "finalize_settlement", &finalize, addr(1));
 
-    assert!(!state.as_ref().unwrap().pending_settlements.contains_key(&channel(1)));
+    assert!(!state
+        .as_ref()
+        .unwrap()
+        .pending_settlements
+        .contains_key(&channel(1)));
     assert_eq!(state.as_ref().unwrap().finalized_count, 1);
 }
 
@@ -102,12 +122,14 @@ fn finalize_before_challenge_period_fails() {
     let mut state = init();
     let submit = serde_json::to_vec(&serde_json::json!({
         "blob": make_blob(channel(1), 1, 1000)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &submit, addr(5));
 
     let finalize = serde_json::to_vec(&serde_json::json!({
         "channel_id": channel(1), "current_time": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "finalize_settlement", &finalize, addr(1));
 }
 
@@ -122,7 +144,8 @@ fn submit_with_same_parties_fails() {
             "signature_a": [1u8], "signature_b": [2u8],
             "relay_fee": 10u64, "submitted_by": addr(0), "submitted_at": 1000u64
         }
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &args, addr(5));
 }
 
@@ -138,17 +161,20 @@ fn relay_info_returns_none_for_unregistered() {
 #[test]
 fn finalize_updates_relay_stats() {
     let mut state = init();
-    let reg = serde_json::to_vec(&serde_json::json!({"addr": addr(5), "timestamp": 500u64})).unwrap();
+    let reg =
+        serde_json::to_vec(&serde_json::json!({"addr": addr(5), "timestamp": 500u64})).unwrap();
     dispatch(&mut state, "register_relay", &reg, addr(1));
 
     let submit = serde_json::to_vec(&serde_json::json!({
         "blob": make_blob(channel(1), 1, 1000)
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "submit_settlement", &submit, addr(5));
 
     let finalize = serde_json::to_vec(&serde_json::json!({
         "channel_id": channel(1), "current_time": 5000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "finalize_settlement", &finalize, addr(1));
 
     let info = state.as_ref().unwrap().relay_info(&addr(5)).unwrap();
@@ -160,7 +186,8 @@ fn finalize_updates_relay_stats() {
 #[should_panic(expected = "relay already registered")]
 fn double_register_relay_fails() {
     let mut state = init();
-    let reg = serde_json::to_vec(&serde_json::json!({"addr": addr(5), "timestamp": 500u64})).unwrap();
+    let reg =
+        serde_json::to_vec(&serde_json::json!({"addr": addr(5), "timestamp": 500u64})).unwrap();
     dispatch(&mut state, "register_relay", &reg, addr(1));
     dispatch(&mut state, "register_relay", &reg, addr(1));
 }

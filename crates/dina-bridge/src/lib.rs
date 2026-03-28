@@ -1,7 +1,7 @@
-pub mod types;
-pub mod cctp;
 pub mod attestation;
+pub mod cctp;
+pub mod types;
 
-pub use types::{BridgeTransfer, BridgeStatus, ChainId};
-pub use cctp::{CctpBridge, CctpMessage, CctpAttestation};
-pub use attestation::{verify_cctp_attestation, encode_cctp_message, decode_cctp_message};
+pub use attestation::{decode_cctp_message, encode_cctp_message, verify_cctp_attestation};
+pub use cctp::{CctpAttestation, CctpBridge, CctpMessage};
+pub use types::{BridgeStatus, BridgeTransfer, ChainId};

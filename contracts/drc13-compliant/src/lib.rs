@@ -44,12 +44,7 @@ pub struct CompliantTokenState {
 }
 
 impl CompliantTokenState {
-    pub fn new(
-        name: String,
-        symbol: String,
-        decimals: u8,
-        admin: Address,
-    ) -> Self {
+    pub fn new(name: String, symbol: String, decimals: u8, admin: Address) -> Self {
         Self {
             name,
             symbol,
@@ -108,12 +103,7 @@ impl CompliantTokenState {
         self.frozen_addresses.remove(&addr);
     }
 
-    pub fn verify_address(
-        &mut self,
-        caller: Address,
-        addr: Address,
-        info: VerificationInfo,
-    ) {
+    pub fn verify_address(&mut self, caller: Address, addr: Address, info: VerificationInfo) {
         if let Some(registry) = self.identity_registry {
             assert!(
                 caller == registry,
@@ -217,10 +207,7 @@ impl CompliantTokenState {
             !self.frozen_addresses.contains_key(&to),
             "DRC13: recipient is frozen"
         );
-        assert!(
-            self.is_verified(&caller),
-            "DRC13: sender is not verified"
-        );
+        assert!(self.is_verified(&caller), "DRC13: sender is not verified");
 
         self.check_compliance(&to, amount);
         self.check_hold_period(&caller, current_time);
@@ -333,7 +320,9 @@ pub fn dispatch(
         "init" => {
             assert!(state.is_none(), "DRC13: already initialised");
             let a: InitArgs = serde_json::from_slice(args).expect("DRC13: bad init args");
-            *state = Some(CompliantTokenState::new(a.name, a.symbol, a.decimals, caller));
+            *state = Some(CompliantTokenState::new(
+                a.name, a.symbol, a.decimals, caller,
+            ));
             serde_json::to_vec("ok").unwrap()
         }
 
@@ -361,8 +350,7 @@ pub fn dispatch(
 
         "is_verified" => {
             let s = state.as_ref().expect("DRC13: not initialised");
-            let a: AddressArg =
-                serde_json::from_slice(args).expect("DRC13: bad is_verified args");
+            let a: AddressArg = serde_json::from_slice(args).expect("DRC13: bad is_verified args");
             serde_json::to_vec(&s.is_verified(&a.addr)).unwrap()
         }
 
@@ -384,16 +372,14 @@ pub fn dispatch(
 
         "freeze" => {
             let s = state.as_mut().expect("DRC13: not initialised");
-            let a: AddressArg =
-                serde_json::from_slice(args).expect("DRC13: bad freeze args");
+            let a: AddressArg = serde_json::from_slice(args).expect("DRC13: bad freeze args");
             s.freeze(caller, a.addr);
             serde_json::to_vec("ok").unwrap()
         }
 
         "unfreeze" => {
             let s = state.as_mut().expect("DRC13: not initialised");
-            let a: AddressArg =
-                serde_json::from_slice(args).expect("DRC13: bad unfreeze args");
+            let a: AddressArg = serde_json::from_slice(args).expect("DRC13: bad unfreeze args");
             s.unfreeze(caller, a.addr);
             serde_json::to_vec("ok").unwrap()
         }

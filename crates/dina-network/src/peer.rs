@@ -207,9 +207,7 @@ impl PeerManager {
 
     /// Check whether a peer is currently banned.
     pub fn is_banned(&self, peer_id: &PeerId) -> bool {
-        self.banned
-            .get(peer_id)
-            .is_some_and(|b| !b.is_expired())
+        self.banned.get(peer_id).is_some_and(|b| !b.is_expired())
     }
 
     /// Return the number of connected peers.
@@ -240,7 +238,11 @@ impl PeerManager {
         // Sort ascending by score so worst peers come first.
         candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let to_evict: Vec<PeerId> = candidates.into_iter().take(count).map(|(id, _)| id).collect();
+        let to_evict: Vec<PeerId> = candidates
+            .into_iter()
+            .take(count)
+            .map(|(id, _)| id)
+            .collect();
 
         for peer_id in &to_evict {
             debug!(%peer_id, "evicting low-score peer");

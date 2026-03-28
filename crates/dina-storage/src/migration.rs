@@ -15,10 +15,7 @@ pub fn current_version() -> u32 {
 
 /// Read the stored schema version from the database, or 0 if none is set.
 fn read_version(db: &DinaDB) -> StorageResult<u32> {
-    let read_txn = db
-        .inner()
-        .begin_read()
-        .map_err(StorageError::Transaction)?;
+    let read_txn = db.inner().begin_read().map_err(StorageError::Transaction)?;
 
     let table = match read_txn.open_table(STATE_METADATA) {
         Ok(t) => t,
@@ -71,9 +68,7 @@ pub fn migrate(db: &DinaDB) -> StorageResult<()> {
         return Ok(());
     }
 
-    info!(
-        "Migrating database from version {stored} to {CURRENT_VERSION}"
-    );
+    info!("Migrating database from version {stored} to {CURRENT_VERSION}");
 
     // Migration v0 -> v1: initial table creation.
     // redb creates tables on first access, so we just need to ensure
@@ -100,7 +95,9 @@ fn apply_v1(db: &DinaDB) -> StorageResult<()> {
         .map_err(StorageError::Transaction)?;
     {
         // Opening each table in a write transaction creates it if it doesn't exist.
-        write_txn.open_table(ACCOUNTS).map_err(StorageError::Table)?;
+        write_txn
+            .open_table(ACCOUNTS)
+            .map_err(StorageError::Table)?;
         write_txn.open_table(BLOCKS).map_err(StorageError::Table)?;
         write_txn
             .open_table(BLOCK_HASHES)
@@ -161,14 +158,35 @@ mod tests {
         let read_txn = db.inner().begin_read().unwrap();
 
         // Each table should exist and be openable
-        assert!(read_txn.open_table(ACCOUNTS).is_ok(), "ACCOUNTS table missing");
+        assert!(
+            read_txn.open_table(ACCOUNTS).is_ok(),
+            "ACCOUNTS table missing"
+        );
         assert!(read_txn.open_table(BLOCKS).is_ok(), "BLOCKS table missing");
-        assert!(read_txn.open_table(BLOCK_HASHES).is_ok(), "BLOCK_HASHES table missing");
-        assert!(read_txn.open_table(TRANSACTIONS).is_ok(), "TRANSACTIONS table missing");
-        assert!(read_txn.open_table(CONTRACT_CODE).is_ok(), "CONTRACT_CODE table missing");
-        assert!(read_txn.open_table(CONTRACT_STORAGE).is_ok(), "CONTRACT_STORAGE table missing");
-        assert!(read_txn.open_table(DEVICE_REGISTRY).is_ok(), "DEVICE_REGISTRY table missing");
-        assert!(read_txn.open_table(STATE_METADATA).is_ok(), "STATE_METADATA table missing");
+        assert!(
+            read_txn.open_table(BLOCK_HASHES).is_ok(),
+            "BLOCK_HASHES table missing"
+        );
+        assert!(
+            read_txn.open_table(TRANSACTIONS).is_ok(),
+            "TRANSACTIONS table missing"
+        );
+        assert!(
+            read_txn.open_table(CONTRACT_CODE).is_ok(),
+            "CONTRACT_CODE table missing"
+        );
+        assert!(
+            read_txn.open_table(CONTRACT_STORAGE).is_ok(),
+            "CONTRACT_STORAGE table missing"
+        );
+        assert!(
+            read_txn.open_table(DEVICE_REGISTRY).is_ok(),
+            "DEVICE_REGISTRY table missing"
+        );
+        assert!(
+            read_txn.open_table(STATE_METADATA).is_ok(),
+            "STATE_METADATA table missing"
+        );
     }
 
     #[test]

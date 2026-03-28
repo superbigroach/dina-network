@@ -23,8 +23,7 @@ pub struct RelayBlob {
 pub fn create_relay_blob(signed_state: SignedState, relay_fee: u64) -> RelayBlob {
     debug!(
         channel_id = hex::encode(signed_state.state.channel_id),
-        relay_fee,
-        "creating relay blob"
+        relay_fee, "creating relay blob"
     );
 
     RelayBlob {

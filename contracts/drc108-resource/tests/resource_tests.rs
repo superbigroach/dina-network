@@ -14,7 +14,8 @@ fn allocate(state: &mut Option<ResourceRegistry>, device: [u8; 32], resource: &s
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": device, "resource_type": resource,
         "amount": amount, "expires_at": null
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "allocate", &args, addr(1));
 }
 
@@ -24,7 +25,8 @@ fn allocate_creates_balance() {
     allocate(&mut state, addr(10), "compute", 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": addr(10), "resource_type": "compute"
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "balance", &args, addr(1));
     let bal: u64 = serde_json::from_slice(&result).unwrap();
     assert_eq!(bal, 1000);
@@ -37,7 +39,8 @@ fn transfer_resource_moves_allocation() {
     let args = serde_json::to_vec(&serde_json::json!({
         "from_device": addr(10), "to_device": addr(11),
         "resource_type": "compute", "amount": 300u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_resource", &args, addr(1));
 
     let s = state.as_ref().unwrap();
@@ -50,12 +53,14 @@ fn purchase_resource_credits_buyer() {
     let mut state = init();
     let price_args = serde_json::to_vec(&serde_json::json!({
         "resource_type": "compute", "price_per_unit": 10u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "set_price", &price_args, addr(1));
 
     let args = serde_json::to_vec(&serde_json::json!({
         "resource_type": "compute", "amount": 50u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "purchase_resource", &args, addr(5));
 
     assert_eq!(state.as_ref().unwrap().balance(&addr(5), "compute"), 50);
@@ -68,7 +73,8 @@ fn report_usage_tracks_consumption() {
     allocate(&mut state, addr(10), "compute", 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": addr(10), "resource_type": "compute", "used": 400u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "report_usage", &args, addr(1));
 
     // Balance should reflect used
@@ -83,7 +89,8 @@ fn report_usage_exceeding_allocation_fails() {
     allocate(&mut state, addr(10), "compute", 100);
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": addr(10), "resource_type": "compute", "used": 200u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "report_usage", &args, addr(1));
 }
 
@@ -94,7 +101,8 @@ fn allocate_by_non_admin_fails() {
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": addr(10), "resource_type": "compute",
         "amount": 100u64, "expires_at": null
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "allocate", &args, addr(99));
 }
 
@@ -106,7 +114,8 @@ fn transfer_more_than_available_fails() {
     let args = serde_json::to_vec(&serde_json::json!({
         "from_device": addr(10), "to_device": addr(11),
         "resource_type": "compute", "amount": 200u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "transfer_resource", &args, addr(1));
 }
 
@@ -115,7 +124,8 @@ fn balance_returns_zero_for_unknown() {
     let mut state = init();
     let args = serde_json::to_vec(&serde_json::json!({
         "device_id": addr(99), "resource_type": "compute"
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(&mut state, "balance", &args, addr(1));
     let bal: u64 = serde_json::from_slice(&result).unwrap();
     assert_eq!(bal, 0);

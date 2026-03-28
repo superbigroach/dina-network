@@ -177,15 +177,9 @@ impl AccountAbstraction {
 
     /// Revoke (remove) a session key from an account.
     pub fn revoke_session_key(&mut self, account: &Address, key: &[u8; 32]) -> DinaResult<()> {
-        let keys = self
-            .session_keys
-            .get_mut(account)
-            .ok_or_else(|| {
-                DinaError::AccountAbstractionError(format!(
-                    "no session keys for account {}",
-                    account
-                ))
-            })?;
+        let keys = self.session_keys.get_mut(account).ok_or_else(|| {
+            DinaError::AccountAbstractionError(format!("no session keys for account {}", account))
+        })?;
 
         let initial_len = keys.len();
         keys.retain(|k| k.key != *key);
@@ -205,7 +199,11 @@ impl AccountAbstraction {
     ) -> Vec<&SessionKeyInfo> {
         self.session_keys
             .get(account)
-            .map(|keys| keys.iter().filter(|k| k.expires_at > current_time).collect())
+            .map(|keys| {
+                keys.iter()
+                    .filter(|k| k.expires_at > current_time)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
@@ -389,7 +387,8 @@ mod tests {
             .unwrap();
         aa.add_session_key(&make_address(1), make_session_key(0xAA, 1, 5000))
             .unwrap();
-        aa.revoke_session_key(&make_address(1), &[0xAA; 32]).unwrap();
+        aa.revoke_session_key(&make_address(1), &[0xAA; 32])
+            .unwrap();
         assert!(!aa.validate_session_key(&make_address(1), &[0xAA; 32], "transfer", 1000));
     }
 

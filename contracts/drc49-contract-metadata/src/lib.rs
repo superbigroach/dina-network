@@ -59,12 +59,7 @@ impl ContractMetadataState {
     // -- Mutations -----------------------------------------------------------
 
     /// Set metadata for a contract. First setter becomes owner; only owner can update.
-    pub fn set_metadata(
-        &mut self,
-        caller: Address,
-        contract: Address,
-        meta: ContractMeta,
-    ) {
+    pub fn set_metadata(&mut self, caller: Address, contract: Address, meta: ContractMeta) {
         if let Some(owner) = self.owners.get(&contract) {
             assert!(
                 *owner == caller,
@@ -92,11 +87,18 @@ impl ContractMetadataState {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug)]
-struct SetMetadataArgs { contract: Address, meta: ContractMeta }
+struct SetMetadataArgs {
+    contract: Address,
+    meta: ContractMeta,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct AddrArg { contract: Address }
+struct AddrArg {
+    contract: Address,
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct TagArg { tag: String }
+struct TagArg {
+    tag: String,
+}
 
 pub fn dispatch(
     state: &mut Option<ContractMetadataState>,
@@ -124,9 +126,11 @@ pub fn dispatch(
         "search_by_tag" => {
             let s = state.as_ref().expect("DRC49: not initialised");
             let a: TagArg = serde_json::from_slice(args).expect("DRC49: bad args");
-            let results: Vec<_> = s.search_by_tag(&a.tag).into_iter().map(|(addr, meta)| {
-                serde_json::json!({ "address": addr, "meta": meta })
-            }).collect();
+            let results: Vec<_> = s
+                .search_by_tag(&a.tag)
+                .into_iter()
+                .map(|(addr, meta)| serde_json::json!({ "address": addr, "meta": meta }))
+                .collect();
             serde_json::to_vec(&results).unwrap()
         }
         "contracts_with_metadata" => {
@@ -151,7 +155,9 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
-    fn addr(n: u8) -> Address { [n; 32] }
+    fn addr(n: u8) -> Address {
+        [n; 32]
+    }
 
     fn sample_meta(name: &str, tags: Vec<&str>) -> ContractMeta {
         ContractMeta {
@@ -179,7 +185,8 @@ mod tests {
         let args = serde_json::to_vec(&SetMetadataArgs {
             contract: addr(10),
             meta: sample_meta("TokenV1", vec!["defi", "token"]),
-        }).unwrap();
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &args, addr(2));
         let s = state.as_ref().unwrap();
         let meta = s.get_metadata(&addr(10)).unwrap();
@@ -191,14 +198,20 @@ mod tests {
     fn test_search_by_tag() {
         let mut state = setup();
         let a1 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(10), meta: sample_meta("A", vec!["defi"]),
-        }).unwrap();
+            contract: addr(10),
+            meta: sample_meta("A", vec!["defi"]),
+        })
+        .unwrap();
         let a2 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(11), meta: sample_meta("B", vec!["nft"]),
-        }).unwrap();
+            contract: addr(11),
+            meta: sample_meta("B", vec!["nft"]),
+        })
+        .unwrap();
         let a3 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(12), meta: sample_meta("C", vec!["defi", "nft"]),
-        }).unwrap();
+            contract: addr(12),
+            meta: sample_meta("C", vec!["defi", "nft"]),
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &a1, addr(2));
         dispatch(&mut state, "set_metadata", &a2, addr(3));
         dispatch(&mut state, "set_metadata", &a3, addr(4));
@@ -212,13 +225,17 @@ mod tests {
     fn test_owner_can_update() {
         let mut state = setup();
         let a1 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(10), meta: sample_meta("V1", vec![]),
-        }).unwrap();
+            contract: addr(10),
+            meta: sample_meta("V1", vec![]),
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &a1, addr(5));
         // Same owner updates
         let a2 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(10), meta: sample_meta("V2", vec![]),
-        }).unwrap();
+            contract: addr(10),
+            meta: sample_meta("V2", vec![]),
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &a2, addr(5));
         let s = state.as_ref().unwrap();
         assert_eq!(s.get_metadata(&addr(10)).unwrap().name, "V2");
@@ -229,13 +246,17 @@ mod tests {
     fn test_non_owner_cannot_update() {
         let mut state = setup();
         let a1 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(10), meta: sample_meta("V1", vec![]),
-        }).unwrap();
+            contract: addr(10),
+            meta: sample_meta("V1", vec![]),
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &a1, addr(5));
         // Different caller tries to update
         let a2 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(10), meta: sample_meta("Hacked", vec![]),
-        }).unwrap();
+            contract: addr(10),
+            meta: sample_meta("Hacked", vec![]),
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &a2, addr(99));
     }
 
@@ -243,11 +264,15 @@ mod tests {
     fn test_contracts_with_metadata() {
         let mut state = setup();
         let a1 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(10), meta: sample_meta("A", vec![]),
-        }).unwrap();
+            contract: addr(10),
+            meta: sample_meta("A", vec![]),
+        })
+        .unwrap();
         let a2 = serde_json::to_vec(&SetMetadataArgs {
-            contract: addr(11), meta: sample_meta("B", vec![]),
-        }).unwrap();
+            contract: addr(11),
+            meta: sample_meta("B", vec![]),
+        })
+        .unwrap();
         dispatch(&mut state, "set_metadata", &a1, addr(2));
         dispatch(&mut state, "set_metadata", &a2, addr(3));
         let s = state.as_ref().unwrap();

@@ -13,7 +13,8 @@ fn init() -> Option<EmergencyStopState> {
 fn freeze(state: &mut Option<EmergencyStopState>, caller: [u8; 32], target: [u8; 32], scope: &str) {
     let args = serde_json::to_vec(&serde_json::json!({
         "target": target, "reason": "security", "scope": scope, "timestamp": 1000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(state, "freeze", &args, caller);
 }
 
@@ -59,7 +60,8 @@ fn registered_responder_can_freeze() {
     let mut state = init();
     let reg_args = serde_json::to_vec(&serde_json::json!({
         "responder": addr(5), "label": "security-bot"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "register_responder", &reg_args, addr(1));
     freeze(&mut state, addr(5), addr(10), "WalletOnly");
     assert!(state.as_ref().unwrap().is_frozen(&addr(10)));
@@ -72,7 +74,8 @@ fn network_ban_unfreeze_by_non_admin_fails() {
     // Register a responder
     let reg_args = serde_json::to_vec(&serde_json::json!({
         "responder": addr(5), "label": "bot"
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "register_responder", &reg_args, addr(1));
 
     // Admin freezes with NetworkBan

@@ -22,11 +22,17 @@ fn make_reading(device_id: [u8; 32], timestamp: u64) -> serde_json::Value {
     })
 }
 
-fn attest(state: &mut Option<SensorAttestationState>, caller: [u8; 32], device_id: [u8; 32], timestamp: u64) -> u64 {
+fn attest(
+    state: &mut Option<SensorAttestationState>,
+    caller: [u8; 32],
+    device_id: [u8; 32],
+    timestamp: u64,
+) -> u64 {
     let args = serde_json::to_vec(&serde_json::json!({
         "reading": make_reading(device_id, timestamp),
         "timestamp": timestamp
-    })).unwrap();
+    }))
+    .unwrap();
     let result = dispatch(state, "attest", &args, caller);
     serde_json::from_slice(&result).unwrap()
 }
@@ -44,7 +50,8 @@ fn verify_attestation_marks_as_verified() {
     let id = attest(&mut state, addr(2), addr(10), 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "attestation_id": id, "timestamp": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify", &args, addr(3));
 
     let att = state.as_ref().unwrap().get_attestation(id).unwrap();
@@ -59,7 +66,8 @@ fn self_verify_fails() {
     let id = attest(&mut state, addr(2), addr(10), 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "attestation_id": id, "timestamp": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify", &args, addr(2));
 }
 
@@ -70,7 +78,8 @@ fn double_verify_fails() {
     let id = attest(&mut state, addr(2), addr(10), 1000);
     let args = serde_json::to_vec(&serde_json::json!({
         "attestation_id": id, "timestamp": 2000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "verify", &args, addr(3));
     dispatch(&mut state, "verify", &args, addr(4));
 }
@@ -104,6 +113,7 @@ fn attest_with_future_reading_fails() {
     let args = serde_json::to_vec(&serde_json::json!({
         "reading": make_reading(addr(10), 5000),
         "timestamp": 1000u64
-    })).unwrap();
+    }))
+    .unwrap();
     dispatch(&mut state, "attest", &args, addr(2));
 }
