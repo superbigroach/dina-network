@@ -52,6 +52,25 @@ impl FeeSchedule {
         }
     }
 
+    /// Zero-fee schedule — no fees whatsoever.
+    pub fn zero_fee() -> Self {
+        Self {
+            base_transfer_fee: 0,
+            base_contract_call_fee: 0,
+            base_deploy_fee: 0,
+            base_register_device_fee: 0,
+            per_byte_fee: 0,
+            gas_price: 0,
+            min_fee: 0,
+            max_fee: 0,
+        }
+    }
+
+    /// Mainnet uses the zero-fee schedule (Dina Network mainnet = zero fees).
+    pub fn mainnet() -> Self {
+        Self::zero_fee()
+    }
+
     /// Low-fee schedule for local development (10x cheaper, higher cap).
     pub fn development() -> Self {
         Self {

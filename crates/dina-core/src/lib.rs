@@ -14,11 +14,13 @@ pub mod limits;
 pub mod merkle;
 pub mod metrics;
 pub mod parallel_executor;
+pub mod rate_limit;
 pub mod registry;
 pub mod security;
 pub mod transaction;
 pub mod types;
 pub mod validator;
+pub mod yield_calc;
 
 pub use aa::{AccountAbstraction, SmartAccountInfo, SmartAccountType, UserOperation};
 pub use account::{Account, AccountState};
