@@ -13,7 +13,28 @@ export interface Wallet {
   isSetUp: boolean;
 }
 
-export type CurrencyRegion = 'Major' | 'European' | 'Americas' | 'Asia-Pacific' | 'Middle East & Africa';
+export type CurrencyRegion =
+  | 'Major'
+  | 'North America'
+  | 'South America'
+  | 'Western Europe'
+  | 'Eastern Europe'
+  | 'East Asia'
+  | 'Southeast Asia'
+  | 'South Asia'
+  | 'Middle East'
+  | 'Central Asia'
+  | 'North Africa'
+  | 'West Africa'
+  | 'East Africa'
+  | 'Central Africa'
+  | 'Southern Africa'
+  | 'Oceania'
+  // Legacy aliases kept for backward compatibility
+  | 'European'
+  | 'Americas'
+  | 'Asia-Pacific'
+  | 'Middle East & Africa';
 
 export interface Currency {
   symbol: string;
