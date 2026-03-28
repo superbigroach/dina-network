@@ -1,6 +1,26 @@
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+
+/// Serde helper for `[u8; 64]` arrays (Ed25519 signatures).
+mod serde_sig64 {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+    pub fn serialize<S>(bytes: &[u8; 64], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(bytes)
+    }
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<[u8; 64], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v: Vec<u8> = Vec::deserialize(deserializer)?;
+        v.try_into()
+            .map_err(|_| serde::de::Error::custom("expected 64 bytes for signature"))
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Wormhole Integration — Cross-Chain Token Transfers via Wormhole
@@ -80,13 +100,14 @@ pub struct Vaa {
     pub signatures: Vec<VaaSignature>,
 }
 
-/// A guardian signature on a VAA (simplified).
+/// A guardian signature on a VAA.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaaSignature {
     /// Index of the guardian in the guardian set
     pub guardian_index: u8,
-    /// Simplified signature: SHA-256(payload_hash || guardian_pubkey)
-    pub signature: [u8; 32],
+    /// Ed25519 signature (64 bytes) over the VAA body hash
+    #[serde(with = "serde_sig64")]
+    pub signature: [u8; 64],
 }
 
 /// The payload of a token transfer VAA.
@@ -165,11 +186,7 @@ pub struct WormholeState {
 
 impl WormholeState {
     /// Initialize a new Wormhole bridge contract.
-    pub fn new(
-        owner: [u8; 32],
-        guardians: Vec<Guardian>,
-        usdc_token: [u8; 32],
-    ) -> Self {
+    pub fn new(owner: [u8; 32], guardians: Vec<Guardian>, usdc_token: [u8; 32]) -> Self {
         let quorum = ((guardians.len() as u32) * 2 / 3) + 1;
         Self {
             owner,
@@ -191,11 +208,7 @@ impl WormholeState {
     // -- Admin ---------------------------------------------------------------
 
     /// Update the guardian set. Only callable by owner.
-    pub fn update_guardian_set(
-        &mut self,
-        caller: [u8; 32],
-        new_guardians: Vec<Guardian>,
-    ) {
+    pub fn update_guardian_set(&mut self, caller: [u8; 32], new_guardians: Vec<Guardian>) {
         assert!(caller == self.owner, "Wormhole: only owner");
         let quorum = ((new_guardians.len() as u32) * 2 / 3) + 1;
         self.guardian_set = GuardianSet {
@@ -303,6 +316,10 @@ impl WormholeState {
     }
 
     /// Verify that a VAA has sufficient valid guardian signatures.
+    ///
+    /// Each guardian signature is a real Ed25519 signature over the VAA body
+    /// hash, verified against the guardian's public key stored in the guardian
+    /// set. This prevents anyone from forging bridge messages.
     fn verify_signatures(&self, vaa: &Vaa, body_hash: &[u8; 32]) {
         assert!(
             vaa.signatures.len() as u32 >= self.guardian_set.quorum,
@@ -328,26 +345,19 @@ impl WormholeState {
                 .find(|g| g.index == sig.guardian_index)
                 .expect("Wormhole: unknown guardian index");
 
-            // Verify signature: SHA-256(body_hash || guardian_pubkey) == signature
-            let mut input = Vec::new();
-            input.extend_from_slice(body_hash);
-            input.extend_from_slice(&guardian.pubkey);
-            let expected = Sha256::digest(&input);
-            let mut expected_bytes = [0u8; 32];
-            expected_bytes.copy_from_slice(&expected);
-            assert!(
-                sig.signature == expected_bytes,
-                "Wormhole: invalid guardian signature"
-            );
+            // Verify Ed25519 signature over the body hash
+            let verifying_key = VerifyingKey::from_bytes(&guardian.pubkey)
+                .expect("Wormhole: invalid guardian public key");
+            let signature = Signature::from_bytes(&sig.signature);
+            verifying_key
+                .verify(body_hash, &signature)
+                .expect("Wormhole: invalid guardian signature");
         }
     }
 
     /// Check if a VAA hash has been consumed.
     pub fn is_vaa_consumed(&self, vaa_hash: &[u8; 32]) -> bool {
-        self.consumed_vaas
-            .get(vaa_hash)
-            .copied()
-            .unwrap_or(false)
+        self.consumed_vaas.get(vaa_hash).copied().unwrap_or(false)
     }
 
     /// Get the number of transfers sent from this chain.
@@ -406,8 +416,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "Wormhole: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("Wormhole: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("Wormhole: bad init args");
             *state = Some(WormholeState::new(caller, a.guardians, a.usdc_token));
             serde_json::to_vec("ok").unwrap()
         }
@@ -422,8 +431,7 @@ pub fn dispatch(
         }
         "set_finality" => {
             let s = state.as_mut().expect("Wormhole: not initialised");
-            let a: SetFinalityArgs =
-                serde_json::from_slice(args).expect("Wormhole: bad args");
+            let a: SetFinalityArgs = serde_json::from_slice(args).expect("Wormhole: bad args");
             s.set_finality(caller, a.finality);
             serde_json::to_vec("ok").unwrap()
         }
@@ -457,8 +465,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "is_vaa_consumed" => {
             let s = state.as_ref().expect("Wormhole: not initialised");
-            let a: IsVaaConsumedArgs =
-                serde_json::from_slice(args).expect("Wormhole: bad args");
+            let a: IsVaaConsumedArgs = serde_json::from_slice(args).expect("Wormhole: bad args");
             serde_json::to_vec(&s.is_vaa_consumed(&a.vaa_hash)).unwrap()
         }
         "wormhole_chain_id" => {
@@ -485,6 +492,8 @@ pub fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
 
     fn owner() -> [u8; 32] {
         [1u8; 32]
@@ -496,38 +505,44 @@ mod tests {
         [3u8; 32]
     }
 
-    fn make_guardians(n: usize) -> Vec<Guardian> {
-        (0..n)
-            .map(|i| {
-                let mut pubkey = [0u8; 32];
-                pubkey[0] = 100 + i as u8;
-                Guardian {
-                    index: i as u8,
-                    pubkey,
-                }
-            })
-            .collect()
+    /// Generate guardian keypairs and return (guardians, signing_keys).
+    fn make_guardian_keys(n: usize) -> (Vec<Guardian>, Vec<SigningKey>) {
+        let mut guardians = Vec::new();
+        let mut keys = Vec::new();
+        for i in 0..n {
+            let signing_key = SigningKey::generate(&mut OsRng);
+            let pubkey = signing_key.verifying_key().to_bytes();
+            guardians.push(Guardian {
+                index: i as u8,
+                pubkey,
+            });
+            keys.push(signing_key);
+        }
+        (guardians, keys)
     }
 
-    fn setup() -> WormholeState {
-        WormholeState::new(owner(), make_guardians(3), usdc())
+    fn setup() -> (WormholeState, Vec<SigningKey>) {
+        let (guardians, keys) = make_guardian_keys(3);
+        let state = WormholeState::new(owner(), guardians, usdc());
+        (state, keys)
     }
 
-    /// Create valid signatures for a VAA body hash using the given guardians.
-    fn sign_vaa(body_hash: &[u8; 32], guardians: &[Guardian], count: usize) -> Vec<VaaSignature> {
+    /// Create valid Ed25519 signatures for a VAA body hash.
+    fn sign_vaa(
+        body_hash: &[u8; 32],
+        guardians: &[Guardian],
+        signing_keys: &[SigningKey],
+        count: usize,
+    ) -> Vec<VaaSignature> {
         guardians
             .iter()
+            .zip(signing_keys.iter())
             .take(count)
-            .map(|g| {
-                let mut input = Vec::new();
-                input.extend_from_slice(body_hash);
-                input.extend_from_slice(&g.pubkey);
-                let digest = Sha256::digest(&input);
-                let mut sig = [0u8; 32];
-                sig.copy_from_slice(&digest);
+            .map(|(g, key)| {
+                let signature = key.sign(body_hash);
                 VaaSignature {
                     guardian_index: g.index,
-                    signature: sig,
+                    signature: signature.to_bytes(),
                 }
             })
             .collect()
@@ -535,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_init() {
-        let s = setup();
+        let (s, _keys) = setup();
         assert_eq!(s.wormhole_chain_id, CHAIN_DINA);
         assert_eq!(s.guardian_set.guardians.len(), 3);
         assert_eq!(s.guardian_set.quorum, 3); // 3*2/3+1 = 3
@@ -544,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_send_tokens() {
-        let mut s = setup();
+        let (mut s, _keys) = setup();
         let seq = s.send_tokens(alice(), 1_000_000, CHAIN_BASE, alice());
         assert_eq!(seq, 1);
         assert_eq!(s.transfer_count(), 1);
@@ -554,13 +569,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "cannot send to self")]
     fn test_send_to_self_fails() {
-        let mut s = setup();
+        let (mut s, _keys) = setup();
         s.send_tokens(alice(), 1_000_000, CHAIN_DINA, alice());
     }
 
     #[test]
     fn test_complete_transfer() {
-        let mut s = setup();
+        let (mut s, keys) = setup();
         let payload = VaaPayload {
             payload_type: 1,
             amount: 500_000,
@@ -585,7 +600,7 @@ mod tests {
         };
 
         let body_hash = vaa.body_hash();
-        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, 3);
+        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, &keys, 3);
 
         let amount = s.complete_transfer(vaa);
         assert_eq!(amount, 500_000);
@@ -594,7 +609,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "VAA already consumed")]
     fn test_replay_prevention() {
-        let mut s = setup();
+        let (mut s, keys) = setup();
         let payload = VaaPayload {
             payload_type: 1,
             amount: 500_000,
@@ -619,7 +634,7 @@ mod tests {
         };
 
         let body_hash = vaa.body_hash();
-        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, 3);
+        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, &keys, 3);
 
         s.complete_transfer(vaa.clone());
         s.complete_transfer(vaa);
@@ -628,7 +643,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "insufficient signatures")]
     fn test_insufficient_signatures_fails() {
-        let mut s = setup();
+        let (mut s, keys) = setup();
         let payload = VaaPayload {
             payload_type: 1,
             amount: 500_000,
@@ -654,7 +669,42 @@ mod tests {
 
         let body_hash = vaa.body_hash();
         // Only 1 signature, need 3
-        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, 1);
+        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, &keys, 1);
+
+        s.complete_transfer(vaa);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid guardian signature")]
+    fn test_forged_signature_fails() {
+        let (mut s, _keys) = setup();
+        let payload = VaaPayload {
+            payload_type: 1,
+            amount: 500_000,
+            token_address: usdc(),
+            token_chain: CHAIN_BASE,
+            recipient: alice(),
+            recipient_chain: CHAIN_DINA,
+            sender: alice(),
+        };
+
+        let mut vaa = Vaa {
+            version: 1,
+            guardian_set_index: 0,
+            timestamp: 1000,
+            nonce: 1,
+            emitter_chain: CHAIN_BASE,
+            emitter_address: [50u8; 32],
+            sequence: 1,
+            consistency_level: 1,
+            payload,
+            signatures: vec![],
+        };
+
+        let body_hash = vaa.body_hash();
+        // Forge signatures using random keys (not the guardian keys)
+        let (_fake_guardians, fake_keys) = make_guardian_keys(3);
+        vaa.signatures = sign_vaa(&body_hash, &s.guardian_set.guardians, &fake_keys, 3);
 
         s.complete_transfer(vaa);
     }

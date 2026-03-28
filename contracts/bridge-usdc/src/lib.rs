@@ -174,9 +174,9 @@ impl BridgedUsdcState {
 
         // H-5: Use checked arithmetic for balance addition to prevent overflow.
         let balance = self.balance_of(&to);
-        let new_balance = balance.checked_add(amount).expect(
-            "USDC.e: balance overflow"
-        );
+        let new_balance = balance
+            .checked_add(amount)
+            .expect("USDC.e: balance overflow");
         self.balances.insert(to, new_balance);
         self.total_supply += amount;
     }
@@ -206,14 +206,8 @@ impl BridgedUsdcState {
     /// Transfer tokens from caller to recipient.
     pub fn transfer(&mut self, caller: [u8; 32], to: [u8; 32], amount: u64) {
         assert!(!self.paused, "USDC.e: paused");
-        assert!(
-            !self.is_blacklisted(&caller),
-            "USDC.e: sender blacklisted"
-        );
-        assert!(
-            !self.is_blacklisted(&to),
-            "USDC.e: recipient blacklisted"
-        );
+        assert!(!self.is_blacklisted(&caller), "USDC.e: sender blacklisted");
+        assert!(!self.is_blacklisted(&to), "USDC.e: recipient blacklisted");
         assert!(amount > 0, "USDC.e: transfer amount must be positive");
 
         let from_balance = self.balance_of(&caller);
@@ -229,34 +223,16 @@ impl BridgedUsdcState {
     /// Approve a spender to spend up to `amount` of the caller's tokens.
     pub fn approve(&mut self, caller: [u8; 32], spender: [u8; 32], amount: u64) {
         assert!(!self.paused, "USDC.e: paused");
-        assert!(
-            !self.is_blacklisted(&caller),
-            "USDC.e: owner blacklisted"
-        );
+        assert!(!self.is_blacklisted(&caller), "USDC.e: owner blacklisted");
         self.allowances.insert((caller, spender), amount);
     }
 
     /// Transfer tokens using an allowance (delegated transfer).
-    pub fn transfer_from(
-        &mut self,
-        caller: [u8; 32],
-        from: [u8; 32],
-        to: [u8; 32],
-        amount: u64,
-    ) {
+    pub fn transfer_from(&mut self, caller: [u8; 32], from: [u8; 32], to: [u8; 32], amount: u64) {
         assert!(!self.paused, "USDC.e: paused");
-        assert!(
-            !self.is_blacklisted(&caller),
-            "USDC.e: spender blacklisted"
-        );
-        assert!(
-            !self.is_blacklisted(&from),
-            "USDC.e: sender blacklisted"
-        );
-        assert!(
-            !self.is_blacklisted(&to),
-            "USDC.e: recipient blacklisted"
-        );
+        assert!(!self.is_blacklisted(&caller), "USDC.e: spender blacklisted");
+        assert!(!self.is_blacklisted(&from), "USDC.e: sender blacklisted");
+        assert!(!self.is_blacklisted(&to), "USDC.e: recipient blacklisted");
         assert!(amount > 0, "USDC.e: transfer amount must be positive");
 
         let allowed = self.allowance(&from, &caller);
@@ -460,15 +436,13 @@ pub fn dispatch(
         // -- ERC-20 / DRC-1 functions ----------------------------------------
         "transfer" => {
             let s = state.as_mut().expect("USDC.e: not initialised");
-            let a: TransferArgs =
-                serde_json::from_slice(args).expect("USDC.e: bad transfer args");
+            let a: TransferArgs = serde_json::from_slice(args).expect("USDC.e: bad transfer args");
             s.transfer(caller, a.to, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
         "approve" => {
             let s = state.as_mut().expect("USDC.e: not initialised");
-            let a: ApproveArgs =
-                serde_json::from_slice(args).expect("USDC.e: bad approve args");
+            let a: ApproveArgs = serde_json::from_slice(args).expect("USDC.e: bad approve args");
             s.approve(caller, a.spender, a.amount);
             serde_json::to_vec("ok").unwrap()
         }

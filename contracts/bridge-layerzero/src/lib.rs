@@ -130,11 +130,7 @@ pub struct LayerZeroState {
 
 impl LayerZeroState {
     /// Initialize a new LayerZero OFT bridge.
-    pub fn new(
-        owner: [u8; 32],
-        lz_endpoint: [u8; 32],
-        usdc_token: [u8; 32],
-    ) -> Self {
+    pub fn new(owner: [u8; 32], lz_endpoint: [u8; 32], usdc_token: [u8; 32]) -> Self {
         Self {
             owner,
             local_chain_id: LZ_DINA,
@@ -162,17 +158,15 @@ impl LayerZeroState {
         remote_address: [u8; 32],
     ) {
         assert!(caller == self.owner, "LZ: only owner");
-        assert!(chain_id != self.local_chain_id, "LZ: cannot set self as remote");
+        assert!(
+            chain_id != self.local_chain_id,
+            "LZ: cannot set self as remote"
+        );
         self.trusted_remotes.insert(chain_id, remote_address);
     }
 
     /// Set the minimum destination gas for a chain.
-    pub fn set_min_dst_gas(
-        &mut self,
-        caller: [u8; 32],
-        chain_id: u16,
-        min_gas: u64,
-    ) {
+    pub fn set_min_dst_gas(&mut self, caller: [u8; 32], chain_id: u16, min_gas: u64) {
         assert!(caller == self.owner, "LZ: only owner");
         self.min_dst_gas.insert(chain_id, min_gas);
     }
@@ -224,13 +218,12 @@ impl LayerZeroState {
         );
 
         // Validate adapter params gas limit
-        let params = adapter_params
-            .unwrap_or_else(|| {
-                self.default_adapter_params
-                    .get(&dst_chain_id)
-                    .cloned()
-                    .unwrap_or_default()
-            });
+        let params = adapter_params.unwrap_or_else(|| {
+            self.default_adapter_params
+                .get(&dst_chain_id)
+                .cloned()
+                .unwrap_or_default()
+        });
 
         if let Some(&min_gas) = self.min_dst_gas.get(&dst_chain_id) {
             assert!(
@@ -299,16 +292,13 @@ impl LayerZeroState {
 
         if nonce != expected_nonce {
             // Store as failed message for later retry
-            let payload_bytes =
-                serde_json::to_vec(&payload).unwrap_or_default();
+            let payload_bytes = serde_json::to_vec(&payload).unwrap_or_default();
             self.failed_messages.push(FailedMessage {
                 src_chain_id,
                 src_address,
                 nonce,
                 payload: payload_bytes,
-                reason: format!(
-                    "nonce mismatch: expected {expected_nonce}, got {nonce}"
-                ),
+                reason: format!("nonce mismatch: expected {expected_nonce}, got {nonce}"),
             });
             return 0;
         }
@@ -338,15 +328,12 @@ impl LayerZeroState {
             .failed_messages
             .iter()
             .position(|m| {
-                m.src_chain_id == src_chain_id
-                    && m.src_address == src_address
-                    && m.nonce == nonce
+                m.src_chain_id == src_chain_id && m.src_address == src_address && m.nonce == nonce
             })
             .expect("LZ: failed message not found");
 
         let failed = self.failed_messages.remove(idx);
-        let payload: OftPayload =
-            serde_json::from_slice(&failed.payload).expect("LZ: bad payload");
+        let payload: OftPayload = serde_json::from_slice(&failed.payload).expect("LZ: bad payload");
 
         // Update inbound nonce
         self.inbound_nonces
@@ -465,8 +452,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "LZ: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("LZ: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("LZ: bad init args");
             *state = Some(LayerZeroState::new(caller, a.lz_endpoint, a.usdc_token));
             serde_json::to_vec("ok").unwrap()
         }
@@ -474,22 +460,19 @@ pub fn dispatch(
         // -- Admin -----------------------------------------------------------
         "set_trusted_remote" => {
             let s = state.as_mut().expect("LZ: not initialised");
-            let a: SetTrustedRemoteArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: SetTrustedRemoteArgs = serde_json::from_slice(args).expect("LZ: bad args");
             s.set_trusted_remote(caller, a.chain_id, a.remote_address);
             serde_json::to_vec("ok").unwrap()
         }
         "set_min_dst_gas" => {
             let s = state.as_mut().expect("LZ: not initialised");
-            let a: SetMinDstGasArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: SetMinDstGasArgs = serde_json::from_slice(args).expect("LZ: bad args");
             s.set_min_dst_gas(caller, a.chain_id, a.min_gas);
             serde_json::to_vec("ok").unwrap()
         }
         "set_default_adapter_params" => {
             let s = state.as_mut().expect("LZ: not initialised");
-            let a: SetAdapterParamsArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: SetAdapterParamsArgs = serde_json::from_slice(args).expect("LZ: bad args");
             s.set_default_adapter_params(caller, a.chain_id, a.params);
             serde_json::to_vec("ok").unwrap()
         }
@@ -507,22 +490,25 @@ pub fn dispatch(
         // -- Core OFT --------------------------------------------------------
         "send" => {
             let s = state.as_mut().expect("LZ: not initialised");
-            let a: SendArgs =
-                serde_json::from_slice(args).expect("LZ: bad send args");
-            let nonce = s.send(caller, a.dst_chain_id, a.dst_address, a.amount, a.adapter_params);
+            let a: SendArgs = serde_json::from_slice(args).expect("LZ: bad send args");
+            let nonce = s.send(
+                caller,
+                a.dst_chain_id,
+                a.dst_address,
+                a.amount,
+                a.adapter_params,
+            );
             serde_json::to_vec(&nonce).unwrap()
         }
         "lz_receive" => {
             let s = state.as_mut().expect("LZ: not initialised");
-            let a: LzReceiveArgs =
-                serde_json::from_slice(args).expect("LZ: bad lz_receive args");
+            let a: LzReceiveArgs = serde_json::from_slice(args).expect("LZ: bad lz_receive args");
             let amount = s.lz_receive(caller, a.src_chain_id, a.src_address, a.nonce, a.payload);
             serde_json::to_vec(&amount).unwrap()
         }
         "retry_message" => {
             let s = state.as_mut().expect("LZ: not initialised");
-            let a: RetryMessageArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: RetryMessageArgs = serde_json::from_slice(args).expect("LZ: bad args");
             let amount = s.retry_message(caller, a.src_chain_id, a.src_address, a.nonce);
             serde_json::to_vec(&amount).unwrap()
         }
@@ -530,20 +516,17 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "is_trusted_remote" => {
             let s = state.as_ref().expect("LZ: not initialised");
-            let a: IsTrustedRemoteArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: IsTrustedRemoteArgs = serde_json::from_slice(args).expect("LZ: bad args");
             serde_json::to_vec(&s.is_trusted_remote(a.chain_id, &a.address)).unwrap()
         }
         "get_outbound_nonce" => {
             let s = state.as_ref().expect("LZ: not initialised");
-            let a: GetNonceArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: GetNonceArgs = serde_json::from_slice(args).expect("LZ: bad args");
             serde_json::to_vec(&s.get_outbound_nonce(a.chain_id)).unwrap()
         }
         "get_inbound_nonce" => {
             let s = state.as_ref().expect("LZ: not initialised");
-            let a: GetInboundNonceArgs =
-                serde_json::from_slice(args).expect("LZ: bad args");
+            let a: GetInboundNonceArgs = serde_json::from_slice(args).expect("LZ: bad args");
             serde_json::to_vec(&s.get_inbound_nonce(a.chain_id, &a.address)).unwrap()
         }
         "failed_message_count" => {

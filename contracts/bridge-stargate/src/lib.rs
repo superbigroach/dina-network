@@ -256,14 +256,13 @@ impl StargateRouterState {
 
     // -- Liquidity -----------------------------------------------------------
 
+    /// Minimum LP tokens burned on first deposit to prevent first-depositor
+    /// share-price manipulation (same pattern as DinaDEX).
+    const MINIMUM_LIQUIDITY: u64 = 1000;
+
     /// Add liquidity to a pool. The provider deposits tokens and receives
     /// LP tokens proportional to their share of the pool.
-    pub fn add_liquidity(
-        &mut self,
-        caller: [u8; 32],
-        pool_id: u16,
-        amount: u64,
-    ) -> u64 {
+    pub fn add_liquidity(&mut self, caller: [u8; 32], pool_id: u16, amount: u64) -> u64 {
         assert!(!self.paused, "Stargate: contract is paused");
         assert!(amount > 0, "Stargate: amount must be positive");
 
@@ -275,8 +274,22 @@ impl StargateRouterState {
 
         // Calculate LP tokens to mint
         let lp_tokens = if pool.total_liquidity == 0 {
-            // First deposit: 1:1 ratio
-            amount
+            // First deposit: mint 1:1 but burn MINIMUM_LIQUIDITY to the zero
+            // address to prevent first-depositor share-price manipulation.
+            assert!(
+                amount > Self::MINIMUM_LIQUIDITY,
+                "Stargate: first deposit must exceed MINIMUM_LIQUIDITY ({})",
+                Self::MINIMUM_LIQUIDITY
+            );
+            let minted = amount;
+            // Burn MINIMUM_LIQUIDITY to zero address (permanently locked)
+            let zero_addr = [0u8; 32];
+            pool.total_liquidity += amount;
+            pool.total_lp_tokens += minted;
+            pool.lp_balances.insert(zero_addr, Self::MINIMUM_LIQUIDITY);
+            let caller_lp = minted - Self::MINIMUM_LIQUIDITY;
+            pool.lp_balances.insert(caller, caller_lp);
+            return caller_lp;
         } else {
             // Proportional to existing pool
             (amount as u128 * pool.total_lp_tokens as u128 / pool.total_liquidity as u128) as u64
@@ -294,12 +307,7 @@ impl StargateRouterState {
 
     /// Remove liquidity from a pool. Burns LP tokens and returns the
     /// proportional share of the pool's tokens.
-    pub fn remove_liquidity(
-        &mut self,
-        caller: [u8; 32],
-        pool_id: u16,
-        lp_amount: u64,
-    ) -> u64 {
+    pub fn remove_liquidity(&mut self, caller: [u8; 32], pool_id: u16, lp_amount: u64) -> u64 {
         assert!(!self.paused, "Stargate: contract is paused");
         assert!(lp_amount > 0, "Stargate: LP amount must be positive");
 
@@ -315,9 +323,8 @@ impl StargateRouterState {
         );
 
         // Calculate tokens to return (proportional to LP share)
-        let token_amount =
-            (lp_amount as u128 * pool.total_liquidity as u128 / pool.total_lp_tokens as u128)
-                as u64;
+        let token_amount = (lp_amount as u128 * pool.total_liquidity as u128
+            / pool.total_lp_tokens as u128) as u64;
 
         pool.total_liquidity -= token_amount;
         pool.total_lp_tokens -= lp_amount;
@@ -386,13 +393,9 @@ impl StargateRouterState {
         pool.accumulated_fees += fee;
 
         // Protocol fee split
-        let protocol_fee = (fee as u128 * self.protocol_fee_bps as u128
-            / self.swap_fee_bps as u128) as u64;
-        let current_protocol = self
-            .protocol_fees
-            .get(&pool.token)
-            .copied()
-            .unwrap_or(0);
+        let protocol_fee =
+            (fee as u128 * self.protocol_fee_bps as u128 / self.swap_fee_bps as u128) as u64;
+        let current_protocol = self.protocol_fees.get(&pool.token).copied().unwrap_or(0);
         self.protocol_fees
             .insert(pool.token, current_protocol + protocol_fee);
 
@@ -501,11 +504,7 @@ impl StargateRouterState {
     }
 
     /// Withdraw accumulated protocol fees.
-    pub fn withdraw_protocol_fees(
-        &mut self,
-        caller: [u8; 32],
-        token: [u8; 32],
-    ) -> u64 {
+    pub fn withdraw_protocol_fees(&mut self, caller: [u8; 32], token: [u8; 32]) -> u64 {
         assert!(caller == self.owner, "Stargate: only owner");
         let amount = self.protocol_fees.get(&token).copied().unwrap_or(0);
         self.protocol_fees.insert(token, 0);
@@ -624,8 +623,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "get_pool" => {
             let s = state.as_ref().expect("Stargate: not initialised");
-            let a: PoolIdArgs =
-                serde_json::from_slice(args).expect("Stargate: bad get_pool args");
+            let a: PoolIdArgs = serde_json::from_slice(args).expect("Stargate: bad get_pool args");
             serde_json::to_vec(&s.get_pool(a.pool_id)).unwrap()
         }
         "get_pool_ids" => {
@@ -691,8 +689,7 @@ pub fn dispatch(
         // -- Swap ------------------------------------------------------------
         "swap" => {
             let s = state.as_mut().expect("Stargate: not initialised");
-            let a: SwapArgs =
-                serde_json::from_slice(args).expect("Stargate: bad swap args");
+            let a: SwapArgs = serde_json::from_slice(args).expect("Stargate: bad swap args");
             let nonce = s.swap(
                 caller,
                 a.dst_chain_id,
@@ -727,8 +724,7 @@ pub fn dispatch(
         }
         "set_swap_fee" => {
             let s = state.as_mut().expect("Stargate: not initialised");
-            let a: FeeArgs =
-                serde_json::from_slice(args).expect("Stargate: bad set_swap_fee args");
+            let a: FeeArgs = serde_json::from_slice(args).expect("Stargate: bad set_swap_fee args");
             s.set_swap_fee(caller, a.fee_bps);
             serde_json::to_vec("ok").unwrap()
         }
@@ -813,12 +809,21 @@ mod tests {
     fn test_add_liquidity() {
         let mut s = setup();
         let lp = s.add_liquidity(alice(), 1, 1_000_000);
-        assert_eq!(lp, 1_000_000); // First deposit: 1:1
+        // First deposit: 1:1 minus MINIMUM_LIQUIDITY burned to zero address
+        assert_eq!(lp, 1_000_000 - StargateRouterState::MINIMUM_LIQUIDITY);
 
         let pool = s.get_pool(1).unwrap();
         assert_eq!(pool.total_liquidity, 1_000_000);
         assert_eq!(pool.total_lp_tokens, 1_000_000);
-        assert_eq!(s.lp_balance_of(1, &alice()), 1_000_000);
+        assert_eq!(
+            s.lp_balance_of(1, &alice()),
+            1_000_000 - StargateRouterState::MINIMUM_LIQUIDITY
+        );
+        // MINIMUM_LIQUIDITY is locked at the zero address
+        assert_eq!(
+            s.lp_balance_of(1, &[0u8; 32]),
+            StargateRouterState::MINIMUM_LIQUIDITY
+        );
     }
 
     #[test]
@@ -828,28 +833,33 @@ mod tests {
         let lp = s.add_liquidity(bob(), 1, 500_000);
         assert_eq!(lp, 500_000); // Proportional to pool
 
-        assert_eq!(s.lp_balance_of(1, &alice()), 1_000_000);
+        assert_eq!(
+            s.lp_balance_of(1, &alice()),
+            1_000_000 - StargateRouterState::MINIMUM_LIQUIDITY
+        );
         assert_eq!(s.lp_balance_of(1, &bob()), 500_000);
     }
 
     #[test]
     fn test_remove_liquidity() {
         let mut s = setup();
-        s.add_liquidity(alice(), 1, 1_000_000);
-        let tokens = s.remove_liquidity(alice(), 1, 500_000);
-        assert_eq!(tokens, 500_000);
+        let alice_lp = s.add_liquidity(alice(), 1, 1_000_000);
+        let remove_amount = alice_lp / 2;
+        let tokens = s.remove_liquidity(alice(), 1, remove_amount);
+        // tokens returned proportional to share of total pool
+        assert!(tokens > 0);
 
         let pool = s.get_pool(1).unwrap();
-        assert_eq!(pool.total_liquidity, 500_000);
-        assert_eq!(s.lp_balance_of(1, &alice()), 500_000);
+        assert_eq!(pool.total_liquidity, 1_000_000 - tokens);
+        assert_eq!(s.lp_balance_of(1, &alice()), alice_lp - remove_amount);
     }
 
     #[test]
     #[should_panic(expected = "insufficient LP balance")]
     fn test_remove_excess_liquidity_fails() {
         let mut s = setup();
-        s.add_liquidity(alice(), 1, 1_000_000);
-        s.remove_liquidity(alice(), 1, 2_000_000);
+        let alice_lp = s.add_liquidity(alice(), 1, 1_000_000);
+        s.remove_liquidity(alice(), 1, alice_lp + 1);
     }
 
     #[test]
@@ -888,10 +898,20 @@ mod tests {
         s.add_liquidity(alice(), 1, 10_000_000);
         // min_amount_ld too high
         s.swap(
-            bob(), LZ_CHAIN_BASE, 1, 1, bob(),
-            1_000_000, 1_000_000, // want full amount, but fee makes it less
-            LzTxParams { dst_gas_for_call: 0, dst_native_amount: 0, dst_native_addr: vec![] },
-            bob().to_vec(), vec![],
+            bob(),
+            LZ_CHAIN_BASE,
+            1,
+            1,
+            bob(),
+            1_000_000,
+            1_000_000, // want full amount, but fee makes it less
+            LzTxParams {
+                dst_gas_for_call: 0,
+                dst_native_amount: 0,
+                dst_native_addr: vec![],
+            },
+            bob().to_vec(),
+            vec![],
         );
     }
 
@@ -901,10 +921,20 @@ mod tests {
         let mut s = setup();
         s.add_liquidity(alice(), 1, 10_000_000);
         s.swap(
-            bob(), 999, 1, 1, bob(), // invalid dst chain
-            1_000_000, 0,
-            LzTxParams { dst_gas_for_call: 0, dst_native_amount: 0, dst_native_addr: vec![] },
-            bob().to_vec(), vec![],
+            bob(),
+            999,
+            1,
+            1,
+            bob(), // invalid dst chain
+            1_000_000,
+            0,
+            LzTxParams {
+                dst_gas_for_call: 0,
+                dst_native_amount: 0,
+                dst_native_addr: vec![],
+            },
+            bob().to_vec(),
+            vec![],
         );
     }
 
@@ -924,10 +954,20 @@ mod tests {
         s.add_liquidity(alice(), 1, 10_000_000);
         s.pause(owner());
         s.swap(
-            bob(), LZ_CHAIN_BASE, 1, 1, bob(),
-            1_000_000, 0,
-            LzTxParams { dst_gas_for_call: 0, dst_native_amount: 0, dst_native_addr: vec![] },
-            bob().to_vec(), vec![],
+            bob(),
+            LZ_CHAIN_BASE,
+            1,
+            1,
+            bob(),
+            1_000_000,
+            0,
+            LzTxParams {
+                dst_gas_for_call: 0,
+                dst_native_amount: 0,
+                dst_native_addr: vec![],
+            },
+            bob().to_vec(),
+            vec![],
         );
     }
 

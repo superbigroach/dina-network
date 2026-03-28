@@ -278,6 +278,10 @@ impl AcrossSpokePoolState {
     ) {
         assert!(!self.paused, "Across: contract is paused");
         assert!(
+            self.whitelisted_relayers.contains_key(&caller),
+            "Across: caller not a whitelisted relayer"
+        );
+        assert!(
             !self.fills.contains_key(&(origin_chain_id, deposit_nonce)),
             "Across: deposit already filled"
         );
@@ -317,11 +321,7 @@ impl AcrossSpokePoolState {
     /// If no relayer fills a deposit before the deadline, the deposit can be
     /// settled via a Merkle proof published by the HubPool. This is slower
     /// but guarantees eventual settlement.
-    pub fn execute_slow_relay_leaf(
-        &mut self,
-        relay_data: RelayData,
-        proof: MerkleProof,
-    ) {
+    pub fn execute_slow_relay_leaf(&mut self, relay_data: RelayData, proof: MerkleProof) {
         assert!(!self.paused, "Across: contract is paused");
         assert!(
             !self
@@ -355,10 +355,8 @@ impl AcrossSpokePoolState {
             fill_timestamp: 0,
         };
 
-        self.fills.insert(
-            (relay_data.origin_chain_id, relay_data.deposit_nonce),
-            fill,
-        );
+        self.fills
+            .insert((relay_data.origin_chain_id, relay_data.deposit_nonce), fill);
     }
 
     // -- Owner functions -----------------------------------------------------
@@ -415,29 +413,29 @@ impl AcrossSpokePoolState {
 
     // -- Internal helpers ----------------------------------------------------
 
-    /// Compute a hash of the relay leaf data for Merkle proof verification.
+    /// Compute a SHA-256 hash of the relay leaf data for Merkle proof verification.
     fn compute_relay_leaf_hash(&self, relay_data: &RelayData) -> [u8; 32] {
-        // Simplified hash: in production this would use keccak256 or sha256
-        // over the ABI-encoded relay data fields.
+        use sha2::{Digest, Sha256};
         let serialized = serde_json::to_vec(relay_data).unwrap_or_default();
-        let mut hash = [0u8; 32];
-        for (i, byte) in serialized.iter().enumerate() {
-            hash[i % 32] ^= byte;
-        }
-        hash
+        let mut hasher = Sha256::new();
+        hasher.update(&serialized);
+        hasher.finalize().into()
     }
 
-    /// Verify a Merkle proof against a root hash.
+    /// Verify a Merkle proof against a root hash using SHA-256 combining.
     fn verify_merkle_proof(&self, leaf_hash: &[u8; 32], proof: &MerkleProof) -> bool {
-        // Simplified verification: in production this would walk the proof
-        // path from leaf to root, hashing at each level.
+        use sha2::{Digest, Sha256};
         let mut current = *leaf_hash;
         for sibling in &proof.proof {
-            let mut combined = [0u8; 32];
-            for i in 0..32 {
-                combined[i] = current[i] ^ sibling[i];
+            let mut hasher = Sha256::new();
+            if current <= *sibling {
+                hasher.update(current);
+                hasher.update(sibling);
+            } else {
+                hasher.update(sibling);
+                hasher.update(current);
             }
-            current = combined;
+            current = hasher.finalize().into();
         }
         current == proof.root
     }
@@ -551,8 +549,7 @@ pub fn dispatch(
         }
         "get_fill" => {
             let s = state.as_ref().expect("Across: not initialised");
-            let a: GetFillArgs =
-                serde_json::from_slice(args).expect("Across: bad get_fill args");
+            let a: GetFillArgs = serde_json::from_slice(args).expect("Across: bad get_fill args");
             serde_json::to_vec(&s.get_fill(a.origin_chain_id, a.deposit_nonce)).unwrap()
         }
         "is_chain_supported" => {
@@ -569,8 +566,7 @@ pub fn dispatch(
         // -- Deposit ---------------------------------------------------------
         "deposit" => {
             let s = state.as_mut().expect("Across: not initialised");
-            let a: DepositArgs =
-                serde_json::from_slice(args).expect("Across: bad deposit args");
+            let a: DepositArgs = serde_json::from_slice(args).expect("Across: bad deposit args");
             let nonce = s.deposit(
                 caller,
                 a.destination_chain_id,
@@ -753,12 +749,32 @@ mod tests {
     fn test_multiple_deposits_increment_nonce() {
         let mut s = setup();
         let n0 = s.deposit(
-            alice(), CHAIN_ID_BASE, bob(), usdc_dina(), usdc_base(),
-            1_000_000, 997_000, 30, 0, 3600, 0, vec![],
+            alice(),
+            CHAIN_ID_BASE,
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            1_000_000,
+            997_000,
+            30,
+            0,
+            3600,
+            0,
+            vec![],
         );
         let n1 = s.deposit(
-            alice(), CHAIN_ID_BASE, bob(), usdc_dina(), usdc_base(),
-            2_000_000, 1_994_000, 30, 0, 3600, 0, vec![],
+            alice(),
+            CHAIN_ID_BASE,
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            2_000_000,
+            1_994_000,
+            30,
+            0,
+            3600,
+            0,
+            vec![],
         );
         assert_eq!(n0, 0);
         assert_eq!(n1, 1);
@@ -770,8 +786,18 @@ mod tests {
     fn test_deposit_unsupported_chain() {
         let mut s = setup();
         s.deposit(
-            alice(), 12345, bob(), usdc_dina(), usdc_base(),
-            1_000_000, 997_000, 30, 0, 3600, 0, vec![],
+            alice(),
+            12345,
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            1_000_000,
+            997_000,
+            30,
+            0,
+            3600,
+            0,
+            vec![],
         );
     }
 
@@ -780,8 +806,18 @@ mod tests {
     fn test_deposit_output_exceeds_input() {
         let mut s = setup();
         s.deposit(
-            alice(), CHAIN_ID_BASE, bob(), usdc_dina(), usdc_base(),
-            1_000_000, 2_000_000, 30, 0, 3600, 0, vec![],
+            alice(),
+            CHAIN_ID_BASE,
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            1_000_000,
+            2_000_000,
+            30,
+            0,
+            3600,
+            0,
+            vec![],
         );
     }
 
@@ -812,12 +848,32 @@ mod tests {
     fn test_double_fill_fails() {
         let mut s = setup();
         s.fill_relay(
-            relayer(), alice(), bob(), usdc_dina(), usdc_base(),
-            1_000_000, 997_000, CHAIN_ID_ETHEREUM, CHAIN_ID_BASE, 0, 3600, vec![],
+            relayer(),
+            alice(),
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            1_000_000,
+            997_000,
+            CHAIN_ID_ETHEREUM,
+            CHAIN_ID_BASE,
+            0,
+            3600,
+            vec![],
         );
         s.fill_relay(
-            relayer(), alice(), bob(), usdc_dina(), usdc_base(),
-            1_000_000, 997_000, CHAIN_ID_ETHEREUM, CHAIN_ID_BASE, 0, 3600, vec![],
+            relayer(),
+            alice(),
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            1_000_000,
+            997_000,
+            CHAIN_ID_ETHEREUM,
+            CHAIN_ID_BASE,
+            0,
+            3600,
+            vec![],
         );
     }
 
@@ -836,8 +892,18 @@ mod tests {
         let mut s = setup();
         s.pause(owner());
         s.deposit(
-            alice(), CHAIN_ID_BASE, bob(), usdc_dina(), usdc_base(),
-            1_000_000, 997_000, 30, 0, 3600, 0, vec![],
+            alice(),
+            CHAIN_ID_BASE,
+            bob(),
+            usdc_dina(),
+            usdc_base(),
+            1_000_000,
+            997_000,
+            30,
+            0,
+            3600,
+            0,
+            vec![],
         );
     }
 

@@ -125,32 +125,19 @@ impl AxelarState {
     }
 
     /// Register a token symbol with its Dina contract address.
-    pub fn register_token(
-        &mut self,
-        caller: [u8; 32],
-        symbol: String,
-        token_address: [u8; 32],
-    ) {
+    pub fn register_token(&mut self, caller: [u8; 32], symbol: String, token_address: [u8; 32]) {
         assert!(caller == self.owner, "Axelar: only owner");
         self.token_registry.insert(symbol, token_address);
     }
 
     /// Update the gateway address. Only callable by owner.
-    pub fn set_gateway(
-        &mut self,
-        caller: [u8; 32],
-        new_gateway: [u8; 32],
-    ) {
+    pub fn set_gateway(&mut self, caller: [u8; 32], new_gateway: [u8; 32]) {
         assert!(caller == self.owner, "Axelar: only owner");
         self.gateway_address = new_gateway;
     }
 
     /// Update the ITS address. Only callable by owner.
-    pub fn set_its(
-        &mut self,
-        caller: [u8; 32],
-        new_its: [u8; 32],
-    ) {
+    pub fn set_its(&mut self, caller: [u8; 32], new_its: [u8; 32]) {
         assert!(caller == self.owner, "Axelar: only owner");
         self.its_address = new_its;
     }
@@ -430,8 +417,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "Axelar: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("Axelar: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("Axelar: bad init args");
             *state = Some(AxelarState::new(
                 caller,
                 a.gateway_address,
@@ -444,29 +430,25 @@ pub fn dispatch(
         // -- Admin -----------------------------------------------------------
         "set_trusted_source" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: SetTrustedSourceArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: SetTrustedSourceArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             s.set_trusted_source(caller, a.chain_name, a.source_address);
             serde_json::to_vec("ok").unwrap()
         }
         "register_token" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: RegisterTokenArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: RegisterTokenArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             s.register_token(caller, a.symbol, a.token_address);
             serde_json::to_vec("ok").unwrap()
         }
         "set_gateway" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: SetGatewayArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: SetGatewayArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             s.set_gateway(caller, a.new_gateway);
             serde_json::to_vec("ok").unwrap()
         }
         "set_its" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: SetItsArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: SetItsArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             s.set_its(caller, a.new_its);
             serde_json::to_vec("ok").unwrap()
         }
@@ -484,8 +466,7 @@ pub fn dispatch(
         // -- ITS: Token transfers --------------------------------------------
         "send_to_chain" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: SendToChainArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: SendToChainArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             s.send_to_chain(caller, a.destination_chain, a.destination_address, a.amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -493,15 +474,19 @@ pub fn dispatch(
         // -- GMP: Receive messages -------------------------------------------
         "execute" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: ExecuteArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
-            s.execute(caller, a.command_id, a.source_chain, a.source_address, a.payload);
+            let a: ExecuteArgs = serde_json::from_slice(args).expect("Axelar: bad args");
+            s.execute(
+                caller,
+                a.command_id,
+                a.source_chain,
+                a.source_address,
+                a.payload,
+            );
             serde_json::to_vec("ok").unwrap()
         }
         "execute_with_token" => {
             let s = state.as_mut().expect("Axelar: not initialised");
-            let a: ExecuteWithTokenArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: ExecuteWithTokenArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             s.execute_with_token(
                 caller,
                 a.command_id,
@@ -517,8 +502,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "is_command_processed" => {
             let s = state.as_ref().expect("Axelar: not initialised");
-            let a: IsCommandProcessedArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: IsCommandProcessedArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             serde_json::to_vec(&s.is_command_processed(&a.command_id)).unwrap()
         }
         "outbound_count" => {
@@ -531,14 +515,12 @@ pub fn dispatch(
         }
         "is_token_registered" => {
             let s = state.as_ref().expect("Axelar: not initialised");
-            let a: IsTokenRegisteredArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: IsTokenRegisteredArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             serde_json::to_vec(&s.is_token_registered(&a.symbol)).unwrap()
         }
         "is_chain_trusted" => {
             let s = state.as_ref().expect("Axelar: not initialised");
-            let a: IsChainTrustedArgs =
-                serde_json::from_slice(args).expect("Axelar: bad args");
+            let a: IsChainTrustedArgs = serde_json::from_slice(args).expect("Axelar: bad args");
             serde_json::to_vec(&s.is_chain_trusted(&a.chain_name)).unwrap()
         }
 
@@ -602,12 +584,7 @@ mod tests {
     #[should_panic(expected = "untrusted destination")]
     fn test_send_to_untrusted_fails() {
         let mut s = setup();
-        s.send_to_chain(
-            alice(),
-            "solana".to_string(),
-            "abc".to_string(),
-            1_000_000,
-        );
+        s.send_to_chain(alice(), "solana".to_string(), "abc".to_string(), 1_000_000);
     }
 
     #[test]

@@ -1,6 +1,26 @@
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+
+/// Serde helper for `[u8; 64]` arrays (Ed25519 signatures).
+mod serde_sig64 {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+    pub fn serialize<S>(bytes: &[u8; 64], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(bytes)
+    }
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<[u8; 64], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v: Vec<u8> = Vec::deserialize(deserializer)?;
+        v.try_into()
+            .map_err(|_| serde::de::Error::custom("expected 64 bytes for signature"))
+    }
+}
 
 // ---------------------------------------------------------------------------
 // CCTP MessageTransmitter — Circle Cross-Chain Transfer Protocol for Dina
@@ -95,11 +115,7 @@ pub struct CctpState {
 
 impl CctpState {
     /// Initialize a new CCTP MessageTransmitter.
-    pub fn new(
-        owner: [u8; 32],
-        attester_pubkey: [u8; 32],
-        usdc_token_address: [u8; 32],
-    ) -> Self {
+    pub fn new(owner: [u8; 32], attester_pubkey: [u8; 32], usdc_token_address: [u8; 32]) -> Self {
         Self {
             owner,
             local_domain: DOMAIN_DINA,
@@ -168,7 +184,8 @@ impl CctpState {
             "CCTP: cannot send to local domain"
         );
         assert!(
-            self.remote_token_messengers.contains_key(&destination_domain),
+            self.remote_token_messengers
+                .contains_key(&destination_domain),
             "CCTP: unknown destination domain {destination_domain}"
         );
 
@@ -196,17 +213,12 @@ impl CctpState {
 
     /// Receive a CCTP message from another chain and mint USDC on Dina.
     ///
-    /// The attestation is a simplified signature check: we verify that
-    /// SHA-256(message_bytes || attester_pubkey) matches the attestation.
-    /// In production, this would be a proper Ed25519 or ECDSA signature
-    /// verification against Circle's attester set.
+    /// The attestation is an Ed25519 signature from Circle's attester over
+    /// the message hash. This ensures only Circle-authorized attesters can
+    /// approve cross-chain USDC minting.
     ///
     /// Returns true if the message was processed successfully.
-    pub fn receive_message(
-        &mut self,
-        message: CctpMessage,
-        attestation: [u8; 32],
-    ) -> bool {
+    pub fn receive_message(&mut self, message: CctpMessage, attestation: [u8; 64]) -> bool {
         assert!(!self.paused, "CCTP: paused");
         assert!(
             message.destination_domain == self.local_domain,
@@ -224,21 +236,14 @@ impl CctpState {
             "CCTP: nonce already used"
         );
 
-        // Verify attestation (simplified)
-        // In production: ed25519_verify(attester_pubkey, message_hash, attestation)
-        // Here we use a simplified HMAC-like check:
-        // attestation == SHA-256(message_hash || attester_pubkey)
+        // Verify Ed25519 attestation from the attester over the message hash
         let message_hash = message.hash();
-        let mut verify_input = Vec::new();
-        verify_input.extend_from_slice(&message_hash);
-        verify_input.extend_from_slice(&self.attester_pubkey);
-        let expected = Sha256::digest(&verify_input);
-        let mut expected_bytes = [0u8; 32];
-        expected_bytes.copy_from_slice(&expected);
-        assert!(
-            attestation == expected_bytes,
-            "CCTP: invalid attestation"
-        );
+        let verifying_key = VerifyingKey::from_bytes(&self.attester_pubkey)
+            .expect("CCTP: invalid attester public key");
+        let signature = Signature::from_bytes(&attestation);
+        verifying_key
+            .verify(&message_hash, &signature)
+            .expect("CCTP: invalid attestation");
 
         // Mark nonce as used
         self.used_nonces.insert(nonce_key, true);
@@ -284,7 +289,8 @@ struct DepositForBurnArgs {
 #[derive(Serialize, Deserialize, Debug)]
 struct ReceiveMessageArgs {
     message: CctpMessage,
-    attestation: [u8; 32],
+    #[serde(with = "serde_sig64")]
+    attestation: [u8; 64],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -324,22 +330,24 @@ pub fn dispatch(
         "init" => {
             assert!(state.is_none(), "CCTP: already initialised");
             let a: InitArgs = serde_json::from_slice(args).expect("CCTP: bad init args");
-            *state = Some(CctpState::new(caller, a.attester_pubkey, a.usdc_token_address));
+            *state = Some(CctpState::new(
+                caller,
+                a.attester_pubkey,
+                a.usdc_token_address,
+            ));
             serde_json::to_vec("ok").unwrap()
         }
 
         // -- Admin -----------------------------------------------------------
         "set_remote_token_messenger" => {
             let s = state.as_mut().expect("CCTP: not initialised");
-            let a: SetRemoteMessengerArgs =
-                serde_json::from_slice(args).expect("CCTP: bad args");
+            let a: SetRemoteMessengerArgs = serde_json::from_slice(args).expect("CCTP: bad args");
             s.set_remote_token_messenger(caller, a.domain, a.messenger);
             serde_json::to_vec("ok").unwrap()
         }
         "set_attester" => {
             let s = state.as_mut().expect("CCTP: not initialised");
-            let a: SetAttesterArgs =
-                serde_json::from_slice(args).expect("CCTP: bad args");
+            let a: SetAttesterArgs = serde_json::from_slice(args).expect("CCTP: bad args");
             s.set_attester(caller, a.new_attester);
             serde_json::to_vec("ok").unwrap()
         }
@@ -402,12 +410,11 @@ pub fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
 
     fn owner() -> [u8; 32] {
         [1u8; 32]
-    }
-    fn attester() -> [u8; 32] {
-        [10u8; 32]
     }
     fn usdc_addr() -> [u8; 32] {
         [20u8; 32]
@@ -419,28 +426,32 @@ mod tests {
         [30u8; 32]
     }
 
-    fn setup() -> CctpState {
-        let mut s = CctpState::new(owner(), attester(), usdc_addr());
-        s.set_remote_token_messenger(owner(), DOMAIN_BASE, remote_messenger());
-        s.set_remote_token_messenger(owner(), DOMAIN_ETHEREUM, remote_messenger());
-        s
+    /// Generate an attester keypair; the public key is stored in contract state.
+    fn make_attester_key() -> SigningKey {
+        SigningKey::generate(&mut OsRng)
     }
 
-    /// Compute the expected attestation for a given message and attester pubkey.
-    fn compute_attestation(message: &CctpMessage, attester_pk: &[u8; 32]) -> [u8; 32] {
+    fn setup() -> (CctpState, SigningKey) {
+        let attester_key = make_attester_key();
+        let attester_pubkey = attester_key.verifying_key().to_bytes();
+        let mut s = CctpState::new(owner(), attester_pubkey, usdc_addr());
+        s.set_remote_token_messenger(owner(), DOMAIN_BASE, remote_messenger());
+        s.set_remote_token_messenger(owner(), DOMAIN_ETHEREUM, remote_messenger());
+        (s, attester_key)
+    }
+
+    /// Compute a valid Ed25519 attestation for a given message.
+    fn compute_attestation(message: &CctpMessage, attester_key: &SigningKey) -> [u8; 64] {
         let message_hash = message.hash();
-        let mut input = Vec::new();
-        input.extend_from_slice(&message_hash);
-        input.extend_from_slice(attester_pk);
-        let digest = Sha256::digest(&input);
-        let mut result = [0u8; 32];
-        result.copy_from_slice(&digest);
-        result
+        let sig = attester_key.sign(&message_hash);
+        sig.to_bytes()
     }
 
     #[test]
     fn test_init() {
-        let s = CctpState::new(owner(), attester(), usdc_addr());
+        let attester_key = make_attester_key();
+        let attester_pubkey = attester_key.verifying_key().to_bytes();
+        let s = CctpState::new(owner(), attester_pubkey, usdc_addr());
         assert_eq!(s.local_domain, DOMAIN_DINA);
         assert_eq!(s.next_nonce, 1);
         assert!(!s.paused);
@@ -448,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_deposit_for_burn() {
-        let mut s = setup();
+        let (mut s, _attester_key) = setup();
         let (nonce, _hash) = s.deposit_for_burn(alice(), 1_000_000, DOMAIN_BASE, alice());
         assert_eq!(nonce, 1);
         assert_eq!(s.next_nonce, 2);
@@ -458,13 +469,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "cannot send to local domain")]
     fn test_deposit_for_burn_to_self_fails() {
-        let mut s = setup();
+        let (mut s, _attester_key) = setup();
         s.deposit_for_burn(alice(), 1_000_000, DOMAIN_DINA, alice());
     }
 
     #[test]
     fn test_receive_message() {
-        let mut s = setup();
+        let (mut s, attester_key) = setup();
         let message = CctpMessage {
             version: 0,
             source_domain: DOMAIN_BASE,
@@ -478,7 +489,7 @@ mod tests {
             amount: 500_000,
         };
 
-        let attestation = compute_attestation(&message, &attester());
+        let attestation = compute_attestation(&message, &attester_key);
         let result = s.receive_message(message, attestation);
         assert!(result);
         assert!(s.is_nonce_used(DOMAIN_BASE, 42));
@@ -487,7 +498,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "nonce already used")]
     fn test_replay_prevention() {
-        let mut s = setup();
+        let (mut s, attester_key) = setup();
         let message = CctpMessage {
             version: 0,
             source_domain: DOMAIN_BASE,
@@ -501,17 +512,17 @@ mod tests {
             amount: 500_000,
         };
 
-        let attestation = compute_attestation(&message, &attester());
+        let attestation = compute_attestation(&message, &attester_key);
         s.receive_message(message.clone(), attestation);
         // Second time should fail
-        let attestation2 = compute_attestation(&message, &attester());
+        let attestation2 = compute_attestation(&message, &attester_key);
         s.receive_message(message, attestation2);
     }
 
     #[test]
     #[should_panic(expected = "invalid attestation")]
     fn test_bad_attestation_fails() {
-        let mut s = setup();
+        let (mut s, _attester_key) = setup();
         let message = CctpMessage {
             version: 0,
             source_domain: DOMAIN_BASE,
@@ -525,14 +536,37 @@ mod tests {
             amount: 500_000,
         };
 
-        let bad_attestation = [0u8; 32];
+        let bad_attestation = [0u8; 64];
         s.receive_message(message, bad_attestation);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid attestation")]
+    fn test_forged_attestation_fails() {
+        let (mut s, _attester_key) = setup();
+        let message = CctpMessage {
+            version: 0,
+            source_domain: DOMAIN_BASE,
+            destination_domain: DOMAIN_DINA,
+            nonce: 1,
+            sender: alice(),
+            recipient: alice(),
+            destination_caller: [0u8; 32],
+            burn_token: usdc_addr(),
+            mint_recipient: alice(),
+            amount: 500_000,
+        };
+
+        // Sign with a different key (attacker's key)
+        let attacker_key = make_attester_key();
+        let forged_attestation = compute_attestation(&message, &attacker_key);
+        s.receive_message(message, forged_attestation);
     }
 
     #[test]
     #[should_panic(expected = "paused")]
     fn test_paused_blocks_deposit() {
-        let mut s = setup();
+        let (mut s, _attester_key) = setup();
         s.pause(owner());
         s.deposit_for_burn(alice(), 1_000_000, DOMAIN_BASE, alice());
     }

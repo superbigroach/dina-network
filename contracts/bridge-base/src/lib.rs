@@ -1,6 +1,26 @@
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+
+/// Serde helper for `[u8; 64]` arrays (Ed25519 signatures).
+mod serde_sig64 {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+    pub fn serialize<S>(bytes: &[u8; 64], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(bytes)
+    }
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<[u8; 64], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v: Vec<u8> = Vec::deserialize(deserializer)?;
+        v.try_into()
+            .map_err(|_| serde::de::Error::custom("expected 64 bytes for signature"))
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Base <-> Dina Bridge — Lock/Mint Bridge for USDC between Base and Dina
@@ -51,8 +71,8 @@ pub struct BaseBridgeState {
     pub usdc_token: [u8; 32],
     /// Next withdrawal ID
     pub next_withdrawal_id: u64,
-    /// Pending withdrawals (Dina -> Base)
-    pub pending_withdrawals: Vec<PendingWithdrawal>,
+    /// Pending withdrawals (Dina -> Base), keyed by withdrawal ID
+    pub pending_withdrawals: BTreeMap<u64, PendingWithdrawal>,
     /// Processed deposit IDs from Base (prevents replay)
     pub processed_deposits: BTreeMap<[u8; 32], bool>,
     /// Total USDC locked on Base side (tracked for accounting)
@@ -79,14 +99,14 @@ impl BaseBridgeState {
             relayer,
             usdc_token,
             next_withdrawal_id: 1,
-            pending_withdrawals: Vec::new(),
+            pending_withdrawals: BTreeMap::new(),
             processed_deposits: BTreeMap::new(),
             total_locked: 0,
             total_minted: 0,
             paused: false,
-            min_amount: 1_000, // 0.001 USDC minimum
+            min_amount: 1_000,             // 0.001 USDC minimum
             max_amount: 1_000_000_000_000, // 1M USDC maximum
-            fee_bps: 10, // 0.1% fee
+            fee_bps: 10,                   // 0.1% fee
             collected_fees: 0,
         }
     }
@@ -107,12 +127,7 @@ impl BaseBridgeState {
     }
 
     /// Set min/max bridge amounts. Only callable by owner.
-    pub fn set_limits(
-        &mut self,
-        caller: [u8; 32],
-        min_amount: u64,
-        max_amount: u64,
-    ) {
+    pub fn set_limits(&mut self, caller: [u8; 32], min_amount: u64, max_amount: u64) {
         assert!(caller == self.owner, "BaseBridge: only owner");
         assert!(min_amount < max_amount, "BaseBridge: invalid limits");
         self.min_amount = min_amount;
@@ -143,10 +158,10 @@ impl BaseBridgeState {
 
     /// Claim bridged USDC on Dina after USDC was locked on Base.
     ///
-    /// The relayer submits the Base transaction proof. The proof is a hash
-    /// of (base_tx_hash, amount, recipient, relayer_address) that the
-    /// relayer signs. In production this would verify a Merkle proof
-    /// against the Base block header.
+    /// The relayer submits the Base transaction details along with an
+    /// Ed25519 signature proving they authorized this claim. The proof is
+    /// the relayer's signature over `SHA-256(base_tx_hash || amount ||
+    /// recipient)`.
     ///
     /// Only callable by the authorized relayer.
     pub fn claim(
@@ -155,7 +170,7 @@ impl BaseBridgeState {
         base_tx_hash: [u8; 32],
         amount: u64,
         recipient: [u8; 32],
-        proof: [u8; 32],
+        proof: [u8; 64],
     ) -> u64 {
         assert!(!self.paused, "BaseBridge: paused");
         assert!(caller == self.relayer, "BaseBridge: only relayer");
@@ -168,16 +183,20 @@ impl BaseBridgeState {
             "BaseBridge: deposit already processed"
         );
 
-        // Verify proof: SHA-256(base_tx_hash || amount_bytes || recipient || relayer)
-        let mut proof_input = Vec::new();
-        proof_input.extend_from_slice(&base_tx_hash);
-        proof_input.extend_from_slice(&amount.to_le_bytes());
-        proof_input.extend_from_slice(&recipient);
-        proof_input.extend_from_slice(&self.relayer);
-        let expected = Sha256::digest(&proof_input);
-        let mut expected_bytes = [0u8; 32];
-        expected_bytes.copy_from_slice(&expected);
-        assert!(proof == expected_bytes, "BaseBridge: invalid proof");
+        // Build the message: SHA-256(base_tx_hash || amount_bytes || recipient)
+        let mut message_input = Vec::new();
+        message_input.extend_from_slice(&base_tx_hash);
+        message_input.extend_from_slice(&amount.to_le_bytes());
+        message_input.extend_from_slice(&recipient);
+        let message_hash = Sha256::digest(&message_input);
+
+        // Verify Ed25519 signature from the relayer over the message
+        let verifying_key = VerifyingKey::from_bytes(&self.relayer)
+            .expect("BaseBridge: invalid relayer public key");
+        let signature = Signature::from_bytes(&proof);
+        verifying_key
+            .verify(&message_hash, &signature)
+            .expect("BaseBridge: invalid proof");
 
         // Calculate fee
         let fee = (amount * self.fee_bps) / 10_000;
@@ -221,14 +240,17 @@ impl BaseBridgeState {
         let id = self.next_withdrawal_id;
         self.next_withdrawal_id += 1;
 
-        self.pending_withdrawals.push(PendingWithdrawal {
+        self.pending_withdrawals.insert(
             id,
-            sender: caller,
-            base_recipient,
-            amount: release_amount,
-            timestamp,
-            processed: false,
-        });
+            PendingWithdrawal {
+                id,
+                sender: caller,
+                base_recipient,
+                amount: release_amount,
+                timestamp,
+                processed: false,
+            },
+        );
 
         // M-7: Use saturating_sub to prevent underflow wrapping on total_minted.
         self.total_minted = self.total_minted.saturating_sub(amount); // burned on Dina
@@ -243,29 +265,27 @@ impl BaseBridgeState {
     /// Mark a withdrawal as processed by the relayer. Only callable by relayer.
     pub fn mark_withdrawal_processed(&mut self, caller: [u8; 32], withdrawal_id: u64) {
         assert!(caller == self.relayer, "BaseBridge: only relayer");
-        for w in &mut self.pending_withdrawals {
-            if w.id == withdrawal_id {
-                assert!(!w.processed, "BaseBridge: already processed");
-                w.processed = true;
-                // M-7: Use saturating_sub to prevent underflow on total_locked.
-                self.total_locked = self.total_locked.saturating_sub(w.amount);
-                return;
-            }
-        }
-        panic!("BaseBridge: withdrawal not found");
+        let w = self
+            .pending_withdrawals
+            .get_mut(&withdrawal_id)
+            .expect("BaseBridge: withdrawal not found");
+        assert!(!w.processed, "BaseBridge: already processed");
+        w.processed = true;
+        // M-7: Use saturating_sub to prevent underflow on total_locked.
+        self.total_locked = self.total_locked.saturating_sub(w.amount);
     }
 
     // -- Queries -------------------------------------------------------------
 
     /// Get a pending withdrawal by ID.
     pub fn get_withdrawal(&self, id: u64) -> Option<&PendingWithdrawal> {
-        self.pending_withdrawals.iter().find(|w| w.id == id)
+        self.pending_withdrawals.get(&id)
     }
 
     /// Get all unprocessed withdrawals.
     pub fn pending_withdrawal_count(&self) -> usize {
         self.pending_withdrawals
-            .iter()
+            .values()
             .filter(|w| !w.processed)
             .count()
     }
@@ -294,7 +314,8 @@ struct ClaimArgs {
     base_tx_hash: [u8; 32],
     amount: u64,
     recipient: [u8; 32],
-    proof: [u8; 32],
+    #[serde(with = "serde_sig64")]
+    proof: [u8; 64],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -348,8 +369,7 @@ pub fn dispatch(
     match method {
         "init" => {
             assert!(state.is_none(), "BaseBridge: already initialised");
-            let a: InitArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad init args");
+            let a: InitArgs = serde_json::from_slice(args).expect("BaseBridge: bad init args");
             *state = Some(BaseBridgeState::new(caller, a.relayer, a.usdc_token));
             serde_json::to_vec("ok").unwrap()
         }
@@ -357,22 +377,19 @@ pub fn dispatch(
         // -- Admin -----------------------------------------------------------
         "set_relayer" => {
             let s = state.as_mut().expect("BaseBridge: not initialised");
-            let a: SetRelayerArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad args");
+            let a: SetRelayerArgs = serde_json::from_slice(args).expect("BaseBridge: bad args");
             s.set_relayer(caller, a.new_relayer);
             serde_json::to_vec("ok").unwrap()
         }
         "set_fee" => {
             let s = state.as_mut().expect("BaseBridge: not initialised");
-            let a: SetFeeArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad args");
+            let a: SetFeeArgs = serde_json::from_slice(args).expect("BaseBridge: bad args");
             s.set_fee(caller, a.fee_bps);
             serde_json::to_vec("ok").unwrap()
         }
         "set_limits" => {
             let s = state.as_mut().expect("BaseBridge: not initialised");
-            let a: SetLimitsArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad args");
+            let a: SetLimitsArgs = serde_json::from_slice(args).expect("BaseBridge: bad args");
             s.set_limits(caller, a.min_amount, a.max_amount);
             serde_json::to_vec("ok").unwrap()
         }
@@ -395,8 +412,7 @@ pub fn dispatch(
         // -- Bridge ----------------------------------------------------------
         "claim" => {
             let s = state.as_mut().expect("BaseBridge: not initialised");
-            let a: ClaimArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad claim args");
+            let a: ClaimArgs = serde_json::from_slice(args).expect("BaseBridge: bad claim args");
             let minted = s.claim(caller, a.base_tx_hash, a.amount, a.recipient, a.proof);
             serde_json::to_vec(&minted).unwrap()
         }
@@ -409,8 +425,7 @@ pub fn dispatch(
         }
         "mark_withdrawal_processed" => {
             let s = state.as_mut().expect("BaseBridge: not initialised");
-            let a: MarkProcessedArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad args");
+            let a: MarkProcessedArgs = serde_json::from_slice(args).expect("BaseBridge: bad args");
             s.mark_withdrawal_processed(caller, a.withdrawal_id);
             serde_json::to_vec("ok").unwrap()
         }
@@ -418,8 +433,7 @@ pub fn dispatch(
         // -- Queries ---------------------------------------------------------
         "get_withdrawal" => {
             let s = state.as_ref().expect("BaseBridge: not initialised");
-            let a: GetWithdrawalArgs =
-                serde_json::from_slice(args).expect("BaseBridge: bad args");
+            let a: GetWithdrawalArgs = serde_json::from_slice(args).expect("BaseBridge: bad args");
             serde_json::to_vec(&s.get_withdrawal(a.id)).unwrap()
         }
         "pending_withdrawal_count" => {
@@ -452,12 +466,11 @@ pub fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
 
     fn owner() -> [u8; 32] {
         [1u8; 32]
-    }
-    fn relayer() -> [u8; 32] {
-        [2u8; 32]
     }
     fn usdc() -> [u8; 32] {
         [20u8; 32]
@@ -469,32 +482,38 @@ mod tests {
         [4u8; 32]
     }
 
-    fn setup() -> BaseBridgeState {
-        BaseBridgeState::new(owner(), relayer(), usdc())
+    /// Generate a relayer keypair; the public key serves as the relayer address.
+    fn make_relayer_key() -> SigningKey {
+        SigningKey::generate(&mut OsRng)
     }
 
-    /// Compute a valid proof for a claim.
+    fn setup() -> (BaseBridgeState, SigningKey) {
+        let relayer_key = make_relayer_key();
+        let relayer_pubkey = relayer_key.verifying_key().to_bytes();
+        let state = BaseBridgeState::new(owner(), relayer_pubkey, usdc());
+        (state, relayer_key)
+    }
+
+    /// Compute a valid Ed25519 proof for a claim.
     fn compute_proof(
+        signing_key: &SigningKey,
         base_tx_hash: &[u8; 32],
         amount: u64,
         recipient: &[u8; 32],
-        relayer_addr: &[u8; 32],
-    ) -> [u8; 32] {
+    ) -> [u8; 64] {
         let mut input = Vec::new();
         input.extend_from_slice(base_tx_hash);
         input.extend_from_slice(&amount.to_le_bytes());
         input.extend_from_slice(recipient);
-        input.extend_from_slice(relayer_addr);
-        let digest = Sha256::digest(&input);
-        let mut result = [0u8; 32];
-        result.copy_from_slice(&digest);
-        result
+        let message_hash = Sha256::digest(&input);
+        let sig = signing_key.sign(&message_hash);
+        sig.to_bytes()
     }
 
     #[test]
     fn test_init() {
-        let s = setup();
-        assert_eq!(s.relayer, relayer());
+        let (s, relayer_key) = setup();
+        assert_eq!(s.relayer, relayer_key.verifying_key().to_bytes());
         assert_eq!(s.usdc_token, usdc());
         assert_eq!(s.total_locked, 0);
         assert_eq!(s.fee_bps, 10);
@@ -502,12 +521,13 @@ mod tests {
 
     #[test]
     fn test_claim_from_base() {
-        let mut s = setup();
+        let (mut s, relayer_key) = setup();
+        let relayer_pubkey = relayer_key.verifying_key().to_bytes();
         let tx_hash = [42u8; 32];
         let amount = 1_000_000u64; // 1 USDC
-        let proof = compute_proof(&tx_hash, amount, &alice(), &relayer());
+        let proof = compute_proof(&relayer_key, &tx_hash, amount, &alice());
 
-        let minted = s.claim(relayer(), tx_hash, amount, alice(), proof);
+        let minted = s.claim(relayer_pubkey, tx_hash, amount, alice(), proof);
         // Fee: 1_000_000 * 10 / 10_000 = 1_000
         assert_eq!(minted, 999_000);
         assert!(s.is_deposit_processed(&tx_hash));
@@ -518,33 +538,48 @@ mod tests {
     #[test]
     #[should_panic(expected = "deposit already processed")]
     fn test_double_claim_fails() {
-        let mut s = setup();
+        let (mut s, relayer_key) = setup();
+        let relayer_pubkey = relayer_key.verifying_key().to_bytes();
         let tx_hash = [42u8; 32];
         let amount = 1_000_000u64;
-        let proof = compute_proof(&tx_hash, amount, &alice(), &relayer());
+        let proof = compute_proof(&relayer_key, &tx_hash, amount, &alice());
 
-        s.claim(relayer(), tx_hash, amount, alice(), proof);
-        let proof2 = compute_proof(&tx_hash, amount, &alice(), &relayer());
-        s.claim(relayer(), tx_hash, amount, alice(), proof2);
+        s.claim(relayer_pubkey, tx_hash, amount, alice(), proof);
+        let proof2 = compute_proof(&relayer_key, &tx_hash, amount, &alice());
+        s.claim(relayer_pubkey, tx_hash, amount, alice(), proof2);
     }
 
     #[test]
     #[should_panic(expected = "only relayer")]
     fn test_claim_non_relayer_fails() {
-        let mut s = setup();
+        let (mut s, relayer_key) = setup();
         let tx_hash = [42u8; 32];
-        let proof = compute_proof(&tx_hash, 1_000_000, &alice(), &relayer());
+        let proof = compute_proof(&relayer_key, &tx_hash, 1_000_000, &alice());
         s.claim(alice(), tx_hash, 1_000_000, alice(), proof);
     }
 
     #[test]
+    #[should_panic(expected = "invalid proof")]
+    fn test_forged_proof_fails() {
+        let (mut s, _relayer_key) = setup();
+        let relayer_pubkey = _relayer_key.verifying_key().to_bytes();
+        let tx_hash = [42u8; 32];
+        let amount = 1_000_000u64;
+        // Sign with a different key (attacker's key)
+        let attacker_key = make_relayer_key();
+        let fake_proof = compute_proof(&attacker_key, &tx_hash, amount, &alice());
+        s.claim(relayer_pubkey, tx_hash, amount, alice(), fake_proof);
+    }
+
+    #[test]
     fn test_withdraw_to_base() {
-        let mut s = setup();
+        let (mut s, relayer_key) = setup();
+        let relayer_pubkey = relayer_key.verifying_key().to_bytes();
         // First deposit to have some minted supply
         let tx_hash = [42u8; 32];
         let amount = 10_000_000u64;
-        let proof = compute_proof(&tx_hash, amount, &alice(), &relayer());
-        s.claim(relayer(), tx_hash, amount, alice(), proof);
+        let proof = compute_proof(&relayer_key, &tx_hash, amount, &alice());
+        s.claim(relayer_pubkey, tx_hash, amount, alice(), proof);
 
         // Withdraw
         let id = s.withdraw(alice(), 5_000_000, base_alice(), 1000);
@@ -552,23 +587,24 @@ mod tests {
         assert_eq!(s.pending_withdrawal_count(), 1);
 
         // Relayer marks as processed
-        s.mark_withdrawal_processed(relayer(), 1);
+        s.mark_withdrawal_processed(relayer_pubkey, 1);
         assert_eq!(s.pending_withdrawal_count(), 0);
     }
 
     #[test]
     #[should_panic(expected = "paused")]
     fn test_paused_blocks_claim() {
-        let mut s = setup();
+        let (mut s, relayer_key) = setup();
+        let relayer_pubkey = relayer_key.verifying_key().to_bytes();
         s.pause(owner());
         let tx_hash = [42u8; 32];
-        let proof = compute_proof(&tx_hash, 1_000_000, &alice(), &relayer());
-        s.claim(relayer(), tx_hash, 1_000_000, alice(), proof);
+        let proof = compute_proof(&relayer_key, &tx_hash, 1_000_000, &alice());
+        s.claim(relayer_pubkey, tx_hash, 1_000_000, alice(), proof);
     }
 
     #[test]
     fn test_set_fee() {
-        let mut s = setup();
+        let (mut s, _relayer_key) = setup();
         s.set_fee(owner(), 50); // 0.5%
         assert_eq!(s.fee_bps, 50);
     }
@@ -576,17 +612,18 @@ mod tests {
     #[test]
     #[should_panic(expected = "fee too high")]
     fn test_fee_too_high() {
-        let mut s = setup();
+        let (mut s, _relayer_key) = setup();
         s.set_fee(owner(), 600);
     }
 
     #[test]
     fn test_withdraw_fees() {
-        let mut s = setup();
+        let (mut s, relayer_key) = setup();
+        let relayer_pubkey = relayer_key.verifying_key().to_bytes();
         let tx_hash = [42u8; 32];
         let amount = 1_000_000u64;
-        let proof = compute_proof(&tx_hash, amount, &alice(), &relayer());
-        s.claim(relayer(), tx_hash, amount, alice(), proof);
+        let proof = compute_proof(&relayer_key, &tx_hash, amount, &alice());
+        s.claim(relayer_pubkey, tx_hash, amount, alice(), proof);
 
         let fees = s.withdraw_fees(owner());
         assert_eq!(fees, 1_000);
