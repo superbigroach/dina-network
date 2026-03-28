@@ -1,10 +1,15 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use argon2::Argon2;
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    XChaCha20Poly1305, XNonce,
+};
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use dina_core::types::Address;
 
@@ -14,7 +19,12 @@ pub struct WalletFile {
     pub name: String,
     pub address: String,
     pub pubkey_hex: String,
-    pub encrypted_key: Vec<u8>,
+    /// Hex-encoded Argon2id salt (16 bytes).
+    pub salt_hex: String,
+    /// Hex-encoded XChaCha20-Poly1305 nonce (24 bytes).
+    pub nonce_hex: String,
+    /// Hex-encoded ciphertext (private key encrypted with AEAD).
+    pub encrypted_key_hex: String,
     pub created_at: String,
 }
 
@@ -43,23 +53,40 @@ impl WalletManager {
         &self.wallet_dir
     }
 
-    /// Derive a 32-byte key from password using SHA-256 (simple, not production-grade).
-    fn derive_password_key(password: &str) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.update(b"dina-wallet-encryption:");
-        hasher.update(password.as_bytes());
-        let result = hasher.finalize();
+    /// Derive a 32-byte key from password using Argon2id with a random salt.
+    fn derive_password_key(password: &str, salt: &[u8; 16]) -> Result<[u8; 32]> {
+        let argon2 = Argon2::new(
+            argon2::Algorithm::Argon2id,
+            argon2::Version::V0x13,
+            argon2::Params::new(19456, 2, 1, Some(32))
+                .map_err(|e| anyhow::anyhow!("failed to create Argon2 params: {}", e))?,
+        );
         let mut key = [0u8; 32];
-        key.copy_from_slice(&result);
-        key
+        argon2
+            .hash_password_into(password.as_bytes(), salt, &mut key)
+            .map_err(|e| anyhow::anyhow!("Argon2 key derivation failed: {}", e))?;
+        Ok(key)
     }
 
-    /// XOR-encrypt/decrypt (symmetric).
-    fn xor_cipher(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
-        data.iter()
-            .enumerate()
-            .map(|(i, b)| b ^ key[i % 32])
-            .collect()
+    /// Encrypt data using XChaCha20-Poly1305 with AEAD.
+    fn encrypt(data: &[u8], key: &[u8; 32]) -> Result<([u8; 24], Vec<u8>)> {
+        let cipher = XChaCha20Poly1305::new(key.into());
+        let mut nonce_bytes = [0u8; 24];
+        OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = XNonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher
+            .encrypt(nonce, data)
+            .map_err(|e| anyhow::anyhow!("encryption failed: {}", e))?;
+        Ok((nonce_bytes, ciphertext))
+    }
+
+    /// Decrypt data using XChaCha20-Poly1305 with AEAD.
+    fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8; 24]) -> Result<Vec<u8>> {
+        let cipher = XChaCha20Poly1305::new(key.into());
+        let nonce = XNonce::from_slice(nonce);
+        cipher.decrypt(nonce, ciphertext).map_err(|_| {
+            anyhow::anyhow!("decryption failed — incorrect password or corrupted data")
+        })
     }
 
     fn wallet_path(&self, name: &str) -> PathBuf {
@@ -81,8 +108,10 @@ impl WalletManager {
         let verifying_key = signing_key.verifying_key();
         let address = Address::from_pubkey(&verifying_key);
 
-        let pw_key = Self::derive_password_key(password);
-        let encrypted_key = Self::xor_cipher(signing_key.as_bytes(), &pw_key);
+        let mut salt = [0u8; 16];
+        OsRng.fill_bytes(&mut salt);
+        let pw_key = Self::derive_password_key(password, &salt)?;
+        let (nonce, ciphertext) = Self::encrypt(signing_key.as_bytes(), &pw_key)?;
 
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -90,12 +119,13 @@ impl WalletManager {
             name: name.to_string(),
             address: address.to_string(),
             pubkey_hex: hex::encode(verifying_key.as_bytes()),
-            encrypted_key,
+            salt_hex: hex::encode(salt),
+            nonce_hex: hex::encode(nonce),
+            encrypted_key_hex: hex::encode(ciphertext),
             created_at: now,
         };
 
-        let json = serde_json::to_string_pretty(&wallet)
-            .context("failed to serialize wallet")?;
+        let json = serde_json::to_string_pretty(&wallet).context("failed to serialize wallet")?;
         std::fs::write(&path, json)
             .with_context(|| format!("failed to write wallet file {:?}", path))?;
 
@@ -115,8 +145,8 @@ impl WalletManager {
             return Ok(wallets);
         }
 
-        for entry in std::fs::read_dir(&self.wallet_dir)
-            .context("failed to read wallet directory")?
+        for entry in
+            std::fs::read_dir(&self.wallet_dir).context("failed to read wallet directory")?
         {
             let entry = entry?;
             let path = entry.path();
@@ -137,13 +167,31 @@ impl WalletManager {
     /// Returns (private_key_bytes, public_key_bytes).
     pub fn load_wallet(&self, name: &str, password: &str) -> Result<([u8; 32], [u8; 32])> {
         let path = self.wallet_path(name);
-        let data = std::fs::read_to_string(&path)
-            .with_context(|| format!("wallet '{name}' not found"))?;
+        let data =
+            std::fs::read_to_string(&path).with_context(|| format!("wallet '{name}' not found"))?;
         let wallet: WalletFile =
             serde_json::from_str(&data).context("failed to parse wallet file")?;
 
-        let pw_key = Self::derive_password_key(password);
-        let decrypted = Self::xor_cipher(&wallet.encrypted_key, &pw_key);
+        let salt_bytes = hex::decode(&wallet.salt_hex).context("invalid salt hex")?;
+        if salt_bytes.len() != 16 {
+            anyhow::bail!("corrupted wallet file: wrong salt length");
+        }
+        let mut salt = [0u8; 16];
+        salt.copy_from_slice(&salt_bytes);
+
+        let nonce_bytes = hex::decode(&wallet.nonce_hex).context("invalid nonce hex")?;
+        if nonce_bytes.len() != 24 {
+            anyhow::bail!("corrupted wallet file: wrong nonce length");
+        }
+        let mut nonce = [0u8; 24];
+        nonce.copy_from_slice(&nonce_bytes);
+
+        let ciphertext =
+            hex::decode(&wallet.encrypted_key_hex).context("invalid encrypted key hex")?;
+
+        let pw_key = Self::derive_password_key(password, &salt)?;
+        let decrypted = Self::decrypt(&ciphertext, &pw_key, &nonce)
+            .context("incorrect password or corrupted wallet file")?;
 
         if decrypted.len() != 32 {
             anyhow::bail!("corrupted wallet file: wrong key length");
@@ -207,10 +255,7 @@ impl WalletManager {
             .unwrap_or(private_key_hex);
         let key_bytes = hex::decode(raw).context("invalid hex in private key")?;
         if key_bytes.len() != 32 {
-            anyhow::bail!(
-                "private key must be 32 bytes, got {}",
-                key_bytes.len()
-            );
+            anyhow::bail!("private key must be 32 bytes, got {}", key_bytes.len());
         }
 
         let mut privkey = [0u8; 32];
@@ -220,8 +265,10 @@ impl WalletManager {
         let verifying_key = signing_key.verifying_key();
         let address = Address::from_pubkey(&verifying_key);
 
-        let pw_key = Self::derive_password_key(password);
-        let encrypted_key = Self::xor_cipher(&privkey, &pw_key);
+        let mut salt = [0u8; 16];
+        OsRng.fill_bytes(&mut salt);
+        let pw_key = Self::derive_password_key(password, &salt)?;
+        let (nonce, ciphertext) = Self::encrypt(&privkey, &pw_key)?;
 
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -229,12 +276,13 @@ impl WalletManager {
             name: name.to_string(),
             address: address.to_string(),
             pubkey_hex: hex::encode(verifying_key.as_bytes()),
-            encrypted_key,
+            salt_hex: hex::encode(salt),
+            nonce_hex: hex::encode(nonce),
+            encrypted_key_hex: hex::encode(ciphertext),
             created_at: now,
         };
 
-        let json = serde_json::to_string_pretty(&wallet)
-            .context("failed to serialize wallet")?;
+        let json = serde_json::to_string_pretty(&wallet).context("failed to serialize wallet")?;
         std::fs::write(&path, json)
             .with_context(|| format!("failed to write wallet file {:?}", path))?;
 

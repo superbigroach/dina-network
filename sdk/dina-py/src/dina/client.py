@@ -54,8 +54,13 @@ class DinaClient:
         self._request_id += 1
         return self._request_id
 
-    def _rpc(self, method: str, params: Optional[dict[str, Any]] = None) -> Any:
+    def _rpc(self, method: str, params: Optional[list[Any]] = None) -> Any:
         """Send a JSON-RPC 2.0 request and return the result.
+
+        Args:
+            method: The RPC method name (e.g. ``"dina_getBalance"``).
+            params: Positional parameters as a list (JSON array), matching
+                the server's expected positional args.
 
         Raises:
             DinaError: If the RPC response contains an error field.
@@ -65,7 +70,7 @@ class DinaClient:
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": method,
-            "params": params or {},
+            "params": params or [],
         }
         response = self._client.post("/rpc", json=payload)
         response.raise_for_status()
@@ -92,8 +97,8 @@ class DinaClient:
         Returns:
             The balance as an integer (micro-USDC).
         """
-        result = self._rpc("account.balance", {"address": address})
-        return int(result["balance"])
+        result = self._rpc("dina_getBalance", [address])
+        return int(result)
 
     def get_account(self, address: Address) -> Account:
         """Get full account information.
@@ -104,7 +109,7 @@ class DinaClient:
         Returns:
             An Account dataclass with balance, nonce, etc.
         """
-        result = self._rpc("account.info", {"address": address})
+        result = self._rpc("dina_getAccount", [address])
         return Account.from_dict(result)
 
     # ------------------------------------------------------------------ #
@@ -120,7 +125,7 @@ class DinaClient:
         Returns:
             A Block dataclass.
         """
-        result = self._rpc("block.get", {"height": height})
+        result = self._rpc("dina_getBlock", [height])
         return Block.from_dict(result)
 
     def get_latest_block(self) -> Block:
@@ -129,7 +134,7 @@ class DinaClient:
         Returns:
             A Block dataclass for the latest block.
         """
-        result = self._rpc("block.latest", {})
+        result = self._rpc("dina_getLatestBlock", [])
         return Block.from_dict(result)
 
     # ------------------------------------------------------------------ #
@@ -145,7 +150,7 @@ class DinaClient:
         """Build a transaction envelope, sign it, and return the signed payload."""
         # Fetch the sender's current nonce
         account = self.get_account(wallet.address)
-        nonce = account.nonce + 1
+        nonce = account.nonce
 
         tx = {
             "type": tx_type,
@@ -187,8 +192,9 @@ class DinaClient:
             body["memo"] = memo
 
         signed = self._build_and_sign_tx(wallet, "transfer", body)
-        result = self._rpc("tx.send", signed)
-        return str(result["tx_hash"])
+        tx_hex = json.dumps(signed, sort_keys=True, separators=(",", ":"))
+        result = self._rpc("dina_sendTransaction", [tx_hex])
+        return str(result)
 
     def deploy_contract(
         self,
@@ -211,8 +217,9 @@ class DinaClient:
             "init_args": init_args,
         }
         signed = self._build_and_sign_tx(wallet, "deploy_contract", body)
-        result = self._rpc("tx.send", signed)
-        return str(result["tx_hash"])
+        tx_hex = json.dumps(signed, sort_keys=True, separators=(",", ":"))
+        result = self._rpc("dina_sendTransaction", [tx_hex])
+        return str(result)
 
     def call_contract(
         self,
@@ -243,8 +250,9 @@ class DinaClient:
             body["usdc"] = usdc
 
         signed = self._build_and_sign_tx(wallet, "call_contract", body)
-        result = self._rpc("tx.send", signed)
-        return str(result["tx_hash"])
+        tx_hex = json.dumps(signed, sort_keys=True, separators=(",", ":"))
+        result = self._rpc("dina_sendTransaction", [tx_hex])
+        return str(result)
 
     # ------------------------------------------------------------------ #
     # Transaction receipt
@@ -260,7 +268,7 @@ class DinaClient:
             A TransactionReceipt if found, or None if pending/unknown.
         """
         try:
-            result = self._rpc("tx.receipt", {"tx_hash": tx_hash})
+            result = self._rpc("dina_getTransaction", [tx_hash])
         except DinaError:
             return None
         if result is None:
@@ -310,7 +318,7 @@ class DinaClient:
         Returns:
             A NetworkInfo dataclass.
         """
-        result = self._rpc("network.info", {})
+        result = self._rpc("dina_networkInfo", [])
         return NetworkInfo.from_dict(result)
 
     # ------------------------------------------------------------------ #

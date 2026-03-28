@@ -30,7 +30,10 @@ impl std::str::FromStr for OutputFormat {
             "pretty" => Ok(OutputFormat::Pretty),
             "json" => Ok(OutputFormat::Json),
             "table" => Ok(OutputFormat::Table),
-            _ => anyhow::bail!("invalid output format '{}', expected: pretty, json, table", s),
+            _ => anyhow::bail!(
+                "invalid output format '{}', expected: pretty, json, table",
+                s
+            ),
         }
     }
 }
@@ -96,8 +99,7 @@ impl CliConfig {
                 .with_context(|| format!("failed to create config dir {:?}", parent))?;
         }
 
-        let json =
-            serde_json::to_string_pretty(self).context("failed to serialize config")?;
+        let json = serde_json::to_string_pretty(self).context("failed to serialize config")?;
         std::fs::write(&path, json)
             .with_context(|| format!("failed to write config to {:?}", path))?;
         Ok(())

@@ -43,8 +43,23 @@ export class DinaClient {
    * @param wsUrl  - Optional WebSocket endpoint for subscriptions.
    *                 If omitted, derived from rpcUrl by replacing http with ws.
    */
-  constructor(rpcUrl: string, wsUrl?: string) {
+  /** Request timeout in milliseconds (default 30 000). */
+  private readonly timeout: number;
+
+  /**
+   * @param rpcUrl  - HTTP endpoint of a Dina node, e.g. "https://rpc.dina.network"
+   * @param options - Optional configuration.
+   * @param options.wsUrl   - WebSocket endpoint for subscriptions.
+   *                          If omitted, derived from rpcUrl by replacing http with ws.
+   * @param options.timeout - Request timeout in milliseconds (default 30 000).
+   */
+  constructor(
+    rpcUrl: string,
+    options?: { wsUrl?: string; timeout?: number }
+  ) {
     this.rpcUrl = rpcUrl.replace(/\/+$/, '');
+    this.timeout = options?.timeout ?? 30_000;
+    const wsUrl = options?.wsUrl;
     if (wsUrl) {
       this.wsUrl = wsUrl.replace(/\/+$/, '');
     } else {
@@ -70,13 +85,27 @@ export class DinaClient {
       params,
     };
 
-    const res = await fetch(this.rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body, (_key, value) =>
-        typeof value === 'bigint' ? value.toString() : value
-      ),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+
+    let res: Response;
+    try {
+      res = await fetch(this.rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body, (_key, value) =>
+          typeof value === 'bigint' ? value.toString() : value
+        ),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new DinaRpcError(-1, `Request timed out after ${this.timeout}ms`, undefined);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (!res.ok) {
       throw new DinaRpcError(
@@ -149,7 +178,7 @@ export class DinaClient {
 
   /** Get network status information. */
   async getNetworkInfo(): Promise<NetworkInfo> {
-    return this.rpc<NetworkInfo>('dina_getNetworkInfo', []);
+    return this.rpc<NetworkInfo>('dina_networkInfo', []);
   }
 
   /** Get registered device info by its public key. */
@@ -171,6 +200,15 @@ export class DinaClient {
    * Returns the transaction hash.
    */
   async transfer(wallet: DinaWallet, params: TransferParams): Promise<Hash> {
+    if (params.amount <= 0n) {
+      throw new Error('Transfer amount must be positive');
+    }
+    if (params.amount > 18_446_744_073_709_551_615n) {
+      throw new Error('Amount exceeds u64 max');
+    }
+    if (params.to === wallet.address) {
+      throw new Error('Cannot transfer to self');
+    }
     const account = await this.getAccount(wallet.address);
     const txPayload = this.buildTransferPayload(
       wallet.address,
@@ -292,13 +330,13 @@ export class DinaClient {
   // Utility
   // ---------------------------------------------------------------------------
 
-  /** Estimate the fee for a transaction type. */
-  async estimateFee(txType: string, params: unknown): Promise<bigint> {
-    const result = await this.rpc<string>('dina_estimateFee', [
+  /** Estimate the gas cost for a transaction type. */
+  async estimateGas(txType: string, params: unknown): Promise<bigint> {
+    const result = await this.rpc<{ gas_estimate: string }>('dina_estimateGas', [
       txType,
       params,
     ]);
-    return BigInt(result);
+    return BigInt(result.gas_estimate);
   }
 
   /**

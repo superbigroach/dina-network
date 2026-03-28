@@ -21,5 +21,7 @@ rand = { workspace = true }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 chrono = { workspace = true }
+argon2 = "0.5"
+chacha20poly1305 = { workspace = true }
 colored = "2"
 dirs = "5"

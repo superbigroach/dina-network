@@ -81,15 +81,14 @@ class DinaWallet:
     def address(self) -> Address:
         """Derive the Dina address from the public key.
 
-        The address is 'dina1' followed by the first 38 hex characters of
-        SHA-256(public_key_bytes).
+        The address is the full 64-character hex SHA-256 hash of the raw
+        public key bytes — matching the JS SDK and the on-chain format.
         """
         if self._address is None:
             pub_bytes = self._public_key.public_bytes(
                 Encoding.Raw, PublicFormat.Raw
             )
-            digest = hashlib.sha256(pub_bytes).hexdigest()
-            self._address = f"dina1{digest[:38]}"
+            self._address = hashlib.sha256(pub_bytes).hexdigest()
         return self._address
 
     @property

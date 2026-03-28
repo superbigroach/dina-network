@@ -47,27 +47,9 @@ export class DinaWallet {
     return new DinaWallet(privateKey, publicKey);
   }
 
-  /**
-   * Restore a wallet from a BIP-39 mnemonic phrase.
-   *
-   * Derives the private key by taking SHA-256 of the mnemonic bytes.
-   * A full BIP-39 + SLIP-0010 derivation path implementation would be used
-   * in production; this provides a deterministic key from the phrase.
-   */
-  static fromMnemonic(mnemonic: string): DinaWallet {
-    const trimmed = mnemonic.trim();
-    const words = trimmed.split(/\s+/);
-    if (words.length < 12 || words.length > 24) {
-      throw new Error(
-        `Mnemonic must be 12-24 words, got ${words.length}`
-      );
-    }
-    // Derive 32-byte seed from mnemonic via SHA-256
-    // In production this would use PBKDF2 per BIP-39 spec
-    const { sha256 } = require('@noble/hashes/sha256') as typeof import('@noble/hashes/sha256');
-    const seed = sha256(new TextEncoder().encode(trimmed));
-    return DinaWallet.fromPrivateKey(seed);
-  }
+  // Mnemonic derivation removed — requires proper BIP-39 PBKDF2 implementation.
+  // The previous version used SHA-256 instead of PBKDF2, producing keys
+  // incompatible with any correct BIP-39 implementation.
 
   /** Sign a message, returning a hex-encoded 64-byte Ed25519 signature. */
   sign(message: Uint8Array): Signature {

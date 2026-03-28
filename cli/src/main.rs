@@ -29,22 +29,23 @@ fn format_usdc(micro: u64) -> String {
     format!("{whole}.{frac:06} USDC")
 }
 
-/// Parse a human-friendly USDC amount string (e.g. "100.50") into micro-USDC.
-/// Also accepts plain integers which are treated as micro-USDC directly.
+/// Parse a USDC amount string into micro-USDC.
+///
+/// The input is always treated as human-readable USDC (e.g. "100" = 100 USDC,
+/// "100.50" = 100.50 USDC). Both are converted by multiplying by 1_000_000.
+/// At most 6 decimal places are allowed.
 fn parse_usdc_amount(s: &str) -> Result<u64> {
-    if let Ok(v) = s.parse::<u64>() {
-        return Ok(v);
-    }
     if let Some((whole_s, frac_s)) = s.split_once('.') {
         let whole: u64 = whole_s.parse().context("invalid USDC amount")?;
-        let padded = format!("{:0<6}", frac_s);
-        if padded.len() > 6 {
+        if frac_s.len() > 6 {
             anyhow::bail!("USDC amounts support at most 6 decimal places");
         }
+        let padded = format!("{:0<6}", frac_s);
         let frac: u64 = padded.parse().context("invalid USDC fraction")?;
         Ok(whole * 1_000_000 + frac)
     } else {
-        anyhow::bail!("invalid USDC amount: '{s}'")
+        let whole: u64 = s.parse().context("invalid USDC amount")?;
+        Ok(whole * 1_000_000)
     }
 }
 
@@ -60,8 +61,7 @@ fn prompt_password(prompt: &str) -> Result<String> {
 
 /// Load a signing key from a raw 32-byte key file.
 fn load_signing_key(path: &str) -> Result<SigningKey> {
-    let bytes =
-        std::fs::read(path).with_context(|| format!("failed to read key file '{path}'"))?;
+    let bytes = std::fs::read(path).with_context(|| format!("failed to read key file '{path}'"))?;
 
     if bytes.len() != 32 {
         anyhow::bail!(
@@ -92,9 +92,12 @@ fn resolve_signing_key(
     if key_path == "dina_key" {
         if let Some(ref default_name) = config.default_wallet {
             let mgr = WalletManager::default_path()?;
-            if mgr.wallet_dir().join(format!("{default_name}.json")).exists() {
-                let password =
-                    prompt_password(&format!("Password for wallet '{default_name}': "))?;
+            if mgr
+                .wallet_dir()
+                .join(format!("{default_name}.json"))
+                .exists()
+            {
+                let password = prompt_password(&format!("Password for wallet '{default_name}': "))?;
                 return mgr.signing_key(default_name, &password);
             }
         }
@@ -108,10 +111,7 @@ fn resolve_signing_key(
 /// Returns 0 if the account does not exist yet.
 async fn fetch_nonce(client: &RpcClient, address: &Address) -> Result<u64> {
     match client.get_account(&address.to_string()).await {
-        Ok(info) => Ok(info
-            .get("nonce")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)),
+        Ok(info) => Ok(info.get("nonce").and_then(|v| v.as_u64()).unwrap_or(0)),
         Err(_) => {
             // Account not found on-chain -- first transaction, nonce is 0.
             Ok(0)
@@ -126,10 +126,7 @@ fn print_value(val: &serde_json::Value, format: &OutputFormat) {
             println!("{}", serde_json::to_string(val).unwrap_or_default());
         }
         _ => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(val).unwrap_or_default()
-            );
+            println!("{}", serde_json::to_string_pretty(val).unwrap_or_default());
         }
     }
 }
@@ -474,10 +471,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let config = CliConfig::load();
 
-    let rpc_url = cli
-        .rpc_url
-        .as_deref()
-        .unwrap_or(&config.rpc_url);
+    let rpc_url = cli.rpc_url.as_deref().unwrap_or(&config.rpc_url);
     let client = RpcClient::new(rpc_url);
     let format = config.effective_format(cli.json);
 
@@ -589,10 +583,7 @@ fn cmd_keygen(output: &str, format: &OutputFormat) -> Result<()> {
         println!("  Private key: {output}");
         println!("  Public key:  {pubkey_path}");
         println!("  Address:     {}", address.to_string().cyan());
-        println!(
-            "  Public key:  0x{}",
-            hex::encode(verifying_key.as_bytes())
-        );
+        println!("  Public key:  0x{}", hex::encode(verifying_key.as_bytes()));
     }
 
     Ok(())
@@ -600,8 +591,7 @@ fn cmd_keygen(output: &str, format: &OutputFormat) -> Result<()> {
 
 /// Query the balance of an address via JSON-RPC.
 async fn cmd_balance(client: &RpcClient, address: &str, format: &OutputFormat) -> Result<()> {
-    let addr =
-        Address::from_str(address).map_err(|e| anyhow::anyhow!("invalid address: {e}"))?;
+    let addr = Address::from_str(address).map_err(|e| anyhow::anyhow!("invalid address: {e}"))?;
 
     let balance = client.get_balance(&addr.to_string()).await?;
 
@@ -653,6 +643,7 @@ async fn cmd_transfer(
         device_witness: None,
         nonce,
         fee,
+        pub_key: *signing_key.verifying_key().as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -727,6 +718,7 @@ async fn cmd_deploy(
         init_args,
         nonce,
         fee,
+        pub_key: *signing_key.verifying_key().as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -800,6 +792,7 @@ async fn cmd_call(
         usdc_attached: value,
         nonce,
         fee,
+        pub_key: *signing_key.verifying_key().as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -867,7 +860,9 @@ async fn cmd_device_register(
     // Fetch nonce and calculate fee using the standard fee schedule.
     let nonce = fetch_nonce(client, &owner).await?;
     let fee_schedule = FeeSchedule::default_testnet();
-    let fee = fee_schedule.base_register_device_fee.clamp(fee_schedule.min_fee, fee_schedule.max_fee);
+    let fee = fee_schedule
+        .base_register_device_fee
+        .clamp(fee_schedule.min_fee, fee_schedule.max_fee);
 
     let mut tx = dina_core::Transaction::RegisterDevice {
         device_pubkey,
@@ -875,6 +870,7 @@ async fn cmd_device_register(
         attestation,
         nonce,
         fee,
+        pub_key: *signing_key.verifying_key().as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -910,11 +906,7 @@ async fn cmd_device_register(
 }
 
 /// Get device info by public key.
-async fn cmd_device_info(
-    client: &RpcClient,
-    pubkey: &str,
-    format: &OutputFormat,
-) -> Result<()> {
+async fn cmd_device_info(client: &RpcClient, pubkey: &str, format: &OutputFormat) -> Result<()> {
     let info = client.get_device(pubkey).await?;
     print_value(&info, format);
     Ok(())
@@ -968,9 +960,7 @@ async fn cmd_status(client: &RpcClient, format: &OutputFormat) -> Result<()> {
     );
     println!(
         "  Peer Count:       {}",
-        info.get("peer_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
+        info.get("peer_count").and_then(|v| v.as_u64()).unwrap_or(0)
     );
     println!(
         "  Version:          {}",
@@ -1053,11 +1043,7 @@ fn cmd_wallet(action: WalletCommands, _config: &CliConfig, format: &OutputFormat
                     } else {
                         String::new()
                     };
-                    println!(
-                        "  {} {}{marker}",
-                        w.name.cyan(),
-                        w.address.dimmed()
-                    );
+                    println!("  {} {}{marker}", w.name.cyan(), w.address.dimmed());
                 }
             }
         }
@@ -1082,7 +1068,9 @@ fn cmd_wallet(action: WalletCommands, _config: &CliConfig, format: &OutputFormat
             if *format == OutputFormat::Json {
                 println!(
                     "{}",
-                    serde_json::to_string(&serde_json::json!({"name": name, "private_key": hex_key}))?
+                    serde_json::to_string(
+                        &serde_json::json!({"name": name, "private_key": hex_key})
+                    )?
                 );
             } else {
                 println!("{}", "WARNING: Never share your private key!".red().bold());
@@ -1121,10 +1109,7 @@ fn cmd_wallet(action: WalletCommands, _config: &CliConfig, format: &OutputFormat
                     serde_json::to_string(&serde_json::json!({"default_wallet": name}))?
                 );
             } else {
-                println!(
-                    "{}",
-                    format!("Default wallet set to '{name}'.").green()
-                );
+                println!("{}", format!("Default wallet set to '{name}'.").green());
             }
         }
     }
@@ -1149,14 +1134,13 @@ fn cmd_config(action: ConfigCommands, format: &OutputFormat) -> Result<()> {
                 println!("  rpc-url:        {}", config.rpc_url.cyan());
                 println!("  rest-url:       {}", config.rest_url.cyan());
                 println!("  chain-id:       {}", config.chain_id.cyan());
-                println!("  format:         {}", config.output_format.to_string().cyan());
+                println!(
+                    "  format:         {}",
+                    config.output_format.to_string().cyan()
+                );
                 println!(
                     "  default-wallet: {}",
-                    config
-                        .default_wallet
-                        .as_deref()
-                        .unwrap_or("(none)")
-                        .cyan()
+                    config.default_wallet.as_deref().unwrap_or("(none)").cyan()
                 );
                 println!("  wallet-dir:     {}", config.wallet_dir.dimmed());
             }
@@ -1271,6 +1255,7 @@ async fn cmd_channel(
                 usdc_attached: micro,
                 nonce,
                 fee,
+                pub_key: *signer.verifying_key().as_bytes(),
                 signature: Sig64([0u8; 64]),
             };
 
@@ -1284,8 +1269,7 @@ async fn cmd_channel(
                 *signature = Sig64(sig);
             }
 
-            let tx_bytes =
-                serde_json::to_vec(&tx).context("failed to serialize transaction")?;
+            let tx_bytes = serde_json::to_vec(&tx).context("failed to serialize transaction")?;
             let tx_hex = format!("0x{}", hex::encode(&tx_bytes));
             let tx_hash = client.send_transaction(&tx_hex).await?;
 
@@ -1334,6 +1318,7 @@ async fn cmd_channel(
                 usdc_attached: 0,
                 nonce,
                 fee,
+                pub_key: *signer.verifying_key().as_bytes(),
                 signature: Sig64([0u8; 64]),
             };
 
@@ -1347,8 +1332,7 @@ async fn cmd_channel(
                 *signature = Sig64(sig);
             }
 
-            let tx_bytes =
-                serde_json::to_vec(&tx).context("failed to serialize transaction")?;
+            let tx_bytes = serde_json::to_vec(&tx).context("failed to serialize transaction")?;
             let tx_hex = format!("0x{}", hex::encode(&tx_bytes));
             let tx_hash = client.send_transaction(&tx_hex).await?;
 
@@ -1389,6 +1373,7 @@ async fn cmd_channel(
                 usdc_attached: 0,
                 nonce,
                 fee,
+                pub_key: *signer.verifying_key().as_bytes(),
                 signature: Sig64([0u8; 64]),
             };
 
@@ -1402,8 +1387,7 @@ async fn cmd_channel(
                 *signature = Sig64(sig);
             }
 
-            let tx_bytes =
-                serde_json::to_vec(&tx).context("failed to serialize transaction")?;
+            let tx_bytes = serde_json::to_vec(&tx).context("failed to serialize transaction")?;
             let tx_hex = format!("0x{}", hex::encode(&tx_bytes));
             let tx_hash = client.send_transaction(&tx_hex).await?;
 
@@ -1440,15 +1424,11 @@ async fn cmd_faucet(
     _config: &CliConfig,
     format: &OutputFormat,
 ) -> Result<()> {
-    let addr =
-        Address::from_str(address).map_err(|e| anyhow::anyhow!("invalid address: {e}"))?;
+    let addr = Address::from_str(address).map_err(|e| anyhow::anyhow!("invalid address: {e}"))?;
 
     let result = client.request_faucet(&addr.to_string()).await?;
 
-    let amount = result
-        .get("amount")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let amount = result.get("amount").and_then(|v| v.as_u64()).unwrap_or(0);
     let tx_hash = result
         .get("tx_hash")
         .and_then(|v| v.as_str())
@@ -1495,14 +1475,8 @@ async fn cmd_validators(
                 );
                 println!("  {}", "-".repeat(68));
                 for v in validators {
-                    let addr = v
-                        .get("address")
-                        .and_then(|a| a.as_str())
-                        .unwrap_or("?");
-                    let stake = v
-                        .get("stake")
-                        .and_then(|s| s.as_u64())
-                        .unwrap_or(0);
+                    let addr = v.get("address").and_then(|a| a.as_str()).unwrap_or("?");
+                    let stake = v.get("stake").and_then(|s| s.as_u64()).unwrap_or(0);
                     let status = v
                         .get("status")
                         .and_then(|s| s.as_str())
@@ -1564,22 +1538,10 @@ async fn cmd_explorer(
                 );
                 println!("  {}", "-".repeat(102));
                 for b in blocks {
-                    let height = b
-                        .get("height")
-                        .and_then(|h| h.as_u64())
-                        .unwrap_or(0);
-                    let time = b
-                        .get("timestamp")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("?");
-                    let txs = b
-                        .get("tx_count")
-                        .and_then(|t| t.as_u64())
-                        .unwrap_or(0);
-                    let hash = b
-                        .get("hash")
-                        .and_then(|h| h.as_str())
-                        .unwrap_or("?");
+                    let height = b.get("height").and_then(|h| h.as_u64()).unwrap_or(0);
+                    let time = b.get("timestamp").and_then(|t| t.as_str()).unwrap_or("?");
+                    let txs = b.get("tx_count").and_then(|t| t.as_u64()).unwrap_or(0);
+                    let hash = b.get("hash").and_then(|h| h.as_str()).unwrap_or("?");
 
                     println!(
                         "  {:>8}  {:<18}  {:>6}  {}",

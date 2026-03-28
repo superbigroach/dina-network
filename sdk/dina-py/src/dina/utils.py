@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-# Dina addresses: "dina1" prefix followed by 38 hex characters (total 43 chars)
-_ADDRESS_PATTERN = re.compile(r"^dina1[0-9a-f]{38}$")
+# Dina addresses: 64 lowercase hex characters (SHA-256 of public key)
+_ADDRESS_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 # USDC on Dina uses 6 decimal places (micro-USDC)
 _USDC_DECIMALS = 6
@@ -94,7 +94,7 @@ def parse_usdc(usdc_str: str) -> int:
 def is_valid_address(addr: str) -> bool:
     """Check if a string is a valid Dina Network address.
 
-    Valid addresses start with 'dina1' followed by 38 lowercase hex characters.
+    Valid addresses are 64 lowercase hex characters (SHA-256 of public key).
 
     Args:
         addr: The address string to validate.
@@ -103,7 +103,7 @@ def is_valid_address(addr: str) -> bool:
         True if the address is valid.
 
     Examples:
-        >>> is_valid_address("dina1" + "a" * 38)
+        >>> is_valid_address("a" * 64)
         True
         >>> is_valid_address("invalid")
         False

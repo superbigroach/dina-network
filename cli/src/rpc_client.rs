@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
@@ -14,9 +16,13 @@ pub struct RpcClient {
 impl RpcClient {
     /// Create a new RPC client pointing at the given URL.
     pub fn new(url: &str) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("failed to build HTTP client");
         Self {
             url: url.to_string(),
-            client: reqwest::Client::new(),
+            client,
             request_id: std::sync::atomic::AtomicU64::new(1),
         }
     }
