@@ -1,20 +1,63 @@
 'use client';
+import { useEffect, useState } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { BalanceStream } from '@/components/BalanceStream';
 import { WalletCard } from '@/components/WalletCard';
 import { YieldDisplay } from '@/components/YieldDisplay';
 import { TransactionList } from '@/components/TransactionList';
 import { CurrencyList } from '@/components/CurrencyList';
-import { MOCK_WALLETS, MOCK_CURRENCIES, MOCK_TRANSACTIONS } from '@/lib/constants';
+import { MOCK_WALLETS, MOCK_CURRENCIES, MOCK_TRANSACTIONS, CHAIN_ID } from '@/lib/constants';
+import { getHealth } from '@/lib/api';
 import Link from 'next/link';
 
+interface NetworkStatus {
+  connected: boolean;
+  height: number;
+  status: string;
+}
+
 export default function DashboardPage() {
-  const activeWallets = MOCK_WALLETS.filter(w => w.isSetUp && w.balance > 0);
+  const [network, setNetwork] = useState<NetworkStatus>({
+    connected: false,
+    height: 0,
+    status: 'connecting',
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchStatus() {
+      try {
+        const health = await getHealth();
+        if (!cancelled) {
+          setNetwork({
+            connected: true,
+            height: health.height,
+            status: health.status || 'ok',
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setNetwork({ connected: false, height: 0, status: 'unreachable' });
+        }
+      }
+    }
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const activeWallets = MOCK_WALLETS.filter((w) => w.isSetUp && w.balance > 0);
   const totalBalance = activeWallets.reduce((sum, w) => sum + w.balance, 0);
-  const weightedYieldBps = totalBalance > 0
-    ? Math.round(activeWallets.reduce((sum, w) => sum + (w.balance / totalBalance) * w.yieldRateBps, 0))
-    : 0;
-  const earliestUpdate = Math.min(...activeWallets.map(w => w.lastYieldUpdate));
+  const weightedYieldBps =
+    totalBalance > 0
+      ? Math.round(activeWallets.reduce((sum, w) => sum + (w.balance / totalBalance) * w.yieldRateBps, 0))
+      : 0;
+  const earliestUpdate = Math.min(...activeWallets.map((w) => w.lastYieldUpdate));
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -47,7 +90,7 @@ export default function DashboardPage() {
             className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
             </svg>
             Send
           </Link>
@@ -56,7 +99,7 @@ export default function DashboardPage() {
             className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition-colors flex items-center gap-2 border border-slate-700"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
             Receive
           </Link>
@@ -65,7 +108,7 @@ export default function DashboardPage() {
             className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition-colors flex items-center gap-2 border border-slate-700"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
             Convert
           </Link>
@@ -85,6 +128,44 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <TransactionList transactions={MOCK_TRANSACTIONS} />
           <CurrencyList currencies={MOCK_CURRENCIES} />
+        </div>
+
+        {/* Network Status */}
+        <div className="mt-8 rounded-xl bg-slate-900 border border-slate-800 p-4">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+            Testnet Status
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-[11px] text-slate-500 mb-0.5">Chain</p>
+              <p className="text-sm font-mono text-white">{CHAIN_ID}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-0.5">Block</p>
+              <p className="text-sm font-mono text-white tabular-nums">
+                {network.height > 0
+                  ? `#${network.height.toLocaleString()}`
+                  : '--'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-0.5">Status</p>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${
+                    network.connected ? 'bg-emerald-400' : 'bg-amber-400'
+                  }`}
+                />
+                <span className={network.connected ? 'text-emerald-400' : 'text-amber-400'}>
+                  {network.connected ? 'Connected' : 'Offline'}
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-0.5">RPC</p>
+              <p className="text-sm font-mono text-slate-300">35.184.213.248</p>
+            </div>
+          </div>
         </div>
       </main>
     </div>

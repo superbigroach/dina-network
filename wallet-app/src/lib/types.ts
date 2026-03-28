@@ -13,6 +13,8 @@ export interface Wallet {
   isSetUp: boolean;
 }
 
+export type CurrencyRegion = 'Major' | 'European' | 'Americas' | 'Asia-Pacific' | 'Middle East & Africa';
+
 export interface Currency {
   symbol: string;
   name: string;
@@ -20,6 +22,7 @@ export interface Currency {
   yieldRateBps: number;
   ratePerUsdc: number;
   icon: string;
+  region: CurrencyRegion;
 }
 
 export interface Transaction {
