@@ -237,7 +237,8 @@ mod tests {
 
     fn make_transfer(fee: u64, nonce: u64) -> Transaction {
         let (sk, _vk) = crypto::generate_keypair();
-        let from = Address::from_pubkey(&sk.verifying_key());
+        let vk = sk.verifying_key();
+        let from = Address::from_pubkey(&vk);
         let to = Address([0xbb; 32]);
 
         let mut tx = Transaction::Transfer {
@@ -248,6 +249,7 @@ mod tests {
             device_witness: None,
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 

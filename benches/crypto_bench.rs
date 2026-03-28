@@ -73,6 +73,7 @@ fn bench_transaction_serialization(c: &mut Criterion) {
         device_witness: None,
         nonce: 42,
         fee: 100,
+        pub_key: *vk.as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -105,6 +106,7 @@ fn bench_transaction_hash(c: &mut Criterion) {
         device_witness: None,
         nonce: 0,
         fee: 10,
+        pub_key: *vk.as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 

@@ -21,6 +21,8 @@ pub struct BlockHeader {
     pub timestamp: u64,
     /// Address of the block proposer/validator.
     pub proposer: Address,
+    /// Ed25519 public key of the proposer (for signature verification).
+    pub proposer_pubkey: [u8; 32],
     /// Ed25519 signature of the block header hash by the proposer.
     #[serde(with = "BigArray")]
     pub signature: [u8; 64],
@@ -47,6 +49,39 @@ impl BlockHeader {
         let hash = self.hash();
         let sig = Signature::from_bytes(&self.signature);
         verifying_key.verify(hash.as_bytes(), &sig).is_ok()
+    }
+
+    /// Verify the block header signature using the embedded proposer pubkey.
+    /// Returns true if the pubkey matches the proposer address and the signature is valid.
+    /// Genesis blocks (block_number == 0) with zero signatures are exempt.
+    pub fn verify_proposer(&self) -> bool {
+        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+
+        // Genesis block with zero signature is exempt
+        if self.block_number == 0 && self.signature == [0u8; 64] {
+            return true;
+        }
+
+        // Reject zero pubkey
+        if self.proposer_pubkey == [0u8; 32] {
+            return false;
+        }
+
+        // Parse the verifying key
+        let vk = match VerifyingKey::from_bytes(&self.proposer_pubkey) {
+            Ok(vk) => vk,
+            Err(_) => return false,
+        };
+
+        // Verify pubkey matches proposer address
+        if Address::from_pubkey(&vk) != self.proposer {
+            return false;
+        }
+
+        // Verify signature over block header hash
+        let hash = self.hash();
+        let sig = Signature::from_bytes(&self.signature);
+        vk.verify(hash.as_bytes(), &sig).is_ok()
     }
 }
 
@@ -105,6 +140,7 @@ impl Block {
             transactions_root: Hash::ZERO,
             timestamp,
             proposer,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         };
         Block {
@@ -114,10 +150,7 @@ impl Block {
     }
 
     /// Create a genesis block signed by the given key.
-    pub fn signed_genesis(
-        signing_key: &ed25519_dalek::SigningKey,
-        timestamp: u64,
-    ) -> Self {
+    pub fn signed_genesis(signing_key: &ed25519_dalek::SigningKey, timestamp: u64) -> Self {
         use crate::crypto;
 
         let verifying_key = signing_key.verifying_key();

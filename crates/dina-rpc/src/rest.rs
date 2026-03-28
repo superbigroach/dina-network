@@ -16,6 +16,7 @@ use tracing::info;
 
 use dina_core::transaction::Transaction;
 use dina_core::types::Address;
+use dina_monitoring::PrometheusMetrics;
 
 use crate::jsonrpc::{block_to_info, DeviceInfo, NodeState};
 
@@ -26,6 +27,13 @@ use crate::jsonrpc::{block_to_info, DeviceInfo, NodeState};
 /// Application state shared across all REST handlers.
 ///
 /// Wraps `NodeState` together with faucet rate-limit tracking.
+/// Faucet global rate-limit window state, protected by a single mutex to
+/// prevent TOCTOU races between checking and resetting the window.
+pub struct FaucetWindow {
+    pub start: u64,
+    pub count: u64,
+}
+
 pub struct RestAppState {
     pub node: NodeState,
     /// Rate limiter: maps address bytes to the last faucet request time.
@@ -35,10 +43,12 @@ pub struct RestAppState {
     pub faucet_global_count: AtomicU64,
     /// Total micro-USDC minted by the faucet (all-time).
     pub faucet_total_minted: AtomicU64,
-    /// Timestamp (epoch seconds) of the start of the current rate-limit window.
-    pub faucet_window_start: AtomicU64,
-    /// Number of faucet requests in the current 60-second window.
-    pub faucet_window_count: AtomicU64,
+    /// C-2: Global per-minute rate limit window, mutex-guarded to avoid race conditions.
+    pub faucet_window: Mutex<FaucetWindow>,
+    /// Prometheus metrics collector.
+    pub metrics: Mutex<PrometheusMetrics>,
+    /// Node start time for uptime tracking.
+    pub started_at: Instant,
 }
 
 pub type AppState = Arc<RestAppState>;
@@ -121,10 +131,7 @@ async fn get_balance_handler(
     };
 
     let accounts = state.node.accounts.read().await;
-    let balance = accounts
-        .get_account(&addr)
-        .map(|a| a.balance)
-        .unwrap_or(0);
+    let balance = accounts.get_account(&addr).map(|a| a.balance).unwrap_or(0);
 
     (
         StatusCode::OK,
@@ -151,7 +158,10 @@ async fn get_block_handler(
         }
     };
     match blocks.get(idx) {
-        Some(block) => (StatusCode::OK, Json(serde_json::to_value(block_to_info(block)).unwrap())),
+        Some(block) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(block_to_info(block)).unwrap()),
+        ),
         None => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": format!("block {height} not found") })),
@@ -162,7 +172,10 @@ async fn get_block_handler(
 async fn get_latest_block_handler(State(state): State<AppState>) -> impl IntoResponse {
     let blocks = state.node.blocks.read().await;
     match blocks.last() {
-        Some(block) => (StatusCode::OK, Json(serde_json::to_value(block_to_info(block)).unwrap())),
+        Some(block) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(block_to_info(block)).unwrap()),
+        ),
         None => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": "no blocks in chain" })),
@@ -208,14 +221,16 @@ async fn submit_transaction_handler(
         }
     }
 
-    // L-6: Pre-validate signature structure before indexing.
+    // C-1: Full Ed25519 signature verification before accepting into mempool.
+    // Coinbase/faucet transactions (from zero address) are exempt.
     {
-        let sig = tx.signature_bytes();
         let sender = tx.sender();
-        if sig == [0u8; 64] && sender != Address([0u8; 32]) {
+        if sender != Address([0u8; 32]) && !tx.verify_signature() {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": "invalid zero signature" })),
+                Json(
+                    serde_json::json!({ "error": "invalid signature: Ed25519 verification failed" }),
+                ),
             );
         }
     }
@@ -306,20 +321,20 @@ async fn faucet_handler(
         );
     }
 
-    // C-2: Check global per-minute rate limit.
+    // C-2: Check global per-minute rate limit (mutex-guarded to prevent race).
     {
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let window_start = state.faucet_window_start.load(Ordering::Relaxed);
-        if now_secs - window_start >= 60 {
+        let mut window = state.faucet_window.lock().await;
+        if now_secs - window.start >= 60 {
             // Start a new window.
-            state.faucet_window_start.store(now_secs, Ordering::Relaxed);
-            state.faucet_window_count.store(1, Ordering::Relaxed);
+            window.start = now_secs;
+            window.count = 1;
         } else {
-            let count = state.faucet_window_count.fetch_add(1, Ordering::Relaxed) + 1;
-            if count > FAUCET_MAX_PER_MINUTE {
+            window.count += 1;
+            if window.count > FAUCET_MAX_PER_MINUTE {
                 return (
                     StatusCode::TOO_MANY_REQUESTS,
                     Json(serde_json::json!({
@@ -366,13 +381,14 @@ async fn faucet_handler(
     // We use a Transfer from the zero address (coinbase) with no signature.
     {
         let faucet_tx = Transaction::Transfer {
-            from: Address([0u8; 32]),  // coinbase / faucet address
+            from: Address([0u8; 32]), // coinbase / faucet address
             to: addr,
             amount: FAUCET_AMOUNT,
             memo: None,
             device_witness: None,
             nonce: 0,
             fee: 0,
+            pub_key: [0u8; 32], // coinbase has no real key
             signature: dina_core::transaction::Sig64([0u8; 64]),
         };
         let mut pool = state.node.tx_pool.write().await;
@@ -380,7 +396,9 @@ async fn faucet_handler(
     }
 
     // C-2: Track total minted amount.
-    state.faucet_total_minted.fetch_add(FAUCET_AMOUNT, Ordering::Relaxed);
+    state
+        .faucet_total_minted
+        .fetch_add(FAUCET_AMOUNT, Ordering::Relaxed);
     state.faucet_global_count.fetch_add(1, Ordering::Relaxed);
 
     info!(%addr, amount = FAUCET_AMOUNT, "faucet dispensed");
@@ -396,6 +414,76 @@ async fn faucet_handler(
 }
 
 // ---------------------------------------------------------------------------
+// Prometheus metrics endpoint
+// ---------------------------------------------------------------------------
+
+async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let blocks = state.node.blocks.read().await;
+    let height = blocks.len().saturating_sub(1) as u64;
+    let tx_pool = state.node.tx_pool.read().await;
+    let peers = *state.node.peer_count.read().await;
+    drop(blocks);
+
+    let mut metrics = state.metrics.lock().await;
+    metrics.set_gauge("dina_block_height", height as f64, &[]);
+    metrics.set_gauge("dina_peer_count", peers as f64, &[]);
+    metrics.set_gauge("dina_mempool_size", tx_pool.len() as f64, &[]);
+    metrics.set_gauge(
+        "dina_uptime_seconds",
+        state.started_at.elapsed().as_secs() as f64,
+        &[],
+    );
+
+    let body = metrics.render();
+    (
+        StatusCode::OK,
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        body,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Detailed health endpoint
+// ---------------------------------------------------------------------------
+
+async fn health_detailed_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let blocks = state.node.blocks.read().await;
+    let height = blocks.len().saturating_sub(1) as u64;
+    let latest_timestamp = blocks.last().map(|b| b.header.timestamp).unwrap_or(0);
+    drop(blocks);
+
+    let peers = *state.node.peer_count.read().await;
+    let tx_pool_size = state.node.tx_pool.read().await.len();
+    let uptime = state.started_at.elapsed().as_secs();
+
+    let now = chrono::Utc::now().timestamp() as u64;
+    let block_age = now.saturating_sub(latest_timestamp);
+    // Consider unhealthy if last block is older than 5 minutes
+    let consensus_ok = block_age < 300;
+    let overall = if consensus_ok { "healthy" } else { "degraded" };
+
+    Json(serde_json::json!({
+        "status": overall,
+        "uptime_seconds": uptime,
+        "version": env!("CARGO_PKG_VERSION"),
+        "checks": {
+            "consensus": {
+                "healthy": consensus_ok,
+                "block_height": height,
+                "last_block_age_secs": block_age,
+            },
+            "network": {
+                "healthy": peers > 0,
+                "peer_count": peers,
+            },
+            "mempool": {
+                "size": tx_pool_size,
+            }
+        }
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // Router construction
 // ---------------------------------------------------------------------------
 
@@ -406,12 +494,15 @@ pub fn rest_router(state: NodeState) -> Router {
         faucet_rate_limit: Mutex::new(HashMap::new()),
         faucet_global_count: AtomicU64::new(0),
         faucet_total_minted: AtomicU64::new(0),
-        faucet_window_start: AtomicU64::new(0),
-        faucet_window_count: AtomicU64::new(0),
+        faucet_window: Mutex::new(FaucetWindow { start: 0, count: 0 }),
+        metrics: Mutex::new(PrometheusMetrics::new()),
+        started_at: Instant::now(),
     });
 
     Router::new()
         .route("/health", get(health_handler))
+        .route("/health/detailed", get(health_detailed_handler))
+        .route("/metrics", get(metrics_handler))
         .route("/v1/balance/{address}", get(get_balance_handler))
         .route("/v1/block/latest", get(get_latest_block_handler))
         .route("/v1/block/{height}", get(get_block_handler))
@@ -423,8 +514,10 @@ pub fn rest_router(state: NodeState) -> Router {
         // H-2: CORS is kept open for portal/frontend compatibility on testnet.
         // The faucet is protected by global rate limits (C-2) and per-address
         // cooldowns. For production, restrict origins to known frontends.
-        .layer(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
 }

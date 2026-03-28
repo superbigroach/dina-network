@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 dina-core = { path = "../dina-core" }
+dina-monitoring = { path = "../dina-monitoring" }
 axum = { workspace = true }
 jsonrpsee = { workspace = true }
 tokio = { workspace = true }
@@ -15,3 +16,4 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
+chrono = { workspace = true }

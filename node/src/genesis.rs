@@ -43,6 +43,7 @@ pub fn create_genesis_block(config: &GenesisConfig) -> Block {
         transactions_root: Hash::ZERO,
         state_root,
         proposer: Address::ZERO,
+        proposer_pubkey: [0u8; 32],
         signature: [0u8; 64],
     };
 

@@ -84,7 +84,11 @@ impl AccountState {
         }
 
         // Check for receiver overflow before mutating state.
-        let receiver_balance = self.accounts.get(to).unwrap().balance;
+        let receiver_balance = self
+            .accounts
+            .get(to)
+            .ok_or_else(|| DinaError::AccountNotFound(to.to_string()))?
+            .balance;
         if receiver_balance.checked_add(amount).is_none() {
             return Err(DinaError::Custom(format!(
                 "receiver balance overflow: {} + {} exceeds u64::MAX",
@@ -92,8 +96,14 @@ impl AccountState {
             )));
         }
 
-        self.accounts.get_mut(from).unwrap().balance -= amount;
-        self.accounts.get_mut(to).unwrap().balance += amount;
+        self.accounts
+            .get_mut(from)
+            .ok_or_else(|| DinaError::AccountNotFound(from.to_string()))?
+            .balance -= amount;
+        self.accounts
+            .get_mut(to)
+            .ok_or_else(|| DinaError::AccountNotFound(to.to_string()))?
+            .balance += amount;
 
         Ok(())
     }
@@ -126,12 +136,10 @@ impl AccountState {
             .get_mut(address)
             .ok_or_else(|| DinaError::AccountNotFound(address.to_string()))?;
 
-        account.nonce = account.nonce.checked_add(1).ok_or_else(|| {
-            DinaError::Custom(format!(
-                "nonce overflow for account {}",
-                address
-            ))
-        })?;
+        account.nonce = account
+            .nonce
+            .checked_add(1)
+            .ok_or_else(|| DinaError::Custom(format!("nonce overflow for account {}", address)))?;
         Ok(())
     }
 

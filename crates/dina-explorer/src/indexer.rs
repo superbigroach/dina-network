@@ -18,6 +18,9 @@ pub struct AccountStats {
 /// Maintains mappings from addresses and block heights to transaction hashes,
 /// tracks per-account statistics, validator proposal counts, device registrations,
 /// and rolling TPS windows.
+/// Maximum number of blocks to keep indexed in the explorer.
+const MAX_INDEXED_BLOCKS: u64 = 10_000;
+
 pub struct ExplorerIndexer {
     /// address -> list of tx hashes involving that address
     tx_by_address: BTreeMap<Address, Vec<Hash>>,
@@ -105,10 +108,7 @@ impl ExplorerIndexer {
             // Index addresses involved in this transaction
             let addresses = Self::extract_addresses(tx);
             for addr in &addresses {
-                self.tx_by_address
-                    .entry(*addr)
-                    .or_default()
-                    .push(tx_hash);
+                self.tx_by_address.entry(*addr).or_default().push(tx_hash);
                 self.touch_account(*addr, height);
             }
 
@@ -137,6 +137,31 @@ impl ExplorerIndexer {
         // Prune old TPS data (keep last 2 hours)
         let cutoff = timestamp.saturating_sub(7200);
         self.tx_counts_by_second = self.tx_counts_by_second.split_off(&cutoff);
+
+        // Prune old indexed data when we exceed MAX_INDEXED_BLOCKS.
+        if self.total_blocks > MAX_INDEXED_BLOCKS {
+            let prune_below = height.saturating_sub(MAX_INDEXED_BLOCKS);
+            // Remove old block entries and their cached transactions.
+            let old_heights: Vec<u64> = self
+                .tx_by_block
+                .range(..prune_below)
+                .map(|(h, _)| *h)
+                .collect();
+            for old_h in &old_heights {
+                if let Some(tx_hashes) = self.tx_by_block.remove(old_h) {
+                    for tx_hash in &tx_hashes {
+                        self.tx_cache.remove(tx_hash);
+                    }
+                    // Clean up per-address indexes for pruned tx hashes.
+                    for tx_hash in &tx_hashes {
+                        self.tx_by_address.retain(|_, hashes| {
+                            hashes.retain(|h| h != tx_hash);
+                            !hashes.is_empty()
+                        });
+                    }
+                }
+            }
+        }
     }
 
     /// Get all transaction hashes involving a given address.
@@ -274,6 +299,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp,
                 proposer: Address([0x01; 32]),
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: txs,
@@ -289,6 +315,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         }
     }

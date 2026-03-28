@@ -83,10 +83,7 @@ impl CognitumDevice {
         Self {
             pubkey: attestation.pubkey,
             device_id: id_hash.0,
-            firmware_version: format!(
-                "fw-{}",
-                hex::encode(&attestation.firmware_hash.0[..4])
-            ),
+            firmware_version: format!("fw-{}", hex::encode(&attestation.firmware_hash.0[..4])),
             witness_root: attestation.witness_root.0,
         }
     }
@@ -117,6 +114,7 @@ impl CognitumDevice {
             },
             nonce: 0,
             fee: 100,
+            pub_key: [0u8; 32], // Caller must set this to the owner's Ed25519 public key before signing.
             signature: Sig64([0u8; 64]),
         }
     }

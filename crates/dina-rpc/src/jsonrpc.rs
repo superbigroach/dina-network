@@ -11,12 +11,12 @@ use serde::Serialize;
 use tokio::sync::RwLock;
 use tracing::info;
 
+use dina_core::account::AccountState;
 use dina_core::block::Block;
 use dina_core::device::DeviceIdentity;
 use dina_core::fees::FeeSchedule;
 use dina_core::transaction::Transaction;
 use dina_core::types::{Address, Hash};
-use dina_core::account::AccountState;
 
 use crate::gas_estimator::{GasEstimate, GasEstimator, GasPriceInfo};
 use crate::tx_pool::TxPoolStatus;
@@ -163,6 +163,10 @@ pub trait DinaRpc {
 // Shared node state
 // ---------------------------------------------------------------------------
 
+/// Maximum number of blocks to keep in the in-memory cache.
+/// When exceeded, the oldest blocks and their index entries are pruned.
+const MAX_CACHED_BLOCKS: usize = 10_000;
+
 /// Shared state backing the RPC server. Holds the chain, accounts, mempool,
 /// and device registry. All fields are behind `Arc<RwLock<>>` so they can be
 /// read and written from multiple async tasks concurrently.
@@ -199,6 +203,37 @@ impl NodeState {
             peer_count: Arc::new(RwLock::new(0)),
             chain_id,
             fee_schedule: FeeSchedule::default_testnet(),
+        }
+    }
+
+    /// Prune old blocks from the in-memory cache when the cache exceeds
+    /// `MAX_CACHED_BLOCKS`. Removes the oldest blocks and their entries
+    /// from `block_index` and `tx_index`.
+    pub async fn prune_old_blocks(&self) {
+        let mut blocks = self.blocks.write().await;
+        if blocks.len() <= MAX_CACHED_BLOCKS {
+            return;
+        }
+
+        let to_remove = blocks.len() - MAX_CACHED_BLOCKS;
+        let removed_blocks: Vec<Block> = blocks.drain(..to_remove).collect();
+
+        // Update block_index: remove pruned entries and adjust remaining positions.
+        let mut block_idx = self.block_index.write().await;
+        let mut tx_idx = self.tx_index.write().await;
+
+        for block in &removed_blocks {
+            block_idx.remove(&block.hash());
+            // Remove transactions belonging to pruned blocks from tx_index.
+            for tx in &block.transactions {
+                tx_idx.remove(&tx.hash());
+            }
+        }
+
+        // Re-index remaining blocks since positions shifted.
+        block_idx.clear();
+        for (pos, block) in blocks.iter().enumerate() {
+            block_idx.insert(block.hash(), pos);
         }
     }
 }
@@ -279,12 +314,15 @@ impl DinaRpcServer for DinaRpcServerImpl {
             }
         }
 
-        // L-6: Pre-validate signature structure before accepting.
+        // C-1: Full Ed25519 signature verification before accepting into mempool.
+        // Coinbase/faucet transactions (from zero address) are exempt.
         {
-            let sig = tx.signature_bytes();
             let sender = tx.sender();
-            if sig == [0u8; 64] && sender != Address([0u8; 32]) {
-                return Err(rpc_err(ERR_INVALID_PARAMS, "invalid zero signature"));
+            if sender != Address([0u8; 32]) && !tx.verify_signature() {
+                return Err(rpc_err(
+                    ERR_INVALID_PARAMS,
+                    "invalid signature: Ed25519 verification failed",
+                ));
             }
         }
 
@@ -309,10 +347,7 @@ impl DinaRpcServer for DinaRpcServerImpl {
             .map_err(|e| rpc_err(ERR_INVALID_PARAMS, format!("invalid address: {e}")))?;
 
         let accounts = self.state.accounts.read().await;
-        let balance = accounts
-            .get_account(&addr)
-            .map(|a| a.balance)
-            .unwrap_or(0);
+        let balance = accounts.get_account(&addr).map(|a| a.balance).unwrap_or(0);
 
         Ok(balance)
     }
@@ -337,8 +372,12 @@ impl DinaRpcServer for DinaRpcServerImpl {
     async fn get_block(&self, height: u64) -> RpcResult<BlockInfo> {
         let blocks = self.state.blocks.read().await;
         // L-3: Safe cast from u64 to usize to avoid truncation on 32-bit platforms.
-        let idx = usize::try_from(height)
-            .map_err(|_| rpc_err(ERR_INVALID_PARAMS, format!("block height {height} out of range")))?;
+        let idx = usize::try_from(height).map_err(|_| {
+            rpc_err(
+                ERR_INVALID_PARAMS,
+                format!("block height {height} out of range"),
+            )
+        })?;
         let block = blocks
             .get(idx)
             .ok_or_else(|| rpc_err(ERR_NOT_FOUND, format!("block {height} not found")))?;
@@ -532,7 +571,13 @@ pub async fn start_jsonrpc_server(
     state: NodeState,
     bind_addr: &str,
 ) -> Result<jsonrpsee::server::ServerHandle, Box<dyn std::error::Error + Send + Sync>> {
+    let server_config = jsonrpsee::server::ServerConfig::builder()
+        .max_request_body_size(2 * 1024 * 1024) // 2 MB
+        .max_response_body_size(10 * 1024 * 1024) // 10 MB
+        .max_connections(200)
+        .build();
     let server = ServerBuilder::default()
+        .set_config(server_config)
         .build(bind_addr)
         .await?;
 

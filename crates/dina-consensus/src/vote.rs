@@ -126,7 +126,8 @@ impl Vote {
                 return false;
             }
         };
-        let sign_bytes = Self::sign_bytes(self.height, self.round, &self.block_hash, self.vote_type);
+        let sign_bytes =
+            Self::sign_bytes(self.height, self.round, &self.block_hash, self.vote_type);
         let signature = Signature::from_bytes(&self.signature);
         verifying_key.verify(&sign_bytes, &signature).is_ok()
     }
@@ -167,7 +168,9 @@ impl VoteSet {
     /// Validates the vote's height, round, type, and signature before accepting.
     pub fn add_vote(&mut self, vote: Vote) -> bool {
         // Reject votes for wrong height/round/type
-        if vote.height != self.height || vote.round != self.round || vote.vote_type != self.vote_type
+        if vote.height != self.height
+            || vote.round != self.round
+            || vote.vote_type != self.vote_type
         {
             debug!(
                 expected_height = self.height,
@@ -179,15 +182,29 @@ impl VoteSet {
             return false;
         }
 
-        // Reject duplicate votes from the same voter
-        if self.votes.contains_key(&vote.voter) {
-            debug!(voter = hex::encode(vote.voter), "Rejected duplicate vote");
+        // Reject duplicate votes from the same voter; detect equivocation
+        if let Some(existing_vote) = self.votes.get(&vote.voter) {
+            if existing_vote.block_hash != vote.block_hash {
+                warn!(
+                    voter = hex::encode(vote.voter),
+                    height = vote.height,
+                    round = vote.round,
+                    existing_block = hex::encode(existing_vote.block_hash.as_bytes()),
+                    new_block = hex::encode(vote.block_hash.as_bytes()),
+                    "Equivocation detected: validator voted for different blocks in the same round"
+                );
+            } else {
+                debug!(voter = hex::encode(vote.voter), "Rejected duplicate vote");
+            }
             return false;
         }
 
         // Verify signature
         if !vote.verify_signature() {
-            warn!(voter = hex::encode(vote.voter), "Rejected vote with invalid signature");
+            warn!(
+                voter = hex::encode(vote.voter),
+                "Rejected vote with invalid signature"
+            );
             return false;
         }
 
@@ -260,20 +277,20 @@ impl CommitCertificate {
         })
     }
 
-    /// Verify all vote signatures in the certificate and confirm quorum.
-    pub fn verify(&self, total_validators: usize) -> bool {
+    /// Verify all vote signatures in the certificate, confirm quorum, and validate
+    /// that every voter is a member of the provided validator set.
+    pub fn verify(&self, total_validators: usize, validator_set: &[[u8; 32]]) -> bool {
         let quorum = (total_validators * 2).div_ceil(3);
 
         if self.votes.len() < quorum {
             warn!(
                 votes = self.votes.len(),
-                quorum,
-                "CommitCertificate has insufficient votes"
+                quorum, "CommitCertificate has insufficient votes"
             );
             return false;
         }
 
-        // Verify all signatures and that votes are for the correct block hash
+        // Verify all signatures, vote correctness, and validator membership
         for vote in &self.votes {
             if vote.vote_type != VoteType::Precommit {
                 warn!("CommitCertificate contains non-precommit vote");
@@ -283,8 +300,18 @@ impl CommitCertificate {
                 warn!("CommitCertificate contains vote for wrong block hash");
                 return false;
             }
+            if !validator_set.contains(&vote.voter) {
+                warn!(
+                    voter = hex::encode(vote.voter),
+                    "CommitCertificate contains vote from non-validator"
+                );
+                return false;
+            }
             if !vote.verify_signature() {
-                warn!(voter = hex::encode(vote.voter), "CommitCertificate vote has invalid signature");
+                warn!(
+                    voter = hex::encode(vote.voter),
+                    "CommitCertificate vote has invalid signature"
+                );
                 return false;
             }
         }

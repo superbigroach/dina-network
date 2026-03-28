@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::leader::LeaderSchedule;
 use crate::view_change::{ViewChange, ViewChangeCollector};
@@ -158,13 +158,18 @@ impl TurboBFT {
     /// The loop checks for timeouts and, if this node is the leader for the
     /// current round, waits for transactions before proposing.
     pub async fn start(&mut self, mut tx_rx: mpsc::UnboundedReceiver<Vec<Transaction>>) {
-        info!(height = self.state.height, "Starting TurboBFT consensus loop");
+        info!(
+            height = self.state.height,
+            "Starting TurboBFT consensus loop"
+        );
 
         loop {
             let timeout_duration = Duration::from_millis(self.config.timeout_ms);
             let elapsed = self.round_start.elapsed();
 
-            if self.state.step == ConsensusStep::Propose && self.is_leader(self.state.height, self.state.round) {
+            if self.state.step == ConsensusStep::Propose
+                && self.is_leader(self.state.height, self.state.round)
+            {
                 // We are the leader: wait for transactions (with timeout)
                 let remaining = timeout_duration.saturating_sub(elapsed);
                 tokio::select! {
@@ -175,7 +180,9 @@ impl TurboBFT {
                             round = proposal.round,
                             "Created and broadcasting proposal"
                         );
-                        let _ = self.output_tx.send(ConsensusOutput::BroadcastProposal(proposal.clone()));
+                        if self.output_tx.send(ConsensusOutput::BroadcastProposal(proposal.clone())).is_err() {
+                            warn!(height = proposal.height, round = proposal.round, "Failed to send proposal to output channel — receiver dropped");
+                        }
                         // Process our own proposal
                         self.on_proposal(proposal);
                     }
@@ -193,7 +200,8 @@ impl TurboBFT {
                 self.on_timeout();
             } else {
                 // Sleep briefly before checking again (avoid busy loop)
-                let check_interval = Duration::from_millis(self.config.block_time_ms / 10).min(Duration::from_millis(100));
+                let check_interval = Duration::from_millis(self.config.block_time_ms / 10)
+                    .min(Duration::from_millis(100));
                 tokio::time::sleep(check_interval).await;
             }
 
@@ -231,8 +239,11 @@ impl TurboBFT {
         }
 
         // Verify the proposer is the expected leader for this round
-        let expected_leader =
-            LeaderSchedule::leader_for(self.state.height, self.state.round, &self.config.validator_keys);
+        let expected_leader = LeaderSchedule::leader_for(
+            self.state.height,
+            self.state.round,
+            &self.config.validator_keys,
+        );
         if proposal.proposer != expected_leader {
             warn!(
                 expected = hex::encode(expected_leader),
@@ -288,7 +299,17 @@ impl TurboBFT {
             &self.signing_key,
         );
 
-        let _ = self.output_tx.send(ConsensusOutput::BroadcastVote(vote.clone()));
+        if self
+            .output_tx
+            .send(ConsensusOutput::BroadcastVote(vote.clone()))
+            .is_err()
+        {
+            warn!(
+                height = self.state.height,
+                round = self.state.round,
+                "Failed to send prevote to output channel — receiver dropped"
+            );
+        }
 
         // Process our own vote
         self.on_vote(vote);
@@ -376,7 +397,17 @@ impl TurboBFT {
                 &self.signing_key,
             );
 
-            let _ = self.output_tx.send(ConsensusOutput::BroadcastVote(precommit.clone()));
+            if self
+                .output_tx
+                .send(ConsensusOutput::BroadcastVote(precommit.clone()))
+                .is_err()
+            {
+                warn!(
+                    height = self.state.height,
+                    round = self.state.round,
+                    "Failed to send precommit to output channel — receiver dropped"
+                );
+            }
 
             // Process our own precommit
             self.handle_precommit(precommit);
@@ -413,11 +444,20 @@ impl TurboBFT {
             {
                 // Emit committed block
                 if let Some(ref proposal) = self.current_proposal {
-                    if proposal.block_hash() == block_hash {
-                        let _ = self.output_tx.send(ConsensusOutput::BlockCommitted {
-                            block: proposal.block.clone(),
-                            certificate,
-                        });
+                    if proposal.block_hash() == block_hash
+                        && self
+                            .output_tx
+                            .send(ConsensusOutput::BlockCommitted {
+                                block: proposal.block.clone(),
+                                certificate,
+                            })
+                            .is_err()
+                    {
+                        error!(
+                            height = self.state.height,
+                            round = self.state.round,
+                            "CRITICAL: Failed to send committed block to output channel — receiver dropped. Block may be lost!"
+                        );
                     }
                 }
             }
@@ -448,7 +488,17 @@ impl TurboBFT {
 
         // Create and broadcast view change message
         let vc = ViewChange::new(self.state.height, old_round, new_round, &self.signing_key);
-        let _ = self.output_tx.send(ConsensusOutput::BroadcastViewChange(vc.clone()));
+        if self
+            .output_tx
+            .send(ConsensusOutput::BroadcastViewChange(vc.clone()))
+            .is_err()
+        {
+            warn!(
+                height = self.state.height,
+                round = self.state.round,
+                "Failed to send view change to output channel — receiver dropped"
+            );
+        }
 
         // Process our own view change
         self.on_view_change(vc);
@@ -459,8 +509,7 @@ impl TurboBFT {
         if let Some(new_round) = self.view_change_collector.add_view_change(vc) {
             info!(
                 height = self.state.height,
-                new_round,
-                "View change triggered — advancing to new round"
+                new_round, "View change triggered — advancing to new round"
             );
             self.advance_round(new_round);
         }
@@ -472,15 +521,17 @@ impl TurboBFT {
     /// signs it, and returns the proposal.
     pub fn create_proposal(&self, transactions: Vec<Transaction>) -> Proposal {
         // Compute a block hash from the transactions and height
-        let _block_hash = self.compute_block_hash(self.state.height, self.state.round, &transactions);
+        let _block_hash =
+            self.compute_block_hash(self.state.height, self.state.round, &transactions);
 
         let header = BlockHeader {
             block_number: self.state.height,
             timestamp: chrono::Utc::now().timestamp() as u64,
             parent_hash: Hash::ZERO, // Filled by block storage layer
-            state_root: Hash::ZERO,     // Filled after execution
+            state_root: Hash::ZERO,  // Filled after execution
             transactions_root: self.compute_transactions_root(&transactions),
             proposer: dina_core::Address::from_pubkey(&self.signing_key.verifying_key()),
+            proposer_pubkey: *self.signing_key.verifying_key().as_bytes(),
             signature: [0u8; 64],
         };
 
@@ -489,7 +540,12 @@ impl TurboBFT {
             transactions: transactions.clone(),
         };
 
-        Proposal::new(self.state.height, self.state.round, block, &self.signing_key)
+        Proposal::new(
+            self.state.height,
+            self.state.round,
+            block,
+            &self.signing_key,
+        )
     }
 
     /// Check whether the given validator is the leader for the specified height and round.
@@ -578,12 +634,7 @@ impl TurboBFT {
     }
 
     /// Compute a block hash from height, round, and transactions.
-    fn compute_block_hash(
-        &self,
-        height: u64,
-        round: u32,
-        transactions: &[Transaction],
-    ) -> Hash {
+    fn compute_block_hash(&self, height: u64, round: u32, transactions: &[Transaction]) -> Hash {
         let mut hasher = Sha256::new();
         hasher.update(b"BLOCK");
         hasher.update(height.to_le_bytes());

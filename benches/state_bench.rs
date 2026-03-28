@@ -35,6 +35,7 @@ fn make_signed_transfer(
         device_witness: None,
         nonce,
         fee,
+        pub_key: *vk.as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -60,6 +61,7 @@ fn make_block(proposer: Address, txs: Vec<Transaction>, block_number: u64) -> Bl
             transactions_root: Hash::ZERO,
             timestamp: 1_700_000_000 + block_number,
             proposer,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         },
         transactions: txs,
@@ -221,6 +223,7 @@ fn bench_redb_block(c: &mut Criterion) {
                     transactions_root: Hash::ZERO,
                     timestamp: 1_700_000_000 + height,
                     proposer: Address::ZERO,
+                    proposer_pubkey: [0u8; 32],
                     signature: [0u8; 64],
                 },
                 transactions: vec![],
@@ -242,6 +245,7 @@ fn bench_redb_block(c: &mut Criterion) {
                     transactions_root: Hash::ZERO,
                     timestamp: 1_700_000_000 + h,
                     proposer: Address::ZERO,
+                    proposer_pubkey: [0u8; 32],
                     signature: [0u8; 64],
                 },
                 transactions: vec![],

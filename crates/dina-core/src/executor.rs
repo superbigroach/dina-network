@@ -83,157 +83,221 @@ fn register_inline_host_functions(
     linker: &mut Linker<InlineWasmHostState>,
 ) -> Result<(), wasmtime::Error> {
     // __host_caller(out_ptr: i32) -> i32
-    linker.func_wrap("env", "__host_caller", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, out_ptr: i32| -> i32 {
-        let addr_bytes = caller.data().caller;
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return -1,
-        };
-        if memory.write(&mut caller, out_ptr as usize, &addr_bytes).is_err() {
-            return -1;
-        }
-        out_ptr
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_caller",
+        |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, out_ptr: i32| -> i32 {
+            let addr_bytes = caller.data().caller;
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return -1,
+            };
+            if memory
+                .write(&mut caller, out_ptr as usize, &addr_bytes)
+                .is_err()
+            {
+                return -1;
+            }
+            out_ptr
+        },
+    )?;
 
     // __host_block_time() -> i64
-    linker.func_wrap("env", "__host_block_time", |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 {
-        0i64
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_block_time",
+        |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 { 0i64 },
+    )?;
 
     // __host_block_height() -> i64
-    linker.func_wrap("env", "__host_block_height", |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 {
-        0i64
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_block_height",
+        |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 { 0i64 },
+    )?;
 
     // __host_self_balance() -> i64
-    linker.func_wrap("env", "__host_self_balance", |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 {
-        0i64
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_self_balance",
+        |_caller: wasmtime::Caller<'_, InlineWasmHostState>| -> i64 { 0i64 },
+    )?;
 
     // __host_transfer(to_ptr: i32, amount: i64) -> i32
-    linker.func_wrap("env", "__host_transfer", |_caller: wasmtime::Caller<'_, InlineWasmHostState>, _to_ptr: i32, _amount: i64| -> i32 {
-        1 // not supported in inline executor
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_transfer",
+        |_caller: wasmtime::Caller<'_, InlineWasmHostState>, _to_ptr: i32, _amount: i64| -> i32 {
+            1 // not supported in inline executor
+        },
+    )?;
 
     // __host_storage_get(key_ptr, key_len) -> i64
-    linker.func_wrap("env", "__host_storage_get", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, key_ptr: i32, key_len: i32| -> i64 {
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return 0,
-        };
-        let data = memory.data(&caller);
-        let start = key_ptr as usize;
-        let end = start + key_len as usize;
-        if end > data.len() { return 0; }
-        let key = data[start..end].to_vec();
+    linker.func_wrap(
+        "env",
+        "__host_storage_get",
+        |mut caller: wasmtime::Caller<'_, InlineWasmHostState>,
+         key_ptr: i32,
+         key_len: i32|
+         -> i64 {
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return 0,
+            };
+            let data = memory.data(&caller);
+            let start = key_ptr as usize;
+            let end = start + key_len as usize;
+            if end > data.len() {
+                return 0;
+            }
+            let key = data[start..end].to_vec();
 
-        let value = match caller.data().storage.get(&key) {
-            Some(v) => v.clone(),
-            None => return 0,
-        };
+            let value = match caller.data().storage.get(&key) {
+                Some(v) => v.clone(),
+                None => return 0,
+            };
 
-        let val_len = value.len() as u32;
-        // Allocate via __alloc
-        let alloc_fn = match caller.get_export("__alloc").and_then(|e| e.into_func()) {
-            Some(f) => f,
-            None => return 0,
-        };
-        let typed = match alloc_fn.typed::<i32, i32>(&caller) {
-            Ok(t) => t,
-            Err(_) => return 0,
-        };
-        let val_ptr = match typed.call(&mut caller, val_len as i32) {
-            Ok(p) => p as u32,
-            Err(_) => return 0,
-        };
+            let val_len = value.len() as u32;
+            // Allocate via __alloc
+            let alloc_fn = match caller.get_export("__alloc").and_then(|e| e.into_func()) {
+                Some(f) => f,
+                None => return 0,
+            };
+            let typed = match alloc_fn.typed::<i32, i32>(&caller) {
+                Ok(t) => t,
+                Err(_) => return 0,
+            };
+            let val_ptr = match typed.call(&mut caller, val_len as i32) {
+                Ok(p) => p as u32,
+                Err(_) => return 0,
+            };
 
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return 0,
-        };
-        if memory.write(&mut caller, val_ptr as usize, &value).is_err() {
-            return 0;
-        }
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return 0,
+            };
+            if memory.write(&mut caller, val_ptr as usize, &value).is_err() {
+                return 0;
+            }
 
-        ((val_ptr as i64) << 32) | (val_len as i64)
-    })?;
+            ((val_ptr as i64) << 32) | (val_len as i64)
+        },
+    )?;
 
     // __host_storage_set(key_ptr, key_len, val_ptr, val_len)
-    linker.func_wrap("env", "__host_storage_set", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32| {
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return,
-        };
-        let data = memory.data(&caller);
-        let ks = key_ptr as usize;
-        let ke = ks + key_len as usize;
-        let vs = val_ptr as usize;
-        let ve = vs + val_len as usize;
-        if ke > data.len() || ve > data.len() { return; }
-        let key = data[ks..ke].to_vec();
-        let value = data[vs..ve].to_vec();
-        caller.data_mut().storage.insert(key, value);
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_storage_set",
+        |mut caller: wasmtime::Caller<'_, InlineWasmHostState>,
+         key_ptr: i32,
+         key_len: i32,
+         val_ptr: i32,
+         val_len: i32| {
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return,
+            };
+            let data = memory.data(&caller);
+            let ks = key_ptr as usize;
+            let ke = ks + key_len as usize;
+            let vs = val_ptr as usize;
+            let ve = vs + val_len as usize;
+            if ke > data.len() || ve > data.len() {
+                return;
+            }
+            let key = data[ks..ke].to_vec();
+            let value = data[vs..ve].to_vec();
+            caller.data_mut().storage.insert(key, value);
+        },
+    )?;
 
     // __host_emit_event(name_ptr, name_len, data_ptr, data_len)
-    linker.func_wrap("env", "__host_emit_event", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, name_ptr: i32, name_len: i32, data_ptr: i32, data_len: i32| {
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return,
-        };
-        let data = memory.data(&caller);
-        let ns = name_ptr as usize;
-        let ne = ns + name_len as usize;
-        let ds = data_ptr as usize;
-        let de = ds + data_len as usize;
-        if ne > data.len() || de > data.len() { return; }
-        let name = String::from_utf8_lossy(&data[ns..ne]).into_owned();
-        let event_data = data[ds..de].to_vec();
-        caller.data_mut().events.push((name, event_data));
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_emit_event",
+        |mut caller: wasmtime::Caller<'_, InlineWasmHostState>,
+         name_ptr: i32,
+         name_len: i32,
+         data_ptr: i32,
+         data_len: i32| {
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return,
+            };
+            let data = memory.data(&caller);
+            let ns = name_ptr as usize;
+            let ne = ns + name_len as usize;
+            let ds = data_ptr as usize;
+            let de = ds + data_len as usize;
+            if ne > data.len() || de > data.len() {
+                return;
+            }
+            let name = String::from_utf8_lossy(&data[ns..ne]).into_owned();
+            let event_data = data[ds..de].to_vec();
+            caller.data_mut().events.push((name, event_data));
+        },
+    )?;
 
     // __host_sha256(data_ptr, data_len) -> i32
-    linker.func_wrap("env", "__host_sha256", |mut caller: wasmtime::Caller<'_, InlineWasmHostState>, data_ptr: i32, data_len: i32| -> i32 {
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return 0,
-        };
-        let mem_data = memory.data(&caller);
-        let start = data_ptr as usize;
-        let end = start + data_len as usize;
-        if end > mem_data.len() { return 0; }
-        let input = mem_data[start..end].to_vec();
+    linker.func_wrap(
+        "env",
+        "__host_sha256",
+        |mut caller: wasmtime::Caller<'_, InlineWasmHostState>,
+         data_ptr: i32,
+         data_len: i32|
+         -> i32 {
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return 0,
+            };
+            let mem_data = memory.data(&caller);
+            let start = data_ptr as usize;
+            let end = start + data_len as usize;
+            if end > mem_data.len() {
+                return 0;
+            }
+            let input = mem_data[start..end].to_vec();
 
-        let hash = Sha256::digest(&input);
+            let hash = Sha256::digest(&input);
 
-        let alloc_fn = match caller.get_export("__alloc").and_then(|e| e.into_func()) {
-            Some(f) => f,
-            None => return 0,
-        };
-        let typed = match alloc_fn.typed::<i32, i32>(&caller) {
-            Ok(t) => t,
-            Err(_) => return 0,
-        };
-        let out_ptr = match typed.call(&mut caller, 32) {
-            Ok(p) => p as u32,
-            Err(_) => return 0,
-        };
+            let alloc_fn = match caller.get_export("__alloc").and_then(|e| e.into_func()) {
+                Some(f) => f,
+                None => return 0,
+            };
+            let typed = match alloc_fn.typed::<i32, i32>(&caller) {
+                Ok(t) => t,
+                Err(_) => return 0,
+            };
+            let out_ptr = match typed.call(&mut caller, 32) {
+                Ok(p) => p as u32,
+                Err(_) => return 0,
+            };
 
-        let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-            Some(m) => m,
-            None => return 0,
-        };
-        if memory.write(&mut caller, out_ptr as usize, &hash).is_err() {
-            return 0;
-        }
+            let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                Some(m) => m,
+                None => return 0,
+            };
+            if memory.write(&mut caller, out_ptr as usize, &hash).is_err() {
+                return 0;
+            }
 
-        out_ptr as i32
-    })?;
+            out_ptr as i32
+        },
+    )?;
 
     // __host_verify_ed25519(pubkey_ptr, msg_ptr, msg_len, sig_ptr) -> i32
-    linker.func_wrap("env", "__host_verify_ed25519", |_caller: wasmtime::Caller<'_, InlineWasmHostState>, _pk: i32, _msg: i32, _mlen: i32, _sig: i32| -> i32 {
-        0 // signature verification not supported in inline executor
-    })?;
+    linker.func_wrap(
+        "env",
+        "__host_verify_ed25519",
+        |_caller: wasmtime::Caller<'_, InlineWasmHostState>,
+         _pk: i32,
+         _msg: i32,
+         _mlen: i32,
+         _sig: i32|
+         -> i32 {
+            0 // signature verification not supported in inline executor
+        },
+    )?;
 
     Ok(())
 }
@@ -302,6 +366,19 @@ impl BlockExecutor {
         let fee = tx.fee();
         let sender = tx.sender();
 
+        // Phase 0: Verify Ed25519 signature before any state mutation.
+        // Coinbase/faucet transactions (from zero address) are exempt.
+        if sender != Address::ZERO && !tx.verify_signature() {
+            return TransactionReceipt {
+                tx_hash,
+                success: false,
+                gas_used: 0,
+                fee_paid: 0,
+                error: Some("invalid signature".to_string()),
+                events: vec![],
+            };
+        }
+
         // Phase 1: Deduct fee. If the sender cannot pay, the tx is dropped
         // entirely with no state changes.
         if let Err(e) = self.state.deduct_fee(&sender, fee) {
@@ -322,7 +399,16 @@ impl BlockExecutor {
         match result {
             Ok(events) => {
                 // Increment nonce on success.
-                let _ = self.state.increment_nonce(&sender);
+                if let Err(e) = self.state.increment_nonce(&sender) {
+                    return TransactionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: self.estimate_gas(tx),
+                        fee_paid: fee,
+                        error: Some(format!("nonce increment failed: {e}")),
+                        events: vec![],
+                    };
+                }
 
                 let gas_used = self.estimate_gas(tx);
                 TransactionReceipt {
@@ -381,17 +467,11 @@ impl BlockExecutor {
             });
         }
 
-        // Verify signature.
-        // Recover the verifying key from the sender address is not possible
-        // (address is a hash of the pubkey), so we require the sender account
-        // to exist. For validation purposes, we verify the signature structurally
-        // by checking it is well-formed. Full signature verification requires
-        // the public key, which is only available to the caller.
-        // For now, we check that the signature bytes are non-zero as a basic
-        // structural check. Real signature verification happens at the mempool
-        // layer where the public key is available.
-        let sig_bytes = self.extract_signature_bytes(tx);
-        if sig_bytes == [0u8; 64] {
+        // Full Ed25519 signature verification using the embedded public key.
+        // The transaction carries the sender's public key; verify_signature()
+        // checks that (a) the key derives to the sender address, and (b) the
+        // Ed25519 signature is valid over the signing payload.
+        if !tx.verify_signature() {
             return Err(DinaError::InvalidSignature);
         }
 
@@ -446,11 +526,7 @@ impl BlockExecutor {
                 let code_hash = hash_bytes(wasm_bytecode);
 
                 // Derive a deterministic contract address from deployer + nonce.
-                let deployer_nonce = self
-                    .state
-                    .get_account(from)
-                    .map(|a| a.nonce)
-                    .unwrap_or(0);
+                let deployer_nonce = self.state.get_account(from).map(|a| a.nonce).unwrap_or(0);
                 let contract_addr = {
                     let mut hasher = Sha256::new();
                     hasher.update(from.as_bytes());
@@ -494,9 +570,7 @@ impl BlockExecutor {
                 let bytecode = self
                     .contract_code
                     .get(contract)
-                    .ok_or_else(|| {
-                        DinaError::ContractNotFound(contract.to_string())
-                    })?
+                    .ok_or_else(|| DinaError::ContractNotFound(contract.to_string()))?
                     .clone();
 
                 // Load existing contract storage.
@@ -524,9 +598,7 @@ impl BlockExecutor {
             } => {
                 // Check that the device is not already registered.
                 if self.devices.contains_key(device_pubkey) {
-                    return Err(DinaError::Custom(
-                        "device already registered".to_string(),
-                    ));
+                    return Err(DinaError::Custom("device already registered".to_string()));
                 }
 
                 let device = DeviceIdentity::new(
@@ -595,9 +667,7 @@ impl BlockExecutor {
         // Allocate and write method name into guest memory.
         let alloc_fn = instance
             .get_typed_func::<i32, i32>(&mut store, "__alloc")
-            .map_err(|_| {
-                DinaError::WasmExecutionError("contract must export __alloc".into())
-            })?;
+            .map_err(|_| DinaError::WasmExecutionError("contract must export __alloc".into()))?;
 
         let memory = instance
             .get_memory(&mut store, "memory")
@@ -609,9 +679,7 @@ impl BlockExecutor {
             .map_err(|e| DinaError::WasmExecutionError(format!("alloc method failed: {e}")))?;
         memory
             .write(&mut store, method_ptr as usize, method_bytes)
-            .map_err(|e| {
-                DinaError::WasmExecutionError(format!("method write failed: {e}"))
-            })?;
+            .map_err(|e| DinaError::WasmExecutionError(format!("method write failed: {e}")))?;
 
         // Allocate and write args.
         let args_ptr = alloc_fn
@@ -620,17 +688,13 @@ impl BlockExecutor {
         if !args.is_empty() {
             memory
                 .write(&mut store, args_ptr as usize, args)
-                .map_err(|e| {
-                    DinaError::WasmExecutionError(format!("args write failed: {e}"))
-                })?;
+                .map_err(|e| DinaError::WasmExecutionError(format!("args write failed: {e}")))?;
         }
 
         // Call __dispatch(method_ptr, method_len, args_ptr, args_len) -> packed i64.
         let dispatch_fn = instance
             .get_typed_func::<(i32, i32, i32, i32), i64>(&mut store, "__dispatch")
-            .map_err(|_| {
-                DinaError::WasmExecutionError("contract must export __dispatch".into())
-            })?;
+            .map_err(|_| DinaError::WasmExecutionError("contract must export __dispatch".into()))?;
 
         let _packed_result = dispatch_fn
             .call(
@@ -689,16 +753,6 @@ impl BlockExecutor {
         }
     }
 
-    /// Extract the raw 64-byte signature from any transaction variant.
-    fn extract_signature_bytes(&self, tx: &Transaction) -> [u8; 64] {
-        match tx {
-            Transaction::Transfer { signature, .. }
-            | Transaction::DeployContract { signature, .. }
-            | Transaction::CallContract { signature, .. }
-            | Transaction::RegisterDevice { signature, .. } => signature.0,
-        }
-    }
-
     /// Compute a deterministic state root by hashing all accounts in sorted
     /// order by address.
     fn compute_state_root(&self) -> Hash {
@@ -747,6 +801,7 @@ mod tests {
             device_witness: None,
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
@@ -773,6 +828,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_000,
                 proposer,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: txs,
@@ -819,10 +875,7 @@ mod tests {
         assert_eq!(final_state.get_account(&sender).unwrap().balance, 8_990);
         assert_eq!(final_state.get_account(&sender).unwrap().nonce, 1);
         // Recipient gets 1000
-        assert_eq!(
-            final_state.get_account(&recipient).unwrap().balance,
-            1_000
-        );
+        assert_eq!(final_state.get_account(&recipient).unwrap().balance, 1_000);
         // Proposer gets the fee
         assert_eq!(final_state.get_account(&proposer).unwrap().balance, 10);
     }
@@ -848,10 +901,7 @@ mod tests {
         assert!(result.receipts[0].error.is_some());
         // Fee was still deducted.
         assert_eq!(result.receipts[0].fee_paid, 10);
-        assert_eq!(
-            executor.state().get_account(&sender).unwrap().balance,
-            90
-        );
+        assert_eq!(executor.state().get_account(&sender).unwrap().balance, 90);
     }
 
     #[test]
@@ -876,10 +926,7 @@ mod tests {
         assert!(err_msg.contains("nonce"));
         // Fee still deducted, nonce NOT incremented.
         assert_eq!(result.receipts[0].fee_paid, 10);
-        assert_eq!(
-            executor.state().get_account(&sender).unwrap().nonce,
-            0
-        );
+        assert_eq!(executor.state().get_account(&sender).unwrap().nonce, 0);
     }
 
     #[test]
@@ -901,10 +948,7 @@ mod tests {
         assert!(!result.receipts[0].success);
         assert_eq!(result.receipts[0].fee_paid, 20);
         // Balance = 500 - 20 = 480 (fee deducted, transfer not applied).
-        assert_eq!(
-            executor.state().get_account(&sender).unwrap().balance,
-            480
-        );
+        assert_eq!(executor.state().get_account(&sender).unwrap().balance, 480);
     }
 
     #[test]
@@ -948,7 +992,7 @@ mod tests {
         let mut state = AccountState::new();
         state.credit(&sender, 10_000);
 
-        // Transaction with all-zero signature (invalid).
+        // Transaction with all-zero signature and pub_key (invalid).
         let tx = Transaction::Transfer {
             from: sender,
             to: Address([0xbb; 32]),
@@ -957,6 +1001,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
 
@@ -1047,9 +1092,6 @@ mod tests {
         // Fee was NOT paid because sender couldn't afford it.
         assert_eq!(result.receipts[0].fee_paid, 0);
         // Balance unchanged.
-        assert_eq!(
-            executor.state().get_account(&sender).unwrap().balance,
-            5
-        );
+        assert_eq!(executor.state().get_account(&sender).unwrap().balance, 5);
     }
 }

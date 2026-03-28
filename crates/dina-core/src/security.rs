@@ -5,7 +5,7 @@
 //! before transactions enter a block, and again during block execution as
 //! defense-in-depth.
 
-use std::collections::BTreeSet;
+use std::collections::{HashSet, VecDeque};
 
 use crate::error::{DinaError, DinaResult};
 use crate::transaction::Transaction;
@@ -84,9 +84,7 @@ impl SecurityValidator {
     /// - Minimum viable size (8 bytes for header)
     pub fn check_wasm_bytecode(bytes: &[u8]) -> DinaResult<()> {
         if bytes.is_empty() {
-            return Err(DinaError::Custom(
-                "WASM bytecode is empty".to_string(),
-            ));
+            return Err(DinaError::Custom("WASM bytecode is empty".to_string()));
         }
 
         // WASM magic number: 0x00 0x61 0x73 0x6d ("\0asm")
@@ -137,9 +135,7 @@ impl SecurityValidator {
     /// This prevents injection attacks through method names.
     pub fn check_method_name(name: &str) -> DinaResult<()> {
         if name.is_empty() {
-            return Err(DinaError::Custom(
-                "method name cannot be empty".to_string(),
-            ));
+            return Err(DinaError::Custom("method name cannot be empty".to_string()));
         }
         if name.len() > 128 {
             return Err(DinaError::Custom(format!(
@@ -206,8 +202,12 @@ impl SecurityValidator {
 ///
 /// The set is bounded by `max_cache_size` to prevent unbounded memory growth.
 /// When the cache is full, `prune` should be called to evict old entries.
+/// A `VecDeque` tracks insertion order so pruning removes the truly oldest
+/// entries rather than relying on hash sort order.
 pub struct ReplayProtection {
-    seen_tx_hashes: BTreeSet<Hash>,
+    seen_tx_hashes: HashSet<[u8; 32]>,
+    /// Tracks insertion order for FIFO pruning.
+    insertion_order: VecDeque<[u8; 32]>,
     max_cache_size: usize,
 }
 
@@ -215,7 +215,8 @@ impl ReplayProtection {
     /// Create a new replay protection cache with the given maximum size.
     pub fn new(max_cache_size: usize) -> Self {
         Self {
-            seen_tx_hashes: BTreeSet::new(),
+            seen_tx_hashes: HashSet::new(),
+            insertion_order: VecDeque::new(),
             max_cache_size,
         }
     }
@@ -226,7 +227,8 @@ impl ReplayProtection {
     /// Returns `Err` if the hash has already been seen (replay attack) or
     /// the cache is full and needs pruning.
     pub fn check_and_record(&mut self, tx_hash: &Hash) -> DinaResult<()> {
-        if self.seen_tx_hashes.contains(tx_hash) {
+        let bytes = tx_hash.0;
+        if self.seen_tx_hashes.contains(&bytes) {
             return Err(DinaError::Custom(format!(
                 "replay attack detected: transaction {tx_hash} already processed"
             )));
@@ -238,20 +240,22 @@ impl ReplayProtection {
             ));
         }
 
-        self.seen_tx_hashes.insert(*tx_hash);
+        self.seen_tx_hashes.insert(bytes);
+        self.insertion_order.push_back(bytes);
         Ok(())
     }
 
-    /// Remove the oldest entries, keeping only the `keep_recent` most recent
-    /// entries (by hash sort order, which serves as a proxy for recency).
+    /// Remove the oldest entries (by insertion order), keeping only the
+    /// `keep_recent` most recent entries.
     pub fn prune(&mut self, keep_recent: usize) {
         if self.seen_tx_hashes.len() <= keep_recent {
             return;
         }
         let to_remove = self.seen_tx_hashes.len() - keep_recent;
-        let removals: Vec<Hash> = self.seen_tx_hashes.iter().take(to_remove).copied().collect();
-        for h in removals {
-            self.seen_tx_hashes.remove(&h);
+        for _ in 0..to_remove {
+            if let Some(oldest) = self.insertion_order.pop_front() {
+                self.seen_tx_hashes.remove(&oldest);
+            }
         }
     }
 
@@ -323,7 +327,13 @@ mod tests {
     #[test]
     fn check_nonce_mismatch() {
         let err = SecurityValidator::check_nonce(5, 3).unwrap_err();
-        assert!(matches!(err, DinaError::InvalidNonce { expected: 5, got: 3 }));
+        assert!(matches!(
+            err,
+            DinaError::InvalidNonce {
+                expected: 5,
+                got: 3
+            }
+        ));
     }
 
     #[test]
@@ -336,6 +346,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
         assert!(SecurityValidator::check_tx_size(&tx, 1_000_000).is_ok());
@@ -351,6 +362,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
         // Set a very small limit
@@ -449,7 +461,13 @@ mod tests {
     #[test]
     fn check_fee_plus_amount_insufficient() {
         let err = SecurityValidator::check_fee_plus_amount(10, 100, 50).unwrap_err();
-        assert!(matches!(err, DinaError::InsufficientBalance { have: 50, need: 110 }));
+        assert!(matches!(
+            err,
+            DinaError::InsufficientBalance {
+                have: 50,
+                need: 110
+            }
+        ));
     }
 
     #[test]

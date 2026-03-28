@@ -47,6 +47,10 @@ struct Cli {
     #[arg(long, default_value_t = 8080)]
     rest_port: u16,
 
+    /// Bind address for RPC servers (default: 127.0.0.1, use 0.0.0.0 for external access).
+    #[arg(long, default_value = "127.0.0.1")]
+    rpc_bind: String,
+
     /// Run this node as a validator.
     #[arg(long)]
     validator: bool,
@@ -254,7 +258,8 @@ fn build_block(
         transactions_root: Hash::ZERO, // Filled after execution
         state_root: Hash::ZERO,        // Filled after execution
         proposer: validator_address,
-        signature: [0u8; 64],          // Signed below
+        proposer_pubkey: *validator_key.verifying_key().as_bytes(),
+        signature: [0u8; 64], // Signed below
     };
 
     let mut block = Block {
@@ -334,9 +339,10 @@ async fn main() -> Result<()> {
     );
 
     // ── 7. Create ChainState (in-memory canonical chain + accounts) ─────
-    let chain_state = Arc::new(RwLock::new(
-        ChainState::new(genesis_block.clone(), cli.chain_id.clone()),
-    ));
+    let chain_state = Arc::new(RwLock::new(ChainState::new(
+        genesis_block.clone(),
+        cli.chain_id.clone(),
+    )));
 
     // Seed the chain state accounts from genesis
     {
@@ -414,8 +420,8 @@ async fn main() -> Result<()> {
 
     // ── 10. Start RPC servers ───────────────────────────────────────────
     let rpc_config = RpcConfig {
-        jsonrpc_bind: format!("0.0.0.0:{}", cli.rpc_port),
-        rest_bind: format!("0.0.0.0:{}", cli.rest_port),
+        jsonrpc_bind: format!("{}:{}", cli.rpc_bind, cli.rpc_port),
+        rest_bind: format!("{}:{}", cli.rpc_bind, cli.rest_port),
     };
 
     let rpc_server = RpcServer::new(rpc_config.clone(), node_state.clone());
@@ -571,8 +577,7 @@ async fn main() -> Result<()> {
 
                 // Remove committed transactions from the mempool
                 {
-                    let tx_hashes: Vec<_> =
-                        block.transactions.iter().map(|tx| tx.hash()).collect();
+                    let tx_hashes: Vec<_> = block.transactions.iter().map(|tx| tx.hash()).collect();
                     if !tx_hashes.is_empty() {
                         let mut pool = mempool_prod.write().await;
                         pool.remove_batch(&tx_hashes);
@@ -588,6 +593,8 @@ async fn main() -> Result<()> {
                     idx.insert(block.hash(), pos);
                     blocks.push(block.clone());
                 }
+                // Prune old blocks from in-memory cache to prevent unbounded growth.
+                node_state_prod.prune_old_blocks().await;
                 {
                     // Sync account state to RPC
                     let cs = chain_state_prod.read().await;
@@ -652,13 +659,35 @@ async fn main() -> Result<()> {
         "Dina node fully started and ready"
     );
 
-    // ── 15. Wait for shutdown signal ────────────────────────────────────
-    match signal::ctrl_c().await {
-        Ok(()) => {
-            info!("Received shutdown signal, shutting down gracefully...");
+    // ── 15. Wait for shutdown signal (SIGINT or SIGTERM) ─────────────────
+    {
+        let ctrl_c = signal::ctrl_c();
+
+        #[cfg(unix)]
+        {
+            let mut sigterm =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .context("failed to register SIGTERM handler")?;
+            tokio::select! {
+                _ = ctrl_c => {
+                    info!("Received SIGINT, shutting down gracefully...");
+                }
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, shutting down gracefully...");
+                }
+            }
         }
-        Err(e) => {
-            error!("Failed to listen for shutdown signal: {e}");
+
+        #[cfg(not(unix))]
+        {
+            match ctrl_c.await {
+                Ok(()) => {
+                    info!("Received shutdown signal, shutting down gracefully...");
+                }
+                Err(e) => {
+                    error!("Failed to listen for shutdown signal: {e}");
+                }
+            }
         }
     }
 
@@ -670,6 +699,16 @@ async fn main() -> Result<()> {
     jsonrpc_handle
         .stop()
         .map_err(|e| anyhow::anyhow!("failed to stop JSON-RPC: {e:?}"))?;
+
+    // Give tasks a brief window to finish current work before aborting.
+    let graceful_timeout = tokio::time::Duration::from_secs(5);
+    let _ = tokio::time::timeout(graceful_timeout, async {
+        // Wait for the bridge task to notice shutdown and exit naturally.
+        // If it doesn't, the timeout will trigger and we'll abort below.
+        tokio::task::yield_now().await;
+    })
+    .await;
+
     rest_handle.abort();
     bridge_handle.abort();
     maintenance_handle.abort();

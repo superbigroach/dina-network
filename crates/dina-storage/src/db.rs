@@ -62,8 +62,7 @@ impl DinaDB {
         // Keep the NamedTempFile alive long enough to get the path, then
         // let redb manage the file. We persist it so redb can open it.
         let _keep = temp.into_temp_path();
-        let db =
-            Database::create(path.to_str().unwrap()).map_err(StorageError::Redb)?;
+        let db = Database::create(path.to_str().unwrap()).map_err(StorageError::Redb)?;
         let instance = Self { db: Arc::new(db) };
         migration::migrate(&instance)?;
         debug!("DinaDB opened in-memory (temp file)");
@@ -102,7 +101,9 @@ impl DinaDB {
 
         let write_txn = self.db.begin_write().map_err(StorageError::Transaction)?;
         {
-            let mut table = write_txn.open_table(ACCOUNTS).map_err(StorageError::Table)?;
+            let mut table = write_txn
+                .open_table(ACCOUNTS)
+                .map_err(StorageError::Table)?;
             table
                 .insert(address.as_bytes().as_slice(), bytes.as_slice())
                 .map_err(StorageError::Storage)?;
@@ -271,6 +272,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 state_root: Hash::ZERO,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![],
@@ -294,6 +296,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 state_root: Hash::ZERO,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![],
@@ -322,6 +325,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 state_root: Hash::ZERO,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![],
@@ -378,6 +382,7 @@ mod tests {
                     transactions_root: Hash::ZERO,
                     state_root: Hash::ZERO,
                     proposer: Address::ZERO,
+                    proposer_pubkey: [0u8; 32],
                     signature: [0u8; 64],
                 },
                 transactions: vec![],
@@ -405,6 +410,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 state_root: Hash::ZERO,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![],

@@ -18,8 +18,8 @@ pub struct RpcConfig {
 impl Default for RpcConfig {
     fn default() -> Self {
         Self {
-            jsonrpc_bind: "0.0.0.0:8545".to_string(),
-            rest_bind: "0.0.0.0:8080".to_string(),
+            jsonrpc_bind: "127.0.0.1:8545".to_string(),
+            rest_bind: "127.0.0.1:8080".to_string(),
         }
     }
 }
@@ -41,8 +41,10 @@ impl RpcServer {
     /// Returns handles for the JSON-RPC server and the REST server task.
     pub async fn start(
         self,
-    ) -> Result<(jsonrpsee::server::ServerHandle, JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<
+        (jsonrpsee::server::ServerHandle, JoinHandle<()>),
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         // Start JSON-RPC server
         let jsonrpc_handle =
             jsonrpc::start_jsonrpc_server(self.state.clone(), &self.config.jsonrpc_bind).await?;

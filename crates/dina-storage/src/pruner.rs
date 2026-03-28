@@ -129,7 +129,10 @@ impl StatePruner {
         let mut blocks_pruned: u64 = 0;
         let mut bytes_freed: u64 = 0;
 
-        let write_txn = db.inner().begin_write().map_err(StorageError::Transaction)?;
+        let write_txn = db
+            .inner()
+            .begin_write()
+            .map_err(StorageError::Transaction)?;
         {
             let mut blocks_table = write_txn.open_table(BLOCKS).map_err(StorageError::Table)?;
             let mut hashes_table = write_txn
@@ -161,8 +164,7 @@ impl StatePruner {
 
                     // Try to remove the corresponding block-hash entry.
                     // We deserialize the block just to get its hash.
-                    if let Ok(block) =
-                        bincode::deserialize::<dina_core::Block>(block_bytes.value())
+                    if let Ok(block) = bincode::deserialize::<dina_core::Block>(block_bytes.value())
                     {
                         let hash = block.hash();
                         let _ = hashes_table.remove(hash.as_bytes().as_slice());
@@ -252,6 +254,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 state_root: Hash::ZERO,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![],
@@ -337,7 +340,10 @@ mod tests {
 
         // Blocks 0..10 should be gone.
         for h in 0..10 {
-            assert!(db.get_block(h).unwrap().is_none(), "block {h} should be pruned");
+            assert!(
+                db.get_block(h).unwrap().is_none(),
+                "block {h} should be pruned"
+            );
         }
         // Blocks 10..20 should remain.
         for h in 10..20 {

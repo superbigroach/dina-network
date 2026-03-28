@@ -26,6 +26,9 @@ pub enum DinaError {
     #[error("WASM execution error: {0}")]
     WasmExecutionError(String),
 
+    #[error("invalid block: {0}")]
+    InvalidBlock(String),
+
     #[error("consensus error: {0}")]
     ConsensusError(String),
 
@@ -68,13 +71,19 @@ mod tests {
 
     #[test]
     fn error_display_insufficient_balance() {
-        let err = DinaError::InsufficientBalance { have: 50, need: 100 };
+        let err = DinaError::InsufficientBalance {
+            have: 50,
+            need: 100,
+        };
         assert_eq!(format!("{err}"), "insufficient balance: have 50, need 100");
     }
 
     #[test]
     fn error_display_invalid_nonce() {
-        let err = DinaError::InvalidNonce { expected: 5, got: 3 };
+        let err = DinaError::InvalidNonce {
+            expected: 5,
+            got: 3,
+        };
         assert_eq!(format!("{err}"), "invalid nonce: expected 5, got 3");
     }
 

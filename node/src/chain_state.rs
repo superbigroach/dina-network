@@ -55,6 +55,13 @@ impl ChainState {
     ///
     /// Returns an [`ExecutionResult`] summarizing the outcome.
     pub fn apply_block(&mut self, block: Block) -> DinaResult<ExecutionResult> {
+        // Verify the block header signature from the proposer
+        if !block.header.verify_proposer() {
+            return Err(DinaError::InvalidBlock(
+                "block header signature verification failed".into(),
+            ));
+        }
+
         // Validate the block against the current chain tip first
         self.chain.is_valid_next_block(&block)?;
 
@@ -95,22 +102,20 @@ impl ChainState {
         let is_coinbase = sender == Address([0u8; 32]);
 
         if !is_coinbase {
-            // -- C-1: Structural signature verification --
-            // Full Ed25519 verification requires the sender's public key, which
-            // cannot be recovered from the Address alone (Address = SHA-256 of
-            // pubkey). For now, reject transactions with an all-zero signature
-            // as a structural validity check. TODO: store the public key in the
-            // account or require it in the transaction payload so that full
-            // Ed25519 verification can be performed on mainnet.
-            let sig_bytes = tx.signature_bytes();
-            if sig_bytes == [0u8; 64] {
+            // -- C-1: Full Ed25519 signature verification --
+            // The transaction carries the sender's public key. verify_signature()
+            // checks that the key derives to the sender address and that the
+            // Ed25519 signature is valid over the signing payload.
+            if !tx.verify_signature() {
                 return Err(DinaError::InvalidSignature);
             }
 
             // -- C-3: Nonce validation --
             // Verify the transaction nonce matches the account's expected nonce
             // to prevent replay attacks and enforce transaction ordering.
-            let account = self.accounts.get_account(&sender)
+            let account = self
+                .accounts
+                .get_account(&sender)
                 .ok_or_else(|| DinaError::AccountNotFound(sender.to_string()))?;
             if account.nonce != tx.nonce() {
                 return Err(DinaError::InvalidNonce {
@@ -191,6 +196,7 @@ impl ChainState {
 mod tests {
     use super::*;
     use dina_core::block::BlockHeader;
+    use dina_core::crypto;
     use dina_core::transaction::Sig64;
     use dina_core::types::{Address, Hash};
 
@@ -207,6 +213,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),
@@ -243,13 +250,14 @@ mod tests {
         let genesis = make_genesis();
         let mut state = ChainState::new(genesis.clone(), "test".to_string());
 
-        let from = addr(1);
+        let (sk, vk) = crypto::generate_keypair();
+        let from = Address::from_pubkey(&vk);
         let to = addr(2);
 
         // Credit sender so the transfer can succeed
         state.accounts.credit(&from, 10_000);
 
-        let tx = Transaction::Transfer {
+        let mut tx = Transaction::Transfer {
             from,
             to,
             amount: 500,
@@ -257,8 +265,17 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
-            signature: Sig64([1u8; 64]), // non-zero signature required by C-1
+            pub_key: *vk.as_bytes(),
+            signature: Sig64([0u8; 64]),
         };
+        let msg = tx.signing_bytes();
+        let sig = crypto::sign(&sk, &msg);
+        if let Transaction::Transfer {
+            ref mut signature, ..
+        } = tx
+        {
+            *signature = Sig64(sig);
+        }
 
         let block1 = Block {
             header: BlockHeader {
@@ -268,6 +285,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 2_000,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![tx],
@@ -304,6 +322,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 2_000,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),

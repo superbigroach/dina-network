@@ -70,6 +70,8 @@ pub enum Transaction {
         device_witness: Option<WitnessProof>,
         nonce: u64,
         fee: u64,
+        /// Ed25519 public key of the sender (used for signature verification).
+        pub_key: [u8; 32],
         signature: Sig64,
     },
 
@@ -80,6 +82,8 @@ pub enum Transaction {
         init_args: Vec<u8>,
         nonce: u64,
         fee: u64,
+        /// Ed25519 public key of the sender (used for signature verification).
+        pub_key: [u8; 32],
         signature: Sig64,
     },
 
@@ -92,6 +96,8 @@ pub enum Transaction {
         usdc_attached: u64,
         nonce: u64,
         fee: u64,
+        /// Ed25519 public key of the sender (used for signature verification).
+        pub_key: [u8; 32],
         signature: Sig64,
     },
 
@@ -102,6 +108,8 @@ pub enum Transaction {
         attestation: DeviceAttestation,
         nonce: u64,
         fee: u64,
+        /// Ed25519 public key of the sender (used for signature verification).
+        pub_key: [u8; 32],
         signature: Sig64,
     },
 }
@@ -204,8 +212,46 @@ impl Transaction {
         }
     }
 
-    /// Verify the transaction signature against the sender's public key.
-    pub fn verify_signature(&self, verifying_key: &VerifyingKey) -> bool {
+    /// Verify the transaction signature using the embedded public key.
+    ///
+    /// This performs full Ed25519 signature verification:
+    /// 1. Rejects transactions with an all-zero public key.
+    /// 2. Parses the embedded `pub_key` bytes into a `VerifyingKey`.
+    /// 3. Derives the address from the public key and checks it matches the sender.
+    /// 4. Verifies the Ed25519 signature over the signing payload.
+    ///
+    /// Returns `true` only if all checks pass.
+    pub fn verify_signature(&self) -> bool {
+        let pk_bytes = self.pub_key_bytes();
+
+        // Reject all-zero public key (missing key).
+        if pk_bytes == [0u8; 32] {
+            return false;
+        }
+
+        // Parse the public key bytes into a VerifyingKey.
+        let verifying_key = match VerifyingKey::from_bytes(&pk_bytes) {
+            Ok(vk) => vk,
+            Err(_) => return false,
+        };
+
+        // Derive the address from the public key and verify it matches the sender.
+        let derived_address = Address::from_pubkey(&verifying_key);
+        if derived_address != self.sender() {
+            return false;
+        }
+
+        // Verify the Ed25519 signature over the signing payload.
+        let sig_bytes = self.signature_bytes();
+        let sig = Signature::from_bytes(&sig_bytes);
+        let msg = self.signing_bytes();
+        verifying_key.verify(&msg, &sig).is_ok()
+    }
+
+    /// Verify the transaction signature against an externally-provided public key.
+    ///
+    /// This is useful in tests or contexts where the caller already has the key.
+    pub fn verify_signature_with_key(&self, verifying_key: &VerifyingKey) -> bool {
         let sig_bytes = self.signature_bytes();
         let sig = Signature::from_bytes(&sig_bytes);
         let msg = self.signing_bytes();
@@ -249,6 +295,16 @@ impl Transaction {
             | Transaction::DeployContract { signature, .. }
             | Transaction::CallContract { signature, .. }
             | Transaction::RegisterDevice { signature, .. } => signature.0,
+        }
+    }
+
+    /// Extract the sender's 32-byte Ed25519 public key.
+    pub fn pub_key_bytes(&self) -> [u8; 32] {
+        match self {
+            Transaction::Transfer { pub_key, .. }
+            | Transaction::DeployContract { pub_key, .. }
+            | Transaction::CallContract { pub_key, .. }
+            | Transaction::RegisterDevice { pub_key, .. } => *pub_key,
         }
     }
 }
@@ -317,6 +373,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
@@ -335,9 +392,9 @@ mod tests {
 
     #[test]
     fn sign_and_verify_transfer() {
-        let (sk, vk) = crypto::generate_keypair();
+        let (sk, _vk) = crypto::generate_keypair();
         let tx = make_signed_transfer(&sk);
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
     }
 
     #[test]
@@ -345,7 +402,26 @@ mod tests {
         let (sk, _) = crypto::generate_keypair();
         let (_, wrong_vk) = crypto::generate_keypair();
         let tx = make_signed_transfer(&sk);
-        assert!(!tx.verify_signature(&wrong_vk));
+        // Tamper with the pub_key to use a wrong key
+        let mut bad_tx = tx;
+        if let Transaction::Transfer {
+            ref mut pub_key, ..
+        } = bad_tx
+        {
+            *pub_key = *wrong_vk.as_bytes();
+        }
+        // Should fail because derived address won't match sender
+        assert!(!bad_tx.verify_signature());
+    }
+
+    #[test]
+    fn verify_with_external_key() {
+        let (sk, vk) = crypto::generate_keypair();
+        let tx = make_signed_transfer(&sk);
+        assert!(tx.verify_signature_with_key(&vk));
+
+        let (_, wrong_vk) = crypto::generate_keypair();
+        assert!(!tx.verify_signature_with_key(&wrong_vk));
     }
 
     #[test]

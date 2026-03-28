@@ -122,8 +122,7 @@ impl ParallelBlockExecutor {
         let lane_results = self.execute_lanes_parallel(lanes)?;
 
         // Phase 3: Merge lane results deterministically.
-        let (receipts, total_fees, total_gas) =
-            self.merge_lane_results(lane_results, tx_count)?;
+        let (receipts, total_fees, total_gas) = self.merge_lane_results(lane_results, tx_count)?;
 
         // Credit fees to the proposer.
         if total_fees > 0 {
@@ -133,8 +132,7 @@ impl ParallelBlockExecutor {
         let state_root = self.compute_state_root();
 
         let parallelism_ratio = if tx_count > 0 {
-            1.0 - (self.longest_lane_len(&block.transactions, lanes_used) as f64
-                / tx_count as f64)
+            1.0 - (self.longest_lane_len(&block.transactions, lanes_used) as f64 / tx_count as f64)
         } else {
             0.0
         };
@@ -166,20 +164,14 @@ impl ParallelBlockExecutor {
         match tx {
             Transaction::Transfer { from, to, .. } => vec![*from, *to],
             Transaction::DeployContract { from, .. } => vec![*from],
-            Transaction::CallContract {
-                from, contract, ..
-            } => vec![*from, *contract],
+            Transaction::CallContract { from, contract, .. } => vec![*from, *contract],
             Transaction::RegisterDevice { owner, .. } => vec![*owner],
         }
     }
 
     /// Assign transactions to lanes using union-find over touched addresses.
     /// Transactions sharing any address end up in the same lane.
-    fn assign_lanes(
-        &self,
-        transactions: &[Transaction],
-        max_lanes: usize,
-    ) -> Vec<ExecutionLane> {
+    fn assign_lanes(&self, transactions: &[Transaction], max_lanes: usize) -> Vec<ExecutionLane> {
         let tx_count = transactions.len();
 
         // Union-find: each transaction starts in its own group.
@@ -232,9 +224,8 @@ impl ParallelBlockExecutor {
         // Sort by the first transaction index in each group for determinism.
         sorted_groups.sort_by_key(|g| g[0]);
 
-        let mut lanes: Vec<ExecutionLane> = (0..max_lanes)
-            .map(|id| ExecutionLane::new(id))
-            .collect();
+        let mut lanes: Vec<ExecutionLane> =
+            (0..max_lanes).map(|id| ExecutionLane::new(id)).collect();
 
         // Assign groups to lanes using a greedy approach: put each group
         // into the lane with the fewest transactions so far.
@@ -264,16 +255,17 @@ impl ParallelBlockExecutor {
         }
         // Re-run assignment to find the actual longest lane.
         let lanes = self.assign_lanes(transactions, lanes_used);
-        lanes.iter().map(|l| l.transactions.len()).max().unwrap_or(0)
+        lanes
+            .iter()
+            .map(|l| l.transactions.len())
+            .max()
+            .unwrap_or(0)
     }
 
     // ── Phase 2: Parallel execution ─────────────────────────────────
 
     /// Execute all lanes in parallel using std::thread.
-    fn execute_lanes_parallel(
-        &self,
-        lanes: Vec<ExecutionLane>,
-    ) -> DinaResult<Vec<LaneResult>> {
+    fn execute_lanes_parallel(&self, lanes: Vec<ExecutionLane>) -> DinaResult<Vec<LaneResult>> {
         // Snapshot the current state for each lane to read from.
         let base_state = &self.state;
         let base_devices = &self.devices;
@@ -298,22 +290,20 @@ impl ParallelBlockExecutor {
                 let mut lane_devices = base_devices.clone();
 
                 s.spawn(move || {
-                    let result = Self::execute_lane(
-                        &mut lane_state,
-                        &mut lane_devices,
-                        &lane,
-                    );
+                    let result = Self::execute_lane(&mut lane_state, &mut lane_devices, &lane);
 
-                    let mut guard = results_ref.lock().unwrap();
+                    let mut guard = results_ref.lock().unwrap_or_else(|e| e.into_inner());
                     guard[lane_id] = Some(result);
                 });
             }
         });
 
-        let guard = results.into_inner().unwrap();
+        let guard = results.into_inner().unwrap_or_else(|e| e.into_inner());
         guard
             .into_iter()
-            .map(|opt| opt.ok_or_else(|| DinaError::Custom("lane thread did not produce result".into())))
+            .map(|opt| {
+                opt.ok_or_else(|| DinaError::Custom("lane thread did not produce result".into()))
+            })
             .collect()
     }
 
@@ -355,7 +345,9 @@ impl ParallelBlockExecutor {
             .iter()
             .filter_map(|(_, tx)| {
                 if let Transaction::RegisterDevice { device_pubkey, .. } = tx {
-                    devices.get(device_pubkey).map(|d| (*device_pubkey, d.clone()))
+                    devices
+                        .get(device_pubkey)
+                        .map(|d| (*device_pubkey, d.clone()))
                 } else {
                     None
                 }
@@ -400,7 +392,16 @@ impl ParallelBlockExecutor {
 
         match result {
             Ok(events) => {
-                let _ = state.increment_nonce(&sender);
+                if let Err(e) = state.increment_nonce(&sender) {
+                    return TransactionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: Self::estimate_gas(tx),
+                        fee_paid: fee,
+                        error: Some(format!("nonce increment failed: {e}")),
+                        events: vec![],
+                    };
+                }
                 let gas_used = Self::estimate_gas(tx);
                 TransactionReceipt {
                     tx_hash,
@@ -497,9 +498,7 @@ impl ParallelBlockExecutor {
                 ..
             } => {
                 if devices.contains_key(device_pubkey) {
-                    return Err(DinaError::Custom(
-                        "device already registered".to_string(),
-                    ));
+                    return Err(DinaError::Custom("device already registered".to_string()));
                 }
 
                 let device = DeviceIdentity::new(
@@ -551,8 +550,7 @@ impl ParallelBlockExecutor {
         let mut total_gas: u64 = 0;
 
         // Collect all (orig_idx, receipt) pairs.
-        let mut indexed_receipts: Vec<(usize, TransactionReceipt)> =
-            Vec::with_capacity(tx_count);
+        let mut indexed_receipts: Vec<(usize, TransactionReceipt)> = Vec::with_capacity(tx_count);
 
         // Track which addresses were modified by which lanes for conflict detection.
         let mut addr_to_lane: HashMap<Address, usize> = HashMap::new();
@@ -609,10 +607,7 @@ impl ParallelBlockExecutor {
 
     /// Execute a block sequentially (single lane). Used as fallback for
     /// small blocks or when all transactions are dependent.
-    fn execute_sequential(
-        &mut self,
-        block: &Block,
-    ) -> DinaResult<ParallelExecutionResult> {
+    fn execute_sequential(&mut self, block: &Block) -> DinaResult<ParallelExecutionResult> {
         let mut receipts = Vec::with_capacity(block.transactions.len());
         let mut total_fees: u64 = 0;
         let mut total_gas: u64 = 0;
@@ -701,6 +696,7 @@ mod tests {
             device_witness: None,
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
@@ -727,6 +723,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_000,
                 proposer,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: txs,
@@ -735,10 +732,7 @@ mod tests {
 
     /// Run the same block through both sequential and parallel executors and
     /// assert that receipts, fees, gas, and state root match exactly.
-    fn assert_matches_sequential(
-        initial_state: AccountState,
-        block: &Block,
-    ) {
+    fn assert_matches_sequential(initial_state: AccountState, block: &Block) {
         // Sequential execution.
         let mut seq_executor = BlockExecutor::new(initial_state.clone());
         let seq_result = seq_executor.execute_block(block).unwrap();
@@ -747,12 +741,19 @@ mod tests {
         let mut par1 = ParallelBlockExecutor::with_config(initial_state.clone(), 1, 0);
         let par1_result = par1.execute_block(block).unwrap();
 
-        assert_eq!(seq_result.state_root, par1_result.state_root,
-            "state root mismatch (1-lane parallel vs sequential)");
+        assert_eq!(
+            seq_result.state_root, par1_result.state_root,
+            "state root mismatch (1-lane parallel vs sequential)"
+        );
         assert_eq!(seq_result.total_fees, par1_result.total_fees);
         assert_eq!(seq_result.gas_used, par1_result.gas_used);
         assert_eq!(seq_result.receipts.len(), par1_result.receipts.len());
-        for (i, (s, p)) in seq_result.receipts.iter().zip(par1_result.receipts.iter()).enumerate() {
+        for (i, (s, p)) in seq_result
+            .receipts
+            .iter()
+            .zip(par1_result.receipts.iter())
+            .enumerate()
+        {
             assert_eq!(s.tx_hash, p.tx_hash, "receipt {i} tx_hash mismatch");
             assert_eq!(s.success, p.success, "receipt {i} success mismatch");
             assert_eq!(s.fee_paid, p.fee_paid, "receipt {i} fee_paid mismatch");
@@ -763,16 +764,29 @@ mod tests {
         let mut par_multi = ParallelBlockExecutor::with_config(initial_state.clone(), 8, 0);
         let par_multi_result = par_multi.execute_block(block).unwrap();
 
-        assert_eq!(seq_result.state_root, par_multi_result.state_root,
-            "state root mismatch (8-lane parallel vs sequential)");
+        assert_eq!(
+            seq_result.state_root, par_multi_result.state_root,
+            "state root mismatch (8-lane parallel vs sequential)"
+        );
         assert_eq!(seq_result.total_fees, par_multi_result.total_fees);
         assert_eq!(seq_result.gas_used, par_multi_result.gas_used);
         assert_eq!(seq_result.receipts.len(), par_multi_result.receipts.len());
-        for (i, (s, p)) in seq_result.receipts.iter().zip(par_multi_result.receipts.iter()).enumerate() {
+        for (i, (s, p)) in seq_result
+            .receipts
+            .iter()
+            .zip(par_multi_result.receipts.iter())
+            .enumerate()
+        {
             assert_eq!(s.tx_hash, p.tx_hash, "receipt {i} tx_hash mismatch (multi)");
             assert_eq!(s.success, p.success, "receipt {i} success mismatch (multi)");
-            assert_eq!(s.fee_paid, p.fee_paid, "receipt {i} fee_paid mismatch (multi)");
-            assert_eq!(s.gas_used, p.gas_used, "receipt {i} gas_used mismatch (multi)");
+            assert_eq!(
+                s.fee_paid, p.fee_paid,
+                "receipt {i} fee_paid mismatch (multi)"
+            );
+            assert_eq!(
+                s.gas_used, p.gas_used,
+                "receipt {i} gas_used mismatch (multi)"
+            );
         }
     }
 
@@ -885,15 +899,17 @@ mod tests {
 
         let mut roots = Vec::new();
         for lanes in &[1, 2, 4, 8] {
-            let mut executor =
-                ParallelBlockExecutor::with_config(state.clone(), *lanes, 0);
+            let mut executor = ParallelBlockExecutor::with_config(state.clone(), *lanes, 0);
             let result = executor.execute_block(&block).unwrap();
             roots.push(result.state_root);
         }
 
         // All state roots must be identical.
         for (i, root) in roots.iter().enumerate().skip(1) {
-            assert_eq!(roots[0], *root, "state root differs with lane count variant {i}");
+            assert_eq!(
+                roots[0], *root,
+                "state root differs with lane count variant {i}"
+            );
         }
     }
 

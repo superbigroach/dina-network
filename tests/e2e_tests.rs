@@ -47,6 +47,7 @@ fn make_signed_transfer(
         device_witness: None,
         nonce,
         fee,
+        pub_key: *vk.as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -77,6 +78,7 @@ fn make_block_with(
             transactions_root: Hash::ZERO,
             timestamp: 1_700_000_000 + block_number,
             proposer,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         },
         transactions: txs,

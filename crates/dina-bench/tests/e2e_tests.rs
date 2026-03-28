@@ -12,12 +12,10 @@ use dina_channels::relay;
 use dina_channels::state::{self as channel_state, SignedState};
 
 use dina_privacy::encrypted_memo::{decrypt_memo, encrypt_memo};
-use dina_privacy::stealth::{
-    derive_stealth_address, detect_stealth, generate_meta_address,
-};
+use dina_privacy::stealth::{derive_stealth_address, detect_stealth, generate_meta_address};
 
-use drc1_token::TokenState;
 use drc101_agent_wallet::AgentWalletState;
+use drc1_token::TokenState;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,6 +45,7 @@ fn make_signed_transfer(
         device_witness: None,
         nonce,
         fee,
+        pub_key: *vk.as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -77,6 +76,7 @@ fn make_block_with(
             transactions_root: Hash::ZERO,
             timestamp: 1_700_000_000 + block_number,
             proposer,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         },
         transactions: txs,
@@ -117,20 +117,15 @@ fn test_full_block_lifecycle() {
     let tx5 = make_signed_transfer(&sk_v3, addr_v1, 3_000, 0, 10);
 
     // Verify each transaction signature
-    assert!(tx1.verify_signature(&vk_v1));
-    assert!(tx2.verify_signature(&vk_v1));
-    assert!(tx3.verify_signature(&vk_v2));
-    assert!(tx4.verify_signature(&vk_v2));
-    assert!(tx5.verify_signature(&vk_v3));
+    assert!(tx1.verify_signature());
+    assert!(tx2.verify_signature());
+    assert!(tx3.verify_signature());
+    assert!(tx4.verify_signature());
+    assert!(tx5.verify_signature());
 
     // Build block with transactions
     let proposer = addr_v1;
-    let block = make_block_with(
-        proposer,
-        vec![tx1, tx2, tx3, tx4, tx5],
-        1,
-        genesis.hash(),
-    );
+    let block = make_block_with(proposer, vec![tx1, tx2, tx3, tx4, tx5], 1, genesis.hash());
 
     // Execute block against account state
     let mut executor = BlockExecutor::new(state);
@@ -154,18 +149,9 @@ fn test_full_block_lifecycle() {
     // v2: 100_000 + 1_000 - 10(fee) - 500 - 10(fee) - 1_500 = 98_980
     // v3: 100_000 + 2_000 + 1_500 - 10(fee) - 3_000 = 100_490
     let final_state = executor.state();
-    assert_eq!(
-        final_state.get_account(&addr_v1).unwrap().balance,
-        100_530
-    );
-    assert_eq!(
-        final_state.get_account(&addr_v2).unwrap().balance,
-        98_980
-    );
-    assert_eq!(
-        final_state.get_account(&addr_v3).unwrap().balance,
-        100_490
-    );
+    assert_eq!(final_state.get_account(&addr_v1).unwrap().balance, 100_530);
+    assert_eq!(final_state.get_account(&addr_v2).unwrap().balance, 98_980);
+    assert_eq!(final_state.get_account(&addr_v3).unwrap().balance, 100_490);
 
     // Verify nonces incremented
     assert_eq!(final_state.get_account(&addr_v1).unwrap().nonce, 2);
@@ -243,20 +229,14 @@ fn test_payment_channel_lifecycle() {
     // Round-trip through QR bytes
     let qr_bytes = relay::blob_to_qr_bytes(&relay_blob);
     let recovered_blob = relay::blob_from_qr_bytes(&qr_bytes).unwrap();
-    assert_eq!(
-        recovered_blob.signed_state.state,
-        signed_final.state
-    );
+    assert_eq!(recovered_blob.signed_state.state, signed_final.state);
     assert_eq!(recovered_blob.relay_fee, 500);
 
     // Recovered blob should also validate
     assert!(relay::validate_relay_blob(&recovered_blob, &pub_a, &pub_b));
 
     // Verify final balances match (conservation of funds)
-    assert_eq!(
-        channel.balance_a + channel.balance_b,
-        channel.total_locked
-    );
+    assert_eq!(channel.balance_a + channel.balance_b, channel.total_locked);
 }
 
 // ===========================================================================
@@ -443,8 +423,7 @@ fn test_drc_contract_lifecycle() {
         "account": alice
     }))
     .unwrap();
-    let balance_result =
-        drc1_token::dispatch(&mut token_state, "balance_of", &balance_args, owner);
+    let balance_result = drc1_token::dispatch(&mut token_state, "balance_of", &balance_args, owner);
     let balance: u64 = serde_json::from_slice(&balance_result).unwrap();
     assert_eq!(balance, 1_000_000);
 
@@ -464,14 +443,12 @@ fn test_drc_contract_lifecycle() {
     assert_eq!(alice_balance, 750_000);
 
     let bob_bal_args = serde_json::to_vec(&serde_json::json!({ "account": bob })).unwrap();
-    let bob_bal_result =
-        drc1_token::dispatch(&mut token_state, "balance_of", &bob_bal_args, owner);
+    let bob_bal_result = drc1_token::dispatch(&mut token_state, "balance_of", &bob_bal_args, owner);
     let bob_balance: u64 = serde_json::from_slice(&bob_bal_result).unwrap();
     assert_eq!(bob_balance, 250_000);
 
     // Verify total supply
-    let supply_result =
-        drc1_token::dispatch(&mut token_state, "total_supply", &[], owner);
+    let supply_result = drc1_token::dispatch(&mut token_state, "total_supply", &[], owner);
     let total_supply: u64 = serde_json::from_slice(&supply_result).unwrap();
     assert_eq!(total_supply, 1_000_000);
 
@@ -492,8 +469,7 @@ fn test_drc_contract_lifecycle() {
     drc101_agent_wallet::dispatch(&mut wallet_state, "deposit", &deposit_args, owner);
 
     // Check balance
-    let balance_result =
-        drc101_agent_wallet::dispatch(&mut wallet_state, "balance", &[], owner);
+    let balance_result = drc101_agent_wallet::dispatch(&mut wallet_state, "balance", &[], owner);
     let wallet_balance: u64 = serde_json::from_slice(&balance_result).unwrap();
     assert_eq!(wallet_balance, 500_000);
 
@@ -521,25 +497,18 @@ fn test_drc_contract_lifecycle() {
         "witness": null
     }))
     .unwrap();
-    drc101_agent_wallet::dispatch(
-        &mut wallet_state,
-        "execute_transfer",
-        &exec_args,
-        owner,
-    );
+    drc101_agent_wallet::dispatch(&mut wallet_state, "execute_transfer", &exec_args, owner);
 
     // Verify spending stats updated
     let stats_result =
         drc101_agent_wallet::dispatch(&mut wallet_state, "spending_stats", &[], owner);
-    let stats: drc101_agent_wallet::SpendingStats =
-        serde_json::from_slice(&stats_result).unwrap();
+    let stats: drc101_agent_wallet::SpendingStats = serde_json::from_slice(&stats_result).unwrap();
     assert_eq!(stats.total_spent, 50_000);
     assert_eq!(stats.spent_today, 50_000);
     assert_eq!(stats.transactions_today, 1);
 
     // Verify balance decreased
-    let balance_result2 =
-        drc101_agent_wallet::dispatch(&mut wallet_state, "balance", &[], owner);
+    let balance_result2 = drc101_agent_wallet::dispatch(&mut wallet_state, "balance", &[], owner);
     let wallet_balance2: u64 = serde_json::from_slice(&balance_result2).unwrap();
     assert_eq!(wallet_balance2, 450_000);
 
@@ -554,12 +523,7 @@ fn test_drc_contract_lifecycle() {
         "witness": null
     }))
     .unwrap();
-    drc101_agent_wallet::dispatch(
-        &mut wallet_state,
-        "execute_transfer",
-        &exec_args2,
-        owner,
-    );
+    drc101_agent_wallet::dispatch(&mut wallet_state, "execute_transfer", &exec_args2, owner);
 
     // Verify updated stats
     let stats_result2 =

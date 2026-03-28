@@ -350,6 +350,7 @@ mod tests {
             device_witness: None,
             nonce,
             fee,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         }
     }

@@ -127,11 +127,7 @@ impl SyncManager {
     /// Blocks are buffered internally. This method returns all blocks that
     /// are now contiguously available starting from `current_height + 1`,
     /// ready to be applied to the chain in order.
-    pub fn on_blocks_received(
-        &mut self,
-        from_height: u64,
-        blocks: Vec<Block>,
-    ) -> Vec<Block> {
+    pub fn on_blocks_received(&mut self, from_height: u64, blocks: Vec<Block>) -> Vec<Block> {
         // Remove the corresponding pending request
         self.pending_requests.remove(&from_height);
 
@@ -180,9 +176,7 @@ impl SyncManager {
             self.current_height = height;
         }
 
-        if self.current_height >= self.target_height
-            && self.pending_requests.is_empty()
-        {
+        if self.current_height >= self.target_height && self.pending_requests.is_empty() {
             self.sync_state = SyncState::CaughtUp;
         }
     }
@@ -208,6 +202,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),
@@ -248,7 +243,10 @@ mod tests {
 
         assert_eq!(sm.sync_progress(), (0, 10));
         assert!(!sm.is_synced());
-        assert!(matches!(sm.sync_state(), SyncState::Syncing { from: 1, to: 10 }));
+        assert!(matches!(
+            sm.sync_state(),
+            SyncState::Syncing { from: 1, to: 10 }
+        ));
     }
 
     #[test]

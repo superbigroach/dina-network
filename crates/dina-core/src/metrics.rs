@@ -144,10 +144,7 @@ impl NodeMetrics {
 
         out.push_str("# HELP dina_peers_connected Number of connected peers\n");
         out.push_str("# TYPE dina_peers_connected gauge\n");
-        out.push_str(&format!(
-            "dina_peers_connected {}\n",
-            self.peers_connected
-        ));
+        out.push_str(&format!("dina_peers_connected {}\n", self.peers_connected));
 
         out.push_str("# HELP dina_tps_1m Transactions per second (1 minute)\n");
         out.push_str("# TYPE dina_tps_1m gauge\n");
@@ -191,10 +188,7 @@ impl NodeMetrics {
 
         out.push_str("# HELP dina_consensus_round Current consensus round\n");
         out.push_str("# TYPE dina_consensus_round gauge\n");
-        out.push_str(&format!(
-            "dina_consensus_round {}\n",
-            self.consensus_round
-        ));
+        out.push_str(&format!("dina_consensus_round {}\n", self.consensus_round));
 
         out
     }
@@ -322,7 +316,7 @@ mod tests {
         m.record_block(10, 1);
         m.record_block(12, 1); // 2 sec gap
         m.record_block(14, 1); // 2 sec gap
-        // total 4 sec over 2 intervals = 2 sec = 2000 ms
+                               // total 4 sec over 2 intervals = 2 sec = 2000 ms
         assert_eq!(m.avg_block_time(), 2000);
     }
 

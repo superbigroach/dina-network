@@ -41,14 +41,14 @@ impl FeeSchedule {
     /// Sensible defaults for the public testnet.
     pub fn default_testnet() -> Self {
         Self {
-            base_transfer_fee: 200,           // $0.0002
-            base_contract_call_fee: 10_000,   // $0.01
-            base_deploy_fee: 1_000_000,       // $1.00
+            base_transfer_fee: 200,            // $0.0002
+            base_contract_call_fee: 10_000,    // $0.01
+            base_deploy_fee: 1_000_000,        // $1.00
             base_register_device_fee: 100_000, // $0.10
-            per_byte_fee: 1,                  // 1 micro-USDC per byte
-            gas_price: 1,                     // 1 micro-USDC per gas unit
-            min_fee: 100,                     // $0.0001
-            max_fee: 10_000_000,              // $10.00
+            per_byte_fee: 1,                   // 1 micro-USDC per byte
+            gas_price: 1,                      // 1 micro-USDC per gas unit
+            min_fee: 100,                      // $0.0001
+            max_fee: 10_000_000,               // $10.00
         }
     }
 
@@ -75,17 +75,13 @@ impl FeeSchedule {
                 let memo_size = memo.as_ref().map_or(0, |m| m.len());
                 self.calculate_transfer_fee(memo_size)
             }
-            Transaction::CallContract {
-                method, args, ..
-            } => {
+            Transaction::CallContract { method, args, .. } => {
                 self.calculate_contract_fee(method, args.len(), 0)
             }
             Transaction::DeployContract { wasm_bytecode, .. } => {
                 self.calculate_deploy_fee(wasm_bytecode.len())
             }
-            Transaction::RegisterDevice { .. } => {
-                self.clamp(self.base_register_device_fee)
-            }
+            Transaction::RegisterDevice { .. } => self.clamp(self.base_register_device_fee),
         }
     }
 
@@ -123,9 +119,9 @@ impl FeeSchedule {
         let base_total = self.base_transfer_fee * tx_count as u64;
         let discount_bps: u64 = match tx_count {
             0..=9 => 0,
-            10..=49 => 1_000,   // 10%
-            50..=99 => 2_000,   // 20%
-            _ => 3_000,         // 30%
+            10..=49 => 1_000, // 10%
+            50..=99 => 2_000, // 20%
+            _ => 3_000,       // 30%
         };
         let discounted = base_total * (10_000 - discount_bps) / 10_000;
         // Enforce that each tx still pays at least min_fee
@@ -168,10 +164,26 @@ impl Default for FeeSchedule {
 impl fmt::Display for FeeSchedule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "FeeSchedule {{")?;
-        writeln!(f, "  transfer    : {}", Self::format_fee(self.base_transfer_fee))?;
-        writeln!(f, "  contract    : {}", Self::format_fee(self.base_contract_call_fee))?;
-        writeln!(f, "  deploy      : {}", Self::format_fee(self.base_deploy_fee))?;
-        writeln!(f, "  register    : {}", Self::format_fee(self.base_register_device_fee))?;
+        writeln!(
+            f,
+            "  transfer    : {}",
+            Self::format_fee(self.base_transfer_fee)
+        )?;
+        writeln!(
+            f,
+            "  contract    : {}",
+            Self::format_fee(self.base_contract_call_fee)
+        )?;
+        writeln!(
+            f,
+            "  deploy      : {}",
+            Self::format_fee(self.base_deploy_fee)
+        )?;
+        writeln!(
+            f,
+            "  register    : {}",
+            Self::format_fee(self.base_register_device_fee)
+        )?;
         writeln!(f, "  per_byte    : {} micro-USDC", self.per_byte_fee)?;
         writeln!(f, "  gas_price   : {} micro-USDC", self.gas_price)?;
         writeln!(f, "  min         : {}", Self::format_fee(self.min_fee))?;
@@ -279,6 +291,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 0,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
         let fee = s.calculate_fee(&tx);
@@ -313,6 +326,7 @@ mod tests {
             usdc_attached: 0,
             nonce: 0,
             fee: 0,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
         let fee = s.calculate_fee(&tx);
@@ -348,6 +362,7 @@ mod tests {
             init_args: vec![],
             nonce: 0,
             fee: 0,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
         let fee = s.calculate_fee(&tx);
@@ -371,6 +386,7 @@ mod tests {
             },
             nonce: 0,
             fee: 0,
+            pub_key: [0u8; 32],
             signature: Sig64([0u8; 64]),
         };
         let fee = s.calculate_fee(&tx);

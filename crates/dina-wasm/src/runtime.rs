@@ -118,7 +118,7 @@ impl WasmRuntime {
 
         // Generate deterministic contract address from deployer + nonce.
         let nonce = {
-            let mut nonces = self.nonces.lock().unwrap();
+            let mut nonces = self.nonces.lock().unwrap_or_else(|e| e.into_inner());
             let n = nonces.entry(deployer).or_insert(0);
             let current = *n;
             *n += 1;
@@ -212,7 +212,7 @@ impl WasmRuntime {
         let init_storage = store.data().storage.clone();
 
         {
-            let mut contracts = self.contracts.lock().unwrap();
+            let mut contracts = self.contracts.lock().unwrap_or_else(|e| e.into_inner());
             contracts.insert(
                 contract_address,
                 StoredContract {
@@ -222,7 +222,10 @@ impl WasmRuntime {
             );
         }
         {
-            let mut storage = self.contract_storage.lock().unwrap();
+            let mut storage = self
+                .contract_storage
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             storage.insert(contract_address, init_storage);
         }
 
@@ -256,7 +259,7 @@ impl WasmRuntime {
 
         // Load contract WASM.
         let stored = {
-            let contracts = self.contracts.lock().unwrap();
+            let contracts = self.contracts.lock().unwrap_or_else(|e| e.into_inner());
             contracts
                 .get(&contract_addr)
                 .cloned()
@@ -265,7 +268,10 @@ impl WasmRuntime {
 
         // Load existing contract storage.
         let existing_storage = {
-            let storage = self.contract_storage.lock().unwrap();
+            let storage = self
+                .contract_storage
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             storage.get(&contract_addr).cloned().unwrap_or_default()
         };
 
@@ -384,7 +390,10 @@ impl WasmRuntime {
 
         // Persist updated storage.
         {
-            let mut contract_storage = self.contract_storage.lock().unwrap();
+            let mut contract_storage = self
+                .contract_storage
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             contract_storage.insert(contract_addr, state.storage.clone());
         }
 

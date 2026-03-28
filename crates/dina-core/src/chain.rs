@@ -77,7 +77,9 @@ impl ChainManager {
     ///
     /// This always succeeds because the chain is initialized with a genesis block.
     pub fn latest_block(&self) -> &Block {
-        self.blocks.last().expect("chain always has at least the genesis block")
+        self.blocks
+            .last()
+            .expect("chain always has at least the genesis block")
     }
 
     /// Return the current chain height (the block number of the tip).
@@ -168,6 +170,7 @@ mod tests {
             transactions_root: Hash::ZERO,
             timestamp,
             proposer: Address::ZERO,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         };
         Block {
@@ -206,7 +209,10 @@ mod tests {
         chain.add_block(block2.clone()).unwrap();
 
         assert_eq!(chain.current_height(), 2);
-        assert_eq!(chain.get_block_by_hash(&block2.hash()).unwrap().hash(), block2.hash());
+        assert_eq!(
+            chain.get_block_by_hash(&block2.hash()).unwrap().hash(),
+            block2.hash()
+        );
     }
 
     #[test]
@@ -223,6 +229,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 2_000,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),
@@ -249,6 +256,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 2_000,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),
@@ -275,6 +283,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 4_000, // older than genesis
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),
@@ -295,6 +304,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 5_000, // equal to genesis
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),

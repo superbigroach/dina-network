@@ -55,66 +55,66 @@ impl ProtocolLimits {
     /// Production mainnet limits -- the most restrictive profile.
     pub fn mainnet() -> Self {
         Self {
-            max_transaction_size: 1_048_576,          // 1 MB
-            max_block_size: 10_485_760,               // 10 MB
+            max_transaction_size: 1_048_576, // 1 MB
+            max_block_size: 10_485_760,      // 10 MB
             max_transactions_per_block: 10_000,
-            max_contract_size: 512_000,               // 500 KB
-            max_memo_size: 4_096,                     // 4 KB
+            max_contract_size: 512_000, // 500 KB
+            max_memo_size: 4_096,       // 4 KB
             max_method_name_length: 128,
-            max_args_size: 102_400,                   // 100 KB
+            max_args_size: 102_400, // 100 KB
             max_events_per_tx: 50,
             max_cross_contract_depth: 10,
             max_storage_keys_per_tx: 1_000,
-            min_transaction_fee: 100,                 // $0.0001
-            max_transaction_fee: 10_000_000,          // $10
-            max_transfer_amount: 1_000_000_000_000,   // $1,000,000
-            max_channel_duration_blocks: 864_000,     // ~30 days at 3s blocks
+            min_transaction_fee: 100,               // $0.0001
+            max_transaction_fee: 10_000_000,        // $10
+            max_transfer_amount: 1_000_000_000_000, // $1,000,000
+            max_channel_duration_blocks: 864_000,   // ~30 days at 3s blocks
             max_validator_count: 7,
-            min_validator_stake: 10_000_000_000,      // $10,000
+            min_validator_stake: 10_000_000_000, // $10,000
         }
     }
 
     /// Public testnet limits -- slightly more relaxed for testing.
     pub fn testnet() -> Self {
         Self {
-            max_transaction_size: 2_097_152,          // 2 MB
-            max_block_size: 20_971_520,               // 20 MB
+            max_transaction_size: 2_097_152, // 2 MB
+            max_block_size: 20_971_520,      // 20 MB
             max_transactions_per_block: 20_000,
-            max_contract_size: 1_048_576,             // 1 MB
-            max_memo_size: 8_192,                     // 8 KB
+            max_contract_size: 1_048_576, // 1 MB
+            max_memo_size: 8_192,         // 8 KB
             max_method_name_length: 256,
-            max_args_size: 204_800,                   // 200 KB
+            max_args_size: 204_800, // 200 KB
             max_events_per_tx: 100,
             max_cross_contract_depth: 20,
             max_storage_keys_per_tx: 2_000,
-            min_transaction_fee: 10,                  // $0.00001
-            max_transaction_fee: 100_000_000,         // $100
-            max_transfer_amount: 10_000_000_000_000,  // $10,000,000
-            max_channel_duration_blocks: 2_592_000,   // ~90 days
+            min_transaction_fee: 10,                 // $0.00001
+            max_transaction_fee: 100_000_000,        // $100
+            max_transfer_amount: 10_000_000_000_000, // $10,000,000
+            max_channel_duration_blocks: 2_592_000,  // ~90 days
             max_validator_count: 21,
-            min_validator_stake: 1_000_000_000,       // $1,000
+            min_validator_stake: 1_000_000_000, // $1,000
         }
     }
 
     /// Local development limits -- very relaxed for rapid iteration.
     pub fn development() -> Self {
         Self {
-            max_transaction_size: 10_485_760,         // 10 MB
-            max_block_size: 104_857_600,              // 100 MB
+            max_transaction_size: 10_485_760, // 10 MB
+            max_block_size: 104_857_600,      // 100 MB
             max_transactions_per_block: 100_000,
-            max_contract_size: 10_485_760,            // 10 MB
-            max_memo_size: 65_536,                    // 64 KB
+            max_contract_size: 10_485_760, // 10 MB
+            max_memo_size: 65_536,         // 64 KB
             max_method_name_length: 512,
-            max_args_size: 1_048_576,                 // 1 MB
+            max_args_size: 1_048_576, // 1 MB
             max_events_per_tx: 1_000,
             max_cross_contract_depth: 50,
             max_storage_keys_per_tx: 10_000,
-            min_transaction_fee: 1,                   // essentially free
-            max_transaction_fee: 1_000_000_000,       // $1,000
-            max_transfer_amount: u64::MAX,            // unlimited
+            min_transaction_fee: 1,             // essentially free
+            max_transaction_fee: 1_000_000_000, // $1,000
+            max_transfer_amount: u64::MAX,      // unlimited
             max_channel_duration_blocks: u64::MAX,
             max_validator_count: 100,
-            min_validator_stake: 1_000_000,           // $1
+            min_validator_stake: 1_000_000, // $1
         }
     }
 
@@ -126,18 +126,20 @@ impl ProtocolLimits {
         let fee = tx.fee();
         if fee < self.min_transaction_fee {
             return Err(DinaError::Custom(format!(
-                "transaction fee {fee} is below minimum {}", self.min_transaction_fee
+                "transaction fee {fee} is below minimum {}",
+                self.min_transaction_fee
             )));
         }
         if fee > self.max_transaction_fee {
             return Err(DinaError::Custom(format!(
-                "transaction fee {fee} exceeds maximum {}", self.max_transaction_fee
+                "transaction fee {fee} exceeds maximum {}",
+                self.max_transaction_fee
             )));
         }
 
         // Check serialized size
-        let tx_bytes = bincode::serialize(tx)
-            .map_err(|e| DinaError::SerializationError(e.to_string()))?;
+        let tx_bytes =
+            bincode::serialize(tx).map_err(|e| DinaError::SerializationError(e.to_string()))?;
         if tx_bytes.len() > self.max_transaction_size {
             return Err(DinaError::Custom(format!(
                 "transaction size {} exceeds limit {}",
@@ -148,7 +150,13 @@ impl ProtocolLimits {
 
         // Type-specific checks
         match tx {
-            Transaction::Transfer { amount, memo, from, to, .. } => {
+            Transaction::Transfer {
+                amount,
+                memo,
+                from,
+                to,
+                ..
+            } => {
                 if *amount > self.max_transfer_amount {
                     return Err(DinaError::Custom(format!(
                         "transfer amount {amount} exceeds limit {}",
@@ -186,9 +194,7 @@ impl ProtocolLimits {
                     )));
                 }
                 if wasm_bytecode.is_empty() {
-                    return Err(DinaError::Custom(
-                        "contract bytecode is empty".to_string(),
-                    ));
+                    return Err(DinaError::Custom("contract bytecode is empty".to_string()));
                 }
             }
             Transaction::CallContract { method, args, .. } => {
@@ -207,7 +213,10 @@ impl ProtocolLimits {
                     )));
                 }
                 // Validate method name characters
-                if !method.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                if !method
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                {
                     return Err(DinaError::Custom(format!(
                         "method name contains invalid characters: {method:?}"
                     )));
@@ -235,8 +244,8 @@ impl ProtocolLimits {
         }
 
         // Check serialized block size
-        let block_bytes = bincode::serialize(block)
-            .map_err(|e| DinaError::SerializationError(e.to_string()))?;
+        let block_bytes =
+            bincode::serialize(block).map_err(|e| DinaError::SerializationError(e.to_string()))?;
         if block_bytes.len() > self.max_block_size {
             return Err(DinaError::Custom(format!(
                 "block size {} exceeds limit {}",
@@ -282,7 +291,8 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee,
-            signature: Sig64([1u8; 64]),  // non-zero sig
+            pub_key: [0u8; 32],
+            signature: Sig64([1u8; 64]), // non-zero sig
         }
     }
 
@@ -295,6 +305,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_000,
                 proposer: Address([0x01; 32]),
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: txs,
@@ -337,12 +348,7 @@ mod tests {
     #[test]
     fn validate_transaction_ok() {
         let limits = ProtocolLimits::mainnet();
-        let tx = make_transfer(
-            Address([0x01; 32]),
-            Address([0x02; 32]),
-            1_000_000,
-            200,
-        );
+        let tx = make_transfer(Address([0x01; 32]), Address([0x02; 32]), 1_000_000, 200);
         assert!(limits.validate_transaction(&tx).is_ok());
     }
 
@@ -393,12 +399,7 @@ mod tests {
     #[test]
     fn validate_transaction_zero_address_target() {
         let limits = ProtocolLimits::mainnet();
-        let tx = make_transfer(
-            Address([0x01; 32]),
-            Address::ZERO,
-            1_000,
-            200,
-        );
+        let tx = make_transfer(Address([0x01; 32]), Address::ZERO, 1_000, 200);
         assert!(limits.validate_transaction(&tx).is_err());
     }
 
@@ -413,6 +414,7 @@ mod tests {
             device_witness: None,
             nonce: 0,
             fee: 200,
+            pub_key: [0u8; 32],
             signature: Sig64([1u8; 64]),
         };
         assert!(limits.validate_transaction(&tx).is_err());
@@ -427,6 +429,7 @@ mod tests {
             init_args: vec![],
             nonce: 0,
             fee: 1_000_000,
+            pub_key: [0u8; 32],
             signature: Sig64([1u8; 64]),
         };
         assert!(limits.validate_transaction(&tx).is_err());
@@ -441,6 +444,7 @@ mod tests {
             init_args: vec![],
             nonce: 0,
             fee: 1_000_000,
+            pub_key: [0u8; 32],
             signature: Sig64([1u8; 64]),
         };
         assert!(limits.validate_transaction(&tx).is_err());
@@ -457,6 +461,7 @@ mod tests {
             usdc_attached: 0,
             nonce: 0,
             fee: 10_000,
+            pub_key: [0u8; 32],
             signature: Sig64([1u8; 64]),
         };
         assert!(limits.validate_transaction(&tx).is_err());
@@ -473,6 +478,7 @@ mod tests {
             usdc_attached: 0,
             nonce: 0,
             fee: 10_000,
+            pub_key: [0u8; 32],
             signature: Sig64([1u8; 64]),
         };
         assert!(limits.validate_transaction(&tx).is_err());
@@ -489,6 +495,7 @@ mod tests {
             usdc_attached: 0,
             nonce: 0,
             fee: 10_000,
+            pub_key: [0u8; 32],
             signature: Sig64([1u8; 64]),
         };
         assert!(limits.validate_transaction(&tx).is_err());

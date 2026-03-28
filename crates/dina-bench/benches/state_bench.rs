@@ -35,6 +35,7 @@ fn make_signed_transfer(
         device_witness: None,
         nonce,
         fee,
+        pub_key: *vk.as_bytes(),
         signature: Sig64([0u8; 64]),
     };
 
@@ -60,6 +61,7 @@ fn make_block(proposer: Address, txs: Vec<Transaction>, block_number: u64) -> Bl
             transactions_root: Hash::ZERO,
             timestamp: 1_700_000_000 + block_number,
             proposer,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         },
         transactions: txs,
@@ -143,27 +145,22 @@ fn bench_block_execution(c: &mut Criterion) {
             })
             .collect();
 
-        group.bench_with_input(
-            BenchmarkId::new("txs", tx_count),
-            &txs,
-            |b, txs| {
-                b.iter_batched(
-                    || {
-                        let mut state = AccountState::new();
-                        // Give sender enough balance for all transactions
-                        let total_needed =
-                            (tx_count as u64) * (10 + 1) + 1_000_000;
-                        state.credit(&sender, total_needed);
-                        (BlockExecutor::new(state), txs.clone())
-                    },
-                    |(mut executor, txs)| {
-                        let block = make_block(proposer, txs, 1);
-                        let _ = executor.execute_block(&block);
-                    },
-                    criterion::BatchSize::SmallInput,
-                );
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("txs", tx_count), &txs, |b, txs| {
+            b.iter_batched(
+                || {
+                    let mut state = AccountState::new();
+                    // Give sender enough balance for all transactions
+                    let total_needed = (tx_count as u64) * (10 + 1) + 1_000_000;
+                    state.credit(&sender, total_needed);
+                    (BlockExecutor::new(state), txs.clone())
+                },
+                |(mut executor, txs)| {
+                    let block = make_block(proposer, txs, 1);
+                    let _ = executor.execute_block(&block);
+                },
+                criterion::BatchSize::SmallInput,
+            );
+        });
     }
 
     group.finish();
@@ -221,6 +218,7 @@ fn bench_redb_block(c: &mut Criterion) {
                     transactions_root: Hash::ZERO,
                     timestamp: 1_700_000_000 + height,
                     proposer: Address::ZERO,
+                    proposer_pubkey: [0u8; 32],
                     signature: [0u8; 64],
                 },
                 transactions: vec![],
@@ -242,6 +240,7 @@ fn bench_redb_block(c: &mut Criterion) {
                     transactions_root: Hash::ZERO,
                     timestamp: 1_700_000_000 + h,
                     proposer: Address::ZERO,
+                    proposer_pubkey: [0u8; 32],
                     signature: [0u8; 64],
                 },
                 transactions: vec![],

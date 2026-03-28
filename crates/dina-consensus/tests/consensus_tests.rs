@@ -1,6 +1,6 @@
 use dina_consensus::{
-    CommitCertificate, LeaderSchedule, Proposal, Vote, VoteSet, VoteType,
-    ViewChange, ViewChangeCollector,
+    CommitCertificate, LeaderSchedule, Proposal, ViewChange, ViewChangeCollector, Vote, VoteSet,
+    VoteType,
 };
 use dina_core::{Address, Block, BlockHeader, Hash};
 use ed25519_dalek::SigningKey;
@@ -20,9 +20,7 @@ fn make_validators(count: usize) -> Vec<[u8; 32]> {
 }
 
 fn make_signing_keys(count: usize) -> Vec<SigningKey> {
-    (0..count)
-        .map(|i| make_signing_key(i as u8 + 1))
-        .collect()
+    (0..count).map(|i| make_signing_key(i as u8 + 1)).collect()
 }
 
 fn dummy_block(height: u64) -> Block {
@@ -34,6 +32,7 @@ fn dummy_block(height: u64) -> Block {
             state_root: Hash::ZERO,
             transactions_root: Hash::ZERO,
             proposer: Address::ZERO,
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         },
         transactions: Vec::new(),
@@ -252,10 +251,11 @@ fn commit_certificate_valid_with_quorum_votes() {
     let cert = CommitCertificate::from_vote_set(&vs, &block_hash);
     assert!(cert.is_some());
 
+    let validator_set: Vec<[u8; 32]> = keys.iter().map(|k| k.verifying_key().to_bytes()).collect();
     let cert = cert.unwrap();
     assert_eq!(cert.height, 1);
     assert_eq!(cert.block_hash, block_hash);
-    assert!(cert.verify(3));
+    assert!(cert.verify(3, &validator_set));
 }
 
 #[test]
@@ -270,12 +270,13 @@ fn commit_certificate_verify_checks_all_signatures() {
         vs.add_vote(v);
     }
 
+    let validator_set: Vec<[u8; 32]> = keys.iter().map(|k| k.verifying_key().to_bytes()).collect();
     let mut cert = CommitCertificate::from_vote_set(&vs, &block_hash).unwrap();
-    assert!(cert.verify(3));
+    assert!(cert.verify(3, &validator_set));
 
     // Corrupt one vote's signature
     cert.votes[0].signature[0] ^= 0xFF;
-    assert!(!cert.verify(3));
+    assert!(!cert.verify(3, &validator_set));
 }
 
 #[test]

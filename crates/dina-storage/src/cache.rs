@@ -155,8 +155,7 @@ impl StateCache {
 
     /// Insert or update a block in the cache.
     pub fn set_block(&mut self, height: u64, block: Block) {
-        if self.blocks.len() >= self.config.max_block_entries
-            && !self.blocks.contains_key(&height)
+        if self.blocks.len() >= self.config.max_block_entries && !self.blocks.contains_key(&height)
         {
             self.evict_lru_block();
         }
@@ -260,6 +259,7 @@ mod tests {
                 transactions_root: Hash::ZERO,
                 state_root: Hash::ZERO,
                 proposer: Address::ZERO,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![],

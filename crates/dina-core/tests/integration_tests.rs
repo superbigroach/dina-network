@@ -153,12 +153,16 @@ mod transaction_tests {
             device_witness: None,
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(sk, &msg);
-        if let Transaction::Transfer { ref mut signature, .. } = tx {
+        if let Transaction::Transfer {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
         tx
@@ -180,12 +184,16 @@ mod transaction_tests {
             init_args: vec![],
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(sk, &msg);
-        if let Transaction::DeployContract { ref mut signature, .. } = tx {
+        if let Transaction::DeployContract {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
         tx
@@ -210,12 +218,16 @@ mod transaction_tests {
             usdc_attached: 500,
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(sk, &msg);
-        if let Transaction::CallContract { ref mut signature, .. } = tx {
+        if let Transaction::CallContract {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
         tx
@@ -245,12 +257,16 @@ mod transaction_tests {
             attestation,
             nonce,
             fee,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(sk, &msg);
-        if let Transaction::RegisterDevice { ref mut signature, .. } = tx {
+        if let Transaction::RegisterDevice {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
         tx
@@ -280,7 +296,7 @@ mod transaction_tests {
     fn transfer_verify_signature_correct_signer() {
         let (sk, vk) = crypto::generate_keypair();
         let tx = make_transfer(&sk, Address([0xBB; 32]), 1000, 0, 10);
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
     }
 
     #[test]
@@ -288,7 +304,7 @@ mod transaction_tests {
         let (sk, _) = crypto::generate_keypair();
         let (_, wrong_vk) = crypto::generate_keypair();
         let tx = make_transfer(&sk, Address([0xBB; 32]), 1000, 0, 10);
-        assert!(!tx.verify_signature(&wrong_vk));
+        assert!(!tx.verify_signature_with_key(&wrong_vk));
     }
 
     #[test]
@@ -313,7 +329,7 @@ mod transaction_tests {
     fn deploy_contract_roundtrip() {
         let (sk, vk) = crypto::generate_keypair();
         let tx = make_deploy(&sk, vec![0x00, 0x61, 0x73, 0x6D], 1, 50);
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
         assert_eq!(tx.sender(), Address::from_pubkey(&vk));
         assert_eq!(tx.nonce(), 1);
         assert_eq!(tx.fee(), 50);
@@ -331,7 +347,7 @@ mod transaction_tests {
         let (sk, _) = crypto::generate_keypair();
         let (_, wrong_vk) = crypto::generate_keypair();
         let tx = make_deploy(&sk, vec![0xFF], 0, 10);
-        assert!(!tx.verify_signature(&wrong_vk));
+        assert!(!tx.verify_signature_with_key(&wrong_vk));
     }
 
     // --- CallContract variant tests ---
@@ -341,7 +357,7 @@ mod transaction_tests {
         let (sk, vk) = crypto::generate_keypair();
         let contract_addr = Address([0xCC; 32]);
         let tx = make_call(&sk, contract_addr, "transfer", 5, 25);
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
         assert_eq!(tx.sender(), Address::from_pubkey(&vk));
         assert_eq!(tx.nonce(), 5);
         assert_eq!(tx.fee(), 25);
@@ -359,7 +375,7 @@ mod transaction_tests {
         let (sk, _) = crypto::generate_keypair();
         let (_, wrong_vk) = crypto::generate_keypair();
         let tx = make_call(&sk, Address([0xDD; 32]), "burn", 0, 10);
-        assert!(!tx.verify_signature(&wrong_vk));
+        assert!(!tx.verify_signature_with_key(&wrong_vk));
     }
 
     // --- RegisterDevice variant tests ---
@@ -369,7 +385,7 @@ mod transaction_tests {
         let (sk, vk) = crypto::generate_keypair();
         let device_pk = [0x42; 32];
         let tx = make_register_device(&sk, device_pk, 3, 15);
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
         // For RegisterDevice, sender() returns `owner`
         assert_eq!(tx.sender(), Address::from_pubkey(&vk));
         assert_eq!(tx.nonce(), 3);
@@ -388,7 +404,7 @@ mod transaction_tests {
         let (sk, _) = crypto::generate_keypair();
         let (_, wrong_vk) = crypto::generate_keypair();
         let tx = make_register_device(&sk, [0x11; 32], 0, 5);
-        assert!(!tx.verify_signature(&wrong_vk));
+        assert!(!tx.verify_signature_with_key(&wrong_vk));
     }
 
     // --- Transfer with memo and witness ---
@@ -407,16 +423,20 @@ mod transaction_tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(&sk, &msg);
-        if let Transaction::Transfer { ref mut signature, .. } = tx {
+        if let Transaction::Transfer {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
 
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
     }
 
     #[test]
@@ -438,16 +458,20 @@ mod transaction_tests {
             device_witness: Some(witness),
             nonce: 7,
             fee: 20,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(&sk, &msg);
-        if let Transaction::Transfer { ref mut signature, .. } = tx {
+        if let Transaction::Transfer {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
 
-        assert!(tx.verify_signature(&vk));
+        assert!(tx.verify_signature());
         assert_eq!(tx.nonce(), 7);
         assert_eq!(tx.fee(), 20);
     }
@@ -747,11 +771,15 @@ mod block_tests {
                 device_witness: None,
                 nonce: i,
                 fee: 10,
+                pub_key: *vk.as_bytes(),
                 signature: Sig64([0u8; 64]),
             };
             let msg = tx.signing_bytes();
             let sig = crypto::sign(&sk, &msg);
-            if let Transaction::Transfer { ref mut signature, .. } = tx {
+            if let Transaction::Transfer {
+                ref mut signature, ..
+            } = tx
+            {
                 *signature = Sig64(sig);
             }
             txs.push(tx);
@@ -765,6 +793,7 @@ mod block_tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_000,
                 proposer: from,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: txs,
@@ -792,11 +821,15 @@ mod block_tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: *vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
         let msg = tx.signing_bytes();
         let sig = crypto::sign(&sk, &msg);
-        if let Transaction::Transfer { ref mut signature, .. } = tx {
+        if let Transaction::Transfer {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
 
@@ -808,6 +841,7 @@ mod block_tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_000,
                 proposer: from,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: vec![tx],
@@ -850,6 +884,7 @@ mod block_tests {
             transactions_root: Hash([0x33; 32]),
             timestamp: 9999,
             proposer: Address([0x44; 32]),
+            proposer_pubkey: [0u8; 32],
             signature: [0u8; 64],
         };
         assert_eq!(header.hash(), header.hash());
@@ -970,13 +1005,7 @@ mod merkle_tests {
         let proof = tree.proof(0).unwrap();
 
         // Try to verify with wrong leaf data
-        assert!(!MerkleTree::verify_proof(
-            &root,
-            &[0xFF; 32],
-            0,
-            2,
-            &proof
-        ));
+        assert!(!MerkleTree::verify_proof(&root, &[0xFF; 32], 0, 2, &proof));
     }
 
     #[test]
@@ -1386,17 +1415,21 @@ mod cross_module_tests {
             device_witness: None,
             nonce: 0,
             fee: 10,
+            pub_key: *sender_vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(&sender_sk, &msg);
-        if let Transaction::Transfer { ref mut signature, .. } = tx {
+        if let Transaction::Transfer {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
 
         // Verify signature
-        assert!(tx.verify_signature(&sender_vk));
+        assert!(tx.verify_signature());
 
         // Apply transaction to state
         state.deduct_fee(&sender_addr, tx.fee()).unwrap();
@@ -1425,11 +1458,15 @@ mod cross_module_tests {
                 device_witness: None,
                 nonce: i,
                 fee: 10,
+                pub_key: *vk.as_bytes(),
                 signature: Sig64([0u8; 64]),
             };
             let msg = tx.signing_bytes();
             let sig = crypto::sign(&sk, &msg);
-            if let Transaction::Transfer { ref mut signature, .. } = tx {
+            if let Transaction::Transfer {
+                ref mut signature, ..
+            } = tx
+            {
                 *signature = Sig64(sig);
             }
             txs.push(tx);
@@ -1443,6 +1480,7 @@ mod cross_module_tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_000,
                 proposer: from,
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: txs,
@@ -1486,17 +1524,21 @@ mod cross_module_tests {
             attestation,
             nonce: 0,
             fee: 50,
+            pub_key: *owner_vk.as_bytes(),
             signature: Sig64([0u8; 64]),
         };
 
         let msg = tx.signing_bytes();
         let sig = crypto::sign(&owner_sk, &msg);
-        if let Transaction::RegisterDevice { ref mut signature, .. } = tx {
+        if let Transaction::RegisterDevice {
+            ref mut signature, ..
+        } = tx
+        {
             *signature = Sig64(sig);
         }
 
         // Verify
-        assert!(tx.verify_signature(&owner_vk));
+        assert!(tx.verify_signature());
         assert_eq!(tx.sender(), owner_addr);
 
         // Setup account for fee deduction
@@ -1529,6 +1571,7 @@ mod cross_module_tests {
                 transactions_root: Hash::ZERO,
                 timestamp: 1_700_000_001,
                 proposer: Address::from_pubkey(&vk),
+                proposer_pubkey: [0u8; 32],
                 signature: [0u8; 64],
             },
             transactions: Vec::new(),
@@ -1581,10 +1624,7 @@ mod error_tests {
 
     #[test]
     fn error_is_clone() {
-        let err = DinaError::InsufficientBalance {
-            have: 10,
-            need: 20,
-        };
+        let err = DinaError::InsufficientBalance { have: 10, need: 20 };
         let cloned = err.clone();
         assert_eq!(format!("{}", err), format!("{}", cloned));
     }
