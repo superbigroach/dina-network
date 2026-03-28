@@ -48,7 +48,6 @@ export default function SendPage() {
         from,
         recipient,
         Math.round(parseFloat(amount) * 1_000_000), // convert to micro-USDC
-        '',
       );
       const elapsed = Date.now() - startTime;
       setConfirmTime(elapsed);
