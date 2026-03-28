@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "lucilla-b0493"
+  },
+  "targets": {
+    "lucilla-b0493": {
+      "hosting": {
+        "dina-wallet": ["lucilla-b0493"]
+      }
+    }
+  }
+}

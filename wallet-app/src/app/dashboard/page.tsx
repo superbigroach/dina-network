@@ -1,5 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
+import { signOut } from '@/lib/firebase';
 import { Navbar } from '@/components/Navbar';
 import { BalanceStream } from '@/components/BalanceStream';
 import { WalletCard } from '@/components/WalletCard';
@@ -17,6 +20,19 @@ interface NetworkStatus {
 }
 
 export default function DashboardPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [user, loading, router]);
+
+  async function handleSignOut() {
+    await signOut();
+    router.push('/');
+  }
   const [network, setNetwork] = useState<NetworkStatus>({
     connected: false,
     height: 0,
@@ -59,9 +75,34 @@ export default function DashboardPage() {
       : 0;
   const earliestUpdate = Math.min(...activeWallets.map((w) => w.lastYieldUpdate));
 
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950">
       <Navbar />
+      {/* User bar */}
+      <div className="max-w-6xl mx-auto px-4 pt-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {user.photoURL && (
+            <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" />
+          )}
+          <span className="text-sm text-slate-400">
+            {user.displayName || user.email}
+          </span>
+        </div>
+        <button
+          onClick={handleSignOut}
+          className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          Sign out
+        </button>
+      </div>
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Hero: Total Balance */}
         <div className="text-center mb-8">
