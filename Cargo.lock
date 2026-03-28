@@ -1325,6 +1325,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dina-currency-registry"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "dina-explorer"
 version = "0.1.0"
 dependencies = [
@@ -1355,6 +1363,14 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+]
+
+[[package]]
+name = "dina-fx-swap"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1505,6 +1521,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "dina-stablecoin-factory"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

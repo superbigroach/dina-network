@@ -134,6 +134,9 @@ members = [
     "contracts/dev-timelock",
     "contracts/dev-factory",
     "contracts/dev-events",
+    "contracts/dina-stablecoin-factory",
+    "contracts/dina-fx-swap",
+    "contracts/dina-currency-registry",
 ]
 
 [workspace.package]
