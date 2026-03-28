@@ -32,6 +32,17 @@ services:
       - DINA_VALIDATOR_INDEX=0
     ports:
       - "19944:9944"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -63,6 +74,17 @@ services:
       - DINA_VALIDATOR_INDEX=1
     depends_on:
       - validator-1
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -94,6 +116,17 @@ services:
       - DINA_VALIDATOR_INDEX=2
     depends_on:
       - validator-1
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -120,8 +153,8 @@ services:
       - RUST_LOG=info,dina_rpc=debug
       - DINA_CHAIN_ID=dina-local-testnet
     ports:
-      - "8545:8545"
-      - "8080:8080"
+      - "127.0.0.1:8545:8545"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - validator-1
       - validator-2

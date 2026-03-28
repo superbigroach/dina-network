@@ -193,8 +193,8 @@ const ENDPOINTS: RestEndpointDoc[] = [
     exampleResponse: {
       count: 3,
       peers: [
-        { id: "node-1", address: "35.193.28.189:26656", latency_ms: 12 },
-        { id: "node-2", address: "136.115.115.11:26656", latency_ms: 8 },
+        { id: "node-1", address: "validator-1.dina.network:26656", latency_ms: 12 },
+        { id: "node-2", address: "validator-2.dina.network:26656", latency_ms: 8 },
       ],
     },
   },

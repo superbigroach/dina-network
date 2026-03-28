@@ -48,13 +48,9 @@ interface BlockSummary {
 // Constants
 // ---------------------------------------------------------------------------
 
-const VALIDATORS = [
-  { ip: "35.184.213.248", label: "Validator 1 (US-Central)" },
-  { ip: "35.193.28.189", label: "Validator 2 (US-East)" },
-  { ip: "136.115.115.11", label: "Validator 3 (EU-West)" },
-];
+import { RPC_URL, REST_URL } from "@/lib/constants";
 
-const API_BASE = "http://35.184.213.248:8080";
+const API_BASE = REST_URL;
 
 // ---------------------------------------------------------------------------
 // Helpers

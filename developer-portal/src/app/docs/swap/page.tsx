@@ -142,7 +142,7 @@ let event = dex.create_pool("USDC", "ETH");
         <CodeBlock title="JavaScript (via SDK)">
           {`import { DinaClient } from "@dina-network/sdk";
 
-const client = new DinaClient({ rpcUrl: "http://35.184.213.248:8545" });
+const client = new DinaClient({ rpcUrl: "https://rpc.dina.network" });
 const wallet = client.wallet("your-private-key");
 
 // Create a new trading pair

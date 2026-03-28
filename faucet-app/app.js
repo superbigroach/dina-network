@@ -270,9 +270,9 @@
         '<li class="history__item">',
         '  <div class="history__icon">+</div>',
         '  <div class="history__details">',
-        '    <div class="history__amount">+' + amountStr + '</div>',
-        '    <div class="history__time">' + timeStr + '</div>',
-        '    <div class="history__tx">' + txShort + '</div>',
+        '    <div class="history__amount">+' + escapeHtml(amountStr) + '</div>',
+        '    <div class="history__time">' + escapeHtml(timeStr) + '</div>',
+        '    <div class="history__tx">' + escapeHtml(txShort) + '</div>',
         '  </div>',
         '</li>',
       ].join('\n');
@@ -405,6 +405,12 @@
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
 
   function formatUSDC(microUnits) {
     var whole = Math.floor(microUnits / 1_000_000);

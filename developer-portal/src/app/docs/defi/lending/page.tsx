@@ -146,7 +146,7 @@ let mut pool = LendingPoolState::new(
         <CodeBlock title="JavaScript (via SDK)">
           {`import { DinaClient } from "@dina-network/sdk";
 
-const client = new DinaClient({ rpcUrl: "http://35.184.213.248:8545" });
+const client = new DinaClient({ rpcUrl: "https://rpc.dina.network" });
 const wallet = client.wallet("your-private-key");
 
 const tx = await wallet.callContract("defi-lending", "create_pool", {

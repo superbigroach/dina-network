@@ -6,3 +6,11 @@ node_modules/
 *.egg-info/
 package-lock.json
 next-env.d.ts
+
+# Keys and secrets
+keys/
+deployment/keys/
+*.key
+*.tfvars
+!*.tfvars.example
+inventory.yml

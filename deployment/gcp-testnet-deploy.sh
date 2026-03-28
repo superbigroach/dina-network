@@ -101,9 +101,22 @@ generate_keys() {
   for i in 0 1 2; do
     KEY_FILE="deployment/keys/validator-${i}.key"
     if [ ! -f "${KEY_FILE}" ]; then
-      # Generate 32 random bytes as Ed25519 seed
-      openssl rand 32 > "${KEY_FILE}"
+      # Generate key using dina CLI (proper Ed25519 keypair)
+      if command -v dina >/dev/null 2>&1; then
+        dina keygen --output "${KEY_FILE}"
+      else
+        err "dina CLI not found — cannot generate validator keys securely"
+        err "Install dina CLI or generate keys manually: dina keygen --output ${KEY_FILE}"
+        exit 1
+      fi
       log "Generated key: ${KEY_FILE}"
+
+      # Store key in GCP Secret Manager
+      gcloud secrets create "dina-validator-${i}-key" \
+        --replication-policy="automatic" --quiet 2>/dev/null || true
+      gcloud secrets versions add "dina-validator-${i}-key" \
+        --data-file="${KEY_FILE}" --quiet
+      log "Stored key in Secret Manager: dina-validator-${i}-key"
     else
       log "Key exists: ${KEY_FILE} (skipping)"
     fi
@@ -152,13 +165,15 @@ setup_firewall() {
     --description="Dina P2P consensus traffic" \
     --quiet
 
-  # RPC access (restrict to your IP in production)
+  # RPC access — restricted to load balancer CIDR and known IPs
+  # Override with DINA_RPC_ALLOWED_RANGES env var (comma-separated CIDRs)
+  RPC_ALLOWED="${DINA_RPC_ALLOWED_RANGES:-130.211.0.0/22,35.191.0.0/16}"
   gcloud compute firewall-rules describe dina-rpc --quiet 2>/dev/null || \
   gcloud compute firewall-rules create dina-rpc \
     --allow=tcp:${RPC_PORT} \
     --target-tags=dina-validator \
-    --source-ranges="0.0.0.0/0" \
-    --description="Dina RPC access" \
+    --source-ranges="${RPC_ALLOWED}" \
+    --description="Dina RPC access (restricted to LB and known IPs)" \
     --quiet
 }
 
@@ -207,9 +222,15 @@ create_vms() {
       --container-mount-host-path=mount-path=/data,host-path=/home/dina/data \
       --metadata=startup-script="#!/bin/bash
 mkdir -p /home/dina/data
-# Copy validator key from Secret Manager or generate
+# Fetch validator key from Secret Manager — fail hard if unavailable
 if [ ! -f /home/dina/data/validator.key ]; then
-  openssl rand 32 > /home/dina/data/validator.key
+  gcloud secrets versions access latest --secret=\"dina-validator-${i}-key\" \
+    > /home/dina/data/validator.key 2>/dev/null
+  if [ \$? -ne 0 ] || [ ! -s /home/dina/data/validator.key ]; then
+    echo 'FATAL: Failed to fetch validator key from Secret Manager' >&2
+    exit 1
+  fi
+  chmod 600 /home/dina/data/validator.key
 fi" \
       --quiet
 

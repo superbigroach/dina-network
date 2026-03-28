@@ -1,13 +1,12 @@
 // Dina Network testnet configuration
+// Configurable RPC/REST endpoints — no hardcoded validator IPs
+export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.dina.network';
+export const REST_URL = process.env.NEXT_PUBLIC_REST_URL || 'https://api.dina.network';
+
 export const TESTNET_CONFIG = {
   chainId: "dina-testnet-1",
-  validators: [
-    { name: "Validator 0", ip: "35.184.213.248", rpcPort: 8545, restPort: 8080 },
-    { name: "Validator 1", ip: "35.193.28.189", rpcPort: 8545, restPort: 8080 },
-    { name: "Validator 2", ip: "136.115.115.11", rpcPort: 8545, restPort: 8080 },
-  ],
-  rpcUrl: "http://35.184.213.248:8545",
-  restUrl: "http://35.184.213.248:8080",
+  rpcUrl: RPC_URL,
+  restUrl: REST_URL,
   blockTimeMs: 100,
   maxTxsPerBlock: 10000,
   currency: "USDC",

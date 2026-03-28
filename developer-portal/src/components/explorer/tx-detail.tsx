@@ -45,7 +45,9 @@ interface TxEvent {
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = "http://35.184.213.248:8080";
+import { REST_URL } from "@/lib/constants";
+
+const API_BASE = REST_URL;
 
 // ---------------------------------------------------------------------------
 // Helpers

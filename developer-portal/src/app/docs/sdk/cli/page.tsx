@@ -400,8 +400,8 @@ dina node --validator --key ./validator.key --data-dir ./dina-data`}
   Address:    dina1validator7x9m...
 
 Connecting to peers...
-  Connected: 35.184.213.248:26656 (Validator 0)
-  Connected: 35.193.28.189:26656 (Validator 1)
+  Connected: validator-0.dina.network:26656 (Validator 0)
+  Connected: validator-1.dina.network:26656 (Validator 1)
 
 Syncing blocks... 1,234,500 / 1,234,567 (99.99%)
 Sync complete. Producing blocks.

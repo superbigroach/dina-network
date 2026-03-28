@@ -865,7 +865,7 @@ dina deploy --wasm optimized.wasm \\
           <code className="text-slate-200">{`import { DinaClient, Wallet } from '@dina-network/sdk';
 import { readFileSync } from 'fs';
 
-const client = new DinaClient('http://35.184.213.248:8545');
+const client = new DinaClient('https://rpc.dina.network');
 const wallet = Wallet.fromMnemonic('your mnemonic here...');
 
 const wasmBytes = readFileSync('./optimized.wasm');
@@ -941,7 +941,7 @@ dina view --contract 0x7a3f...e291 \\
             <pre className="overflow-x-auto rounded-xl bg-slate-800 p-5 text-sm leading-relaxed">
               <code className="text-slate-200">{`import { DinaClient, Wallet } from '@dina-network/sdk';
 
-const client = new DinaClient('http://35.184.213.248:8545');
+const client = new DinaClient('https://rpc.dina.network');
 const wallet = Wallet.fromMnemonic('your mnemonic...');
 
 // Mutation call (costs gas)
@@ -974,7 +974,7 @@ await client.callContract(wallet, {
               Via JSON-RPC
             </h3>
             <pre className="overflow-x-auto rounded-xl bg-slate-800 p-5 text-sm leading-relaxed">
-              <code className="text-slate-200">{`curl -X POST http://35.184.213.248:8545 \\
+              <code className="text-slate-200">{`curl -X POST https://rpc.dina.network \\
   -H "Content-Type: application/json" \\
   -d '{
     "jsonrpc": "2.0",

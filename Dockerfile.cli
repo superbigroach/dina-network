@@ -42,4 +42,7 @@ RUN chmod +x /usr/local/bin/dina
 # Working directory for key files and output
 WORKDIR /workspace
 
+RUN groupadd -r dina && useradd -r -g dina -d /home/dina -m dina
+USER dina
+
 ENTRYPOINT ["dina"]
