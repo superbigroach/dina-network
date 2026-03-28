@@ -5,7 +5,7 @@
     "name": "Canadian Dollar",
     "country": "CA",
     "rate": 1380000,
-    "yield": 380,
+    "yield": 450,
     "flag": "🇨🇦",
     "contractAddress": "0x434144432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -16,7 +16,7 @@
     "name": "Mexican Peso",
     "country": "MX",
     "rate": 17500000,
-    "yield": 1050,
+    "yield": 450,
     "flag": "🇲🇽",
     "contractAddress": "0x4d584e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -27,7 +27,7 @@
     "name": "Guatemalan Quetzal",
     "country": "GT",
     "rate": 7800000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇬🇹",
     "contractAddress": "0x475451432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -38,7 +38,7 @@
     "name": "Belize Dollar",
     "country": "BZ",
     "rate": 2000000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇧🇿",
     "contractAddress": "0x425a44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -49,7 +49,7 @@
     "name": "Honduran Lempira",
     "country": "HN",
     "rate": 24800000,
-    "yield": 600,
+    "yield": 450,
     "flag": "🇭🇳",
     "contractAddress": "0x484e4c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -60,7 +60,7 @@
     "name": "Nicaraguan Córdoba",
     "country": "NI",
     "rate": 36800000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇳🇮",
     "contractAddress": "0x4e494f432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -71,7 +71,7 @@
     "name": "Costa Rican Colón",
     "country": "CR",
     "rate": 530000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇨🇷",
     "contractAddress": "0x435243432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -93,7 +93,7 @@
     "name": "Dominican Peso",
     "country": "DO",
     "rate": 58500000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇩🇴",
     "contractAddress": "0x444f50432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -104,7 +104,7 @@
     "name": "Cuban Peso",
     "country": "CU",
     "rate": 24000000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇨🇺",
     "contractAddress": "0x435550432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -115,7 +115,7 @@
     "name": "Haitian Gourde",
     "country": "HT",
     "rate": 133000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇭🇹",
     "contractAddress": "0x485447432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -126,7 +126,7 @@
     "name": "Jamaican Dollar",
     "country": "JM",
     "rate": 155000000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇯🇲",
     "contractAddress": "0x4a4d44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -137,7 +137,7 @@
     "name": "Trinidad & Tobago Dollar",
     "country": "TT",
     "rate": 6800000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇹🇹",
     "contractAddress": "0x545444432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -148,7 +148,7 @@
     "name": "Barbadian Dollar",
     "country": "BB",
     "rate": 2000000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇧🇧",
     "contractAddress": "0x424244432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -159,7 +159,7 @@
     "name": "Bahamian Dollar",
     "country": "BS",
     "rate": 1000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇧🇸",
     "contractAddress": "0x425344432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -170,7 +170,7 @@
     "name": "East Caribbean Dollar",
     "country": "EC",
     "rate": 2700000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🏝️",
     "contractAddress": "0x584344432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -181,7 +181,7 @@
     "name": "Aruban Florin",
     "country": "AW",
     "rate": 1790000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇦🇼",
     "contractAddress": "0x415747432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -192,7 +192,7 @@
     "name": "Netherlands Antillean Guilder",
     "country": "CW",
     "rate": 1790000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇨🇼",
     "contractAddress": "0x414e47432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -214,7 +214,7 @@
     "name": "Cayman Islands Dollar",
     "country": "KY",
     "rate": 830000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇰🇾",
     "contractAddress": "0x4b5944432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -225,7 +225,7 @@
     "name": "Brazilian Real",
     "country": "BR",
     "rate": 5100000,
-    "yield": 1250,
+    "yield": 450,
     "flag": "🇧🇷",
     "contractAddress": "0x425253432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -236,7 +236,7 @@
     "name": "Argentine Peso",
     "country": "AR",
     "rate": 900000000,
-    "yield": 4000,
+    "yield": 450,
     "flag": "🇦🇷",
     "contractAddress": "0x415253432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -247,7 +247,7 @@
     "name": "Chilean Peso",
     "country": "CL",
     "rate": 950000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇨🇱",
     "contractAddress": "0x434c50432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -258,7 +258,7 @@
     "name": "Colombian Peso",
     "country": "CO",
     "rate": 4200000000,
-    "yield": 900,
+    "yield": 450,
     "flag": "🇨🇴",
     "contractAddress": "0x434f50432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -269,7 +269,7 @@
     "name": "Peruvian Sol",
     "country": "PE",
     "rate": 3750000,
-    "yield": 600,
+    "yield": 450,
     "flag": "🇵🇪",
     "contractAddress": "0x50454e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -280,7 +280,7 @@
     "name": "Uruguayan Peso",
     "country": "UY",
     "rate": 42000000,
-    "yield": 900,
+    "yield": 450,
     "flag": "🇺🇾",
     "contractAddress": "0x555955432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -291,7 +291,7 @@
     "name": "Paraguayan Guarani",
     "country": "PY",
     "rate": 7500000000,
-    "yield": 600,
+    "yield": 450,
     "flag": "🇵🇾",
     "contractAddress": "0x505947432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -302,7 +302,7 @@
     "name": "Bolivian Boliviano",
     "country": "BO",
     "rate": 6900000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇧🇴",
     "contractAddress": "0x424f42432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -313,7 +313,7 @@
     "name": "Venezuelan Bolívar",
     "country": "VE",
     "rate": 36500000,
-    "yield": 5000,
+    "yield": 450,
     "flag": "🇻🇪",
     "contractAddress": "0x564553432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -324,7 +324,7 @@
     "name": "Guyanese Dollar",
     "country": "GY",
     "rate": 209000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇬🇾",
     "contractAddress": "0x475944432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -335,7 +335,7 @@
     "name": "Surinamese Dollar",
     "country": "SR",
     "rate": 36200000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇸🇷",
     "contractAddress": "0x535244432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -346,7 +346,7 @@
     "name": "Falkland Islands Pound",
     "country": "FK",
     "rate": 790000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇫🇰",
     "contractAddress": "0x464b50432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -357,7 +357,7 @@
     "name": "Euro",
     "country": "EU",
     "rate": 930000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇪🇺",
     "contractAddress": "0x455552432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -368,7 +368,7 @@
     "name": "British Pound",
     "country": "GB",
     "rate": 790000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇬🇧",
     "contractAddress": "0x474250432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -379,7 +379,7 @@
     "name": "Swiss Franc",
     "country": "CH",
     "rate": 880000,
-    "yield": 150,
+    "yield": 450,
     "flag": "🇨🇭",
     "contractAddress": "0x434846432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -390,7 +390,7 @@
     "name": "Swedish Krona",
     "country": "SE",
     "rate": 10500000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇸🇪",
     "contractAddress": "0x53454b472d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -401,7 +401,7 @@
     "name": "Norwegian Krone",
     "country": "NO",
     "rate": 10800000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇳🇴",
     "contractAddress": "0x4e4f4b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -412,7 +412,7 @@
     "name": "Danish Krone",
     "country": "DK",
     "rate": 6950000,
-    "yield": 320,
+    "yield": 450,
     "flag": "🇩🇰",
     "contractAddress": "0x444b4b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -423,7 +423,7 @@
     "name": "Icelandic Króna",
     "country": "IS",
     "rate": 138000000,
-    "yield": 900,
+    "yield": 450,
     "flag": "🇮🇸",
     "contractAddress": "0x49534b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -434,7 +434,7 @@
     "name": "Gibraltar Pound",
     "country": "GI",
     "rate": 790000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇬🇮",
     "contractAddress": "0x474950432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -445,7 +445,7 @@
     "name": "Polish Zloty",
     "country": "PL",
     "rate": 4050000,
-    "yield": 550,
+    "yield": 450,
     "flag": "🇵🇱",
     "contractAddress": "0x504c4e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -456,7 +456,7 @@
     "name": "Czech Koruna",
     "country": "CZ",
     "rate": 23500000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇨🇿",
     "contractAddress": "0x435a4b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -467,7 +467,7 @@
     "name": "Hungarian Forint",
     "country": "HU",
     "rate": 375000000,
-    "yield": 650,
+    "yield": 450,
     "flag": "🇭🇺",
     "contractAddress": "0x485546432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -478,7 +478,7 @@
     "name": "Romanian Leu",
     "country": "RO",
     "rate": 4650000,
-    "yield": 550,
+    "yield": 450,
     "flag": "🇷🇴",
     "contractAddress": "0x524f4e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -489,7 +489,7 @@
     "name": "Bulgarian Lev",
     "country": "BG",
     "rate": 1820000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇧🇬",
     "contractAddress": "0x42474e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -500,7 +500,7 @@
     "name": "Croatian Kuna",
     "country": "HR",
     "rate": 7050000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇭🇷",
     "contractAddress": "0x48524b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -511,7 +511,7 @@
     "name": "Serbian Dinar",
     "country": "RS",
     "rate": 109000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇷🇸",
     "contractAddress": "0x525344432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -522,7 +522,7 @@
     "name": "Bosnia-Herzegovina Mark",
     "country": "BA",
     "rate": 1820000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇧🇦",
     "contractAddress": "0x42414d432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -533,7 +533,7 @@
     "name": "Macedonian Denar",
     "country": "MK",
     "rate": 57500000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇲🇰",
     "contractAddress": "0x4d4b44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -544,7 +544,7 @@
     "name": "Albanian Lek",
     "country": "AL",
     "rate": 96000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇦🇱",
     "contractAddress": "0x414c4c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -555,7 +555,7 @@
     "name": "Moldovan Leu",
     "country": "MD",
     "rate": 17800000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇲🇩",
     "contractAddress": "0x4d444c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -566,7 +566,7 @@
     "name": "Ukrainian Hryvnia",
     "country": "UA",
     "rate": 41500000,
-    "yield": 1500,
+    "yield": 450,
     "flag": "🇺🇦",
     "contractAddress": "0x554148432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -577,7 +577,7 @@
     "name": "Belarusian Ruble",
     "country": "BY",
     "rate": 3250000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇧🇾",
     "contractAddress": "0x42594e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -588,7 +588,7 @@
     "name": "Georgian Lari",
     "country": "GE",
     "rate": 2710000,
-    "yield": 900,
+    "yield": 450,
     "flag": "🇬🇪",
     "contractAddress": "0x47454c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -599,7 +599,7 @@
     "name": "Armenian Dram",
     "country": "AM",
     "rate": 388000000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇦🇲",
     "contractAddress": "0x414d44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -610,7 +610,7 @@
     "name": "Azerbaijani Manat",
     "country": "AZ",
     "rate": 1700000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇦🇿",
     "contractAddress": "0x415a4e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -621,7 +621,7 @@
     "name": "Turkish Lira",
     "country": "TR",
     "rate": 32500000,
-    "yield": 4500,
+    "yield": 450,
     "flag": "🇹🇷",
     "contractAddress": "0x5452594c2d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -632,7 +632,7 @@
     "name": "Russian Ruble",
     "country": "RU",
     "rate": 92000000,
-    "yield": 1600,
+    "yield": 450,
     "flag": "🇷🇺",
     "contractAddress": "0x525542432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -643,7 +643,7 @@
     "name": "Japanese Yen",
     "country": "JP",
     "rate": 154000000,
-    "yield": 50,
+    "yield": 450,
     "flag": "🇯🇵",
     "contractAddress": "0x4a5059432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -654,7 +654,7 @@
     "name": "Chinese Yuan",
     "country": "CN",
     "rate": 7250000,
-    "yield": 250,
+    "yield": 450,
     "flag": "🇨🇳",
     "contractAddress": "0x434e48432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -665,7 +665,7 @@
     "name": "South Korean Won",
     "country": "KR",
     "rate": 1380000000,
-    "yield": 320,
+    "yield": 450,
     "flag": "🇰🇷",
     "contractAddress": "0x4b5257432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -676,7 +676,7 @@
     "name": "Taiwan Dollar",
     "country": "TW",
     "rate": 32500000,
-    "yield": 150,
+    "yield": 450,
     "flag": "🇹🇼",
     "contractAddress": "0x545744432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -687,7 +687,7 @@
     "name": "Hong Kong Dollar",
     "country": "HK",
     "rate": 7810000,
-    "yield": 430,
+    "yield": 450,
     "flag": "🇭🇰",
     "contractAddress": "0x484b44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -698,7 +698,7 @@
     "name": "Macau Pataca",
     "country": "MO",
     "rate": 8050000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇲🇴",
     "contractAddress": "0x4d4f50432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -709,7 +709,7 @@
     "name": "Mongolian Tugrik",
     "country": "MN",
     "rate": 3450000000,
-    "yield": 1200,
+    "yield": 450,
     "flag": "🇲🇳",
     "contractAddress": "0x4d4e54432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -720,7 +720,7 @@
     "name": "North Korean Won",
     "country": "KP",
     "rate": 900000000,
-    "yield": 0,
+    "yield": 450,
     "flag": "🇰🇵",
     "contractAddress": "0x4b5057432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -731,7 +731,7 @@
     "name": "Singapore Dollar",
     "country": "SG",
     "rate": 1340000,
-    "yield": 320,
+    "yield": 450,
     "flag": "🇸🇬",
     "contractAddress": "0x534744432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -742,7 +742,7 @@
     "name": "Thai Baht",
     "country": "TH",
     "rate": 35500000,
-    "yield": 200,
+    "yield": 450,
     "flag": "🇹🇭",
     "contractAddress": "0x544842432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -753,7 +753,7 @@
     "name": "Malaysian Ringgit",
     "country": "MY",
     "rate": 4700000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇲🇾",
     "contractAddress": "0x4d5952432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -764,7 +764,7 @@
     "name": "Indonesian Rupiah",
     "country": "ID",
     "rate": 15800000000,
-    "yield": 600,
+    "yield": 450,
     "flag": "🇮🇩",
     "contractAddress": "0x494452432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -775,7 +775,7 @@
     "name": "Philippine Peso",
     "country": "PH",
     "rate": 56500000,
-    "yield": 550,
+    "yield": 450,
     "flag": "🇵🇭",
     "contractAddress": "0x504850432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -786,7 +786,7 @@
     "name": "Vietnamese Dong",
     "country": "VN",
     "rate": 25000000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇻🇳",
     "contractAddress": "0x564e44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -797,7 +797,7 @@
     "name": "Myanmar Kyat",
     "country": "MM",
     "rate": 2100000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇲🇲",
     "contractAddress": "0x4d4d4b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -808,7 +808,7 @@
     "name": "Cambodian Riel",
     "country": "KH",
     "rate": 4100000000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇰🇭",
     "contractAddress": "0x4b4852432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -819,7 +819,7 @@
     "name": "Lao Kip",
     "country": "LA",
     "rate": 21000000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇱🇦",
     "contractAddress": "0x4c414b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -830,7 +830,7 @@
     "name": "Brunei Dollar",
     "country": "BN",
     "rate": 1340000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇧🇳",
     "contractAddress": "0x424e44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -852,7 +852,7 @@
     "name": "Indian Rupee",
     "country": "IN",
     "rate": 83500000,
-    "yield": 650,
+    "yield": 450,
     "flag": "🇮🇳",
     "contractAddress": "0x494e52432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -863,7 +863,7 @@
     "name": "Pakistani Rupee",
     "country": "PK",
     "rate": 278000000,
-    "yield": 2000,
+    "yield": 450,
     "flag": "🇵🇰",
     "contractAddress": "0x504b52432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -874,7 +874,7 @@
     "name": "Bangladeshi Taka",
     "country": "BD",
     "rate": 110000000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇧🇩",
     "contractAddress": "0x424454432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -885,7 +885,7 @@
     "name": "Sri Lankan Rupee",
     "country": "LK",
     "rate": 305000000,
-    "yield": 1000,
+    "yield": 450,
     "flag": "🇱🇰",
     "contractAddress": "0x4c4b52432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -896,7 +896,7 @@
     "name": "Nepalese Rupee",
     "country": "NP",
     "rate": 133500000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇳🇵",
     "contractAddress": "0x4e5052432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -907,7 +907,7 @@
     "name": "Bhutanese Ngultrum",
     "country": "BT",
     "rate": 83500000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇧🇹",
     "contractAddress": "0x42544e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -918,7 +918,7 @@
     "name": "Maldivian Rufiyaa",
     "country": "MV",
     "rate": 15400000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇲🇻",
     "contractAddress": "0x4d5652432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -929,7 +929,7 @@
     "name": "Afghan Afghani",
     "country": "AF",
     "rate": 70000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇦🇫",
     "contractAddress": "0x41464e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -951,7 +951,7 @@
     "name": "Saudi Riyal",
     "country": "SA",
     "rate": 3750000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇸🇦",
     "contractAddress": "0x534152432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -962,7 +962,7 @@
     "name": "Qatari Riyal",
     "country": "QA",
     "rate": 3640000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇶🇦",
     "contractAddress": "0x514152432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -973,7 +973,7 @@
     "name": "Bahraini Dinar",
     "country": "BH",
     "rate": 376000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇧🇭",
     "contractAddress": "0x424844432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -995,7 +995,7 @@
     "name": "Kuwaiti Dinar",
     "country": "KW",
     "rate": 307000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇰🇼",
     "contractAddress": "0x4b5744432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1006,7 +1006,7 @@
     "name": "Jordanian Dinar",
     "country": "JO",
     "rate": 709000,
-    "yield": 600,
+    "yield": 450,
     "flag": "🇯🇴",
     "contractAddress": "0x4a4f44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1028,7 +1028,7 @@
     "name": "Lebanese Pound",
     "country": "LB",
     "rate": 89500000000,
-    "yield": 0,
+    "yield": 450,
     "flag": "🇱🇧",
     "contractAddress": "0x4c4250432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1039,7 +1039,7 @@
     "name": "Iraqi Dinar",
     "country": "IQ",
     "rate": 1310000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇮🇶",
     "contractAddress": "0x495144432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1050,7 +1050,7 @@
     "name": "Iranian Rial",
     "country": "IR",
     "rate": 42000000000,
-    "yield": 2300,
+    "yield": 450,
     "flag": "🇮🇷",
     "contractAddress": "0x495252432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1061,7 +1061,7 @@
     "name": "Syrian Pound",
     "country": "SY",
     "rate": 13000000000,
-    "yield": 0,
+    "yield": 450,
     "flag": "🇸🇾",
     "contractAddress": "0x535950432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1072,7 +1072,7 @@
     "name": "Yemeni Rial",
     "country": "YE",
     "rate": 250000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇾🇪",
     "contractAddress": "0x594552432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1083,7 +1083,7 @@
     "name": "Kazakhstani Tenge",
     "country": "KZ",
     "rate": 450000000,
-    "yield": 1400,
+    "yield": 450,
     "flag": "🇰🇿",
     "contractAddress": "0x4b5a54432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1094,7 +1094,7 @@
     "name": "Uzbekistani Som",
     "country": "UZ",
     "rate": 12700000000,
-    "yield": 1400,
+    "yield": 450,
     "flag": "🇺🇿",
     "contractAddress": "0x555a53432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1105,7 +1105,7 @@
     "name": "Kyrgyzstani Som",
     "country": "KG",
     "rate": 89000000,
-    "yield": 1000,
+    "yield": 450,
     "flag": "🇰🇬",
     "contractAddress": "0x4b4753432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1116,7 +1116,7 @@
     "name": "Tajikistani Somoni",
     "country": "TJ",
     "rate": 10900000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇹🇯",
     "contractAddress": "0x544a53432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1127,7 +1127,7 @@
     "name": "Turkmenistani Manat",
     "country": "TM",
     "rate": 3500000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇹🇲",
     "contractAddress": "0x544d54432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1138,7 +1138,7 @@
     "name": "Egyptian Pound",
     "country": "EG",
     "rate": 48500000,
-    "yield": 2200,
+    "yield": 450,
     "flag": "🇪🇬",
     "contractAddress": "0x454750432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1149,7 +1149,7 @@
     "name": "Moroccan Dirham",
     "country": "MA",
     "rate": 10000000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇲🇦",
     "contractAddress": "0x4d4144432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1160,7 +1160,7 @@
     "name": "Algerian Dinar",
     "country": "DZ",
     "rate": 135000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇩🇿",
     "contractAddress": "0x445a44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1171,7 +1171,7 @@
     "name": "Tunisian Dinar",
     "country": "TN",
     "rate": 3120000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇹🇳",
     "contractAddress": "0x544e44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1182,7 +1182,7 @@
     "name": "Libyan Dinar",
     "country": "LY",
     "rate": 4850000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇱🇾",
     "contractAddress": "0x4c5944432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1193,7 +1193,7 @@
     "name": "Sudanese Pound",
     "country": "SD",
     "rate": 601000000,
-    "yield": 1500,
+    "yield": 450,
     "flag": "🇸🇩",
     "contractAddress": "0x534447432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1204,7 +1204,7 @@
     "name": "Nigerian Naira",
     "country": "NG",
     "rate": 1550000000,
-    "yield": 1800,
+    "yield": 450,
     "flag": "🇳🇬",
     "contractAddress": "0x4e474e532d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1215,7 +1215,7 @@
     "name": "Ghanaian Cedi",
     "country": "GH",
     "rate": 15200000,
-    "yield": 2500,
+    "yield": 450,
     "flag": "🇬🇭",
     "contractAddress": "0x474853432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1226,7 +1226,7 @@
     "name": "West African CFA Franc",
     "country": "WA",
     "rate": 610000000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🌍",
     "contractAddress": "0x584f46432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1237,7 +1237,7 @@
     "name": "Gambian Dalasi",
     "country": "GM",
     "rate": 67000000,
-    "yield": 600,
+    "yield": 450,
     "flag": "🇬🇲",
     "contractAddress": "0x474d44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1248,7 +1248,7 @@
     "name": "Guinean Franc",
     "country": "GN",
     "rate": 8600000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇬🇳",
     "contractAddress": "0x474e46432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1259,7 +1259,7 @@
     "name": "Sierra Leonean Leone",
     "country": "SL",
     "rate": 22500000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇸🇱",
     "contractAddress": "0x534c4c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1270,7 +1270,7 @@
     "name": "Liberian Dollar",
     "country": "LR",
     "rate": 192000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇱🇷",
     "contractAddress": "0x4c5244432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1281,7 +1281,7 @@
     "name": "Cape Verdean Escudo",
     "country": "CV",
     "rate": 102500000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇨🇻",
     "contractAddress": "0x435645432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1292,7 +1292,7 @@
     "name": "Mauritanian Ouguiya",
     "country": "MR",
     "rate": 39700000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇲🇷",
     "contractAddress": "0x4d5255432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1303,7 +1303,7 @@
     "name": "Kenyan Shilling",
     "country": "KE",
     "rate": 152000000,
-    "yield": 1000,
+    "yield": 450,
     "flag": "🇰🇪",
     "contractAddress": "0x4b4553472d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1314,7 +1314,7 @@
     "name": "Tanzanian Shilling",
     "country": "TZ",
     "rate": 2650000000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇹🇿",
     "contractAddress": "0x545a53432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1325,7 +1325,7 @@
     "name": "Ugandan Shilling",
     "country": "UG",
     "rate": 3800000000,
-    "yield": 900,
+    "yield": 450,
     "flag": "🇺🇬",
     "contractAddress": "0x554758432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1336,7 +1336,7 @@
     "name": "Ethiopian Birr",
     "country": "ET",
     "rate": 57000000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇪🇹",
     "contractAddress": "0x455442432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1347,7 +1347,7 @@
     "name": "Rwandan Franc",
     "country": "RW",
     "rate": 1290000000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇷🇼",
     "contractAddress": "0x525746432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1358,7 +1358,7 @@
     "name": "Burundian Franc",
     "country": "BI",
     "rate": 2870000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇧🇮",
     "contractAddress": "0x424946432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1369,7 +1369,7 @@
     "name": "Somali Shilling",
     "country": "SO",
     "rate": 571000000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇸🇴",
     "contractAddress": "0x534f53432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1380,7 +1380,7 @@
     "name": "Djiboutian Franc",
     "country": "DJ",
     "rate": 177700000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇩🇯",
     "contractAddress": "0x444a46432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1391,7 +1391,7 @@
     "name": "Eritrean Nakfa",
     "country": "ER",
     "rate": 15000000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇪🇷",
     "contractAddress": "0x45524e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1402,7 +1402,7 @@
     "name": "South Sudanese Pound",
     "country": "SS",
     "rate": 130000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇸🇸",
     "contractAddress": "0x535350432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1413,7 +1413,7 @@
     "name": "Central African CFA Franc",
     "country": "CA",
     "rate": 610000000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🌍",
     "contractAddress": "0x584146432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1424,7 +1424,7 @@
     "name": "Congolese Franc",
     "country": "CD",
     "rate": 2780000000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇨🇩",
     "contractAddress": "0x434446432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1435,7 +1435,7 @@
     "name": "São Tomé Dobra",
     "country": "ST",
     "rate": 22800000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇸🇹",
     "contractAddress": "0x53544e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1446,7 +1446,7 @@
     "name": "South African Rand",
     "country": "ZA",
     "rate": 18500000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇿🇦",
     "contractAddress": "0x5a4152432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1457,7 +1457,7 @@
     "name": "Botswana Pula",
     "country": "BW",
     "rate": 13700000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇧🇼",
     "contractAddress": "0x425750432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1468,7 +1468,7 @@
     "name": "Namibian Dollar",
     "country": "NA",
     "rate": 18500000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇳🇦",
     "contractAddress": "0x4e4144432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1479,7 +1479,7 @@
     "name": "Eswatini Lilangeni",
     "country": "SZ",
     "rate": 18500000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇸🇿",
     "contractAddress": "0x535a4c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1490,7 +1490,7 @@
     "name": "Lesotho Loti",
     "country": "LS",
     "rate": 18500000,
-    "yield": 700,
+    "yield": 450,
     "flag": "🇱🇸",
     "contractAddress": "0x4c534c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1501,7 +1501,7 @@
     "name": "Malawian Kwacha",
     "country": "MW",
     "rate": 1740000000,
-    "yield": 2000,
+    "yield": 450,
     "flag": "🇲🇼",
     "contractAddress": "0x4d574b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1512,7 +1512,7 @@
     "name": "Zambian Kwacha",
     "country": "ZM",
     "rate": 26500000,
-    "yield": 1200,
+    "yield": 450,
     "flag": "🇿🇲",
     "contractAddress": "0x5a4d57432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1523,7 +1523,7 @@
     "name": "Mozambican Metical",
     "country": "MZ",
     "rate": 63800000,
-    "yield": 1300,
+    "yield": 450,
     "flag": "🇲🇿",
     "contractAddress": "0x4d5a4e432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1534,7 +1534,7 @@
     "name": "Angolan Kwanza",
     "country": "AO",
     "rate": 835000000,
-    "yield": 1500,
+    "yield": 450,
     "flag": "🇦🇴",
     "contractAddress": "0x414f41432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1545,7 +1545,7 @@
     "name": "Malagasy Ariary",
     "country": "MG",
     "rate": 4550000000,
-    "yield": 800,
+    "yield": 450,
     "flag": "🇲🇬",
     "contractAddress": "0x4d4741432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1556,7 +1556,7 @@
     "name": "Mauritian Rupee",
     "country": "MU",
     "rate": 45500000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇲🇺",
     "contractAddress": "0x4d5552432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1567,7 +1567,7 @@
     "name": "Seychellois Rupee",
     "country": "SC",
     "rate": 14200000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇸🇨",
     "contractAddress": "0x534352432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1578,7 +1578,7 @@
     "name": "Comorian Franc",
     "country": "KM",
     "rate": 457000000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇰🇲",
     "contractAddress": "0x4b4d46432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1589,7 +1589,7 @@
     "name": "Zimbabwean Dollar",
     "country": "ZW",
     "rate": 13500000000,
-    "yield": 3000,
+    "yield": 450,
     "flag": "🇿🇼",
     "contractAddress": "0x5a574c432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1600,7 +1600,7 @@
     "name": "Australian Dollar",
     "country": "AU",
     "rate": 1540000,
-    "yield": 400,
+    "yield": 450,
     "flag": "🇦🇺",
     "contractAddress": "0x415544432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1622,7 +1622,7 @@
     "name": "Fijian Dollar",
     "country": "FJ",
     "rate": 2250000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇫🇯",
     "contractAddress": "0x464a44432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1633,7 +1633,7 @@
     "name": "Papua New Guinean Kina",
     "country": "PG",
     "rate": 3850000,
-    "yield": 500,
+    "yield": 450,
     "flag": "🇵🇬",
     "contractAddress": "0x50474b432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1644,7 +1644,7 @@
     "name": "Samoan Tala",
     "country": "WS",
     "rate": 2780000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇼🇸",
     "contractAddress": "0x575354432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1655,7 +1655,7 @@
     "name": "Tongan Paʻanga",
     "country": "TO",
     "rate": 2380000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇹🇴",
     "contractAddress": "0x544f50432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1666,7 +1666,7 @@
     "name": "Vanuatu Vatu",
     "country": "VU",
     "rate": 119000000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇻🇺",
     "contractAddress": "0x565556432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1677,7 +1677,7 @@
     "name": "Solomon Islands Dollar",
     "country": "SB",
     "rate": 8400000,
-    "yield": 350,
+    "yield": 450,
     "flag": "🇸🇧",
     "contractAddress": "0x534244432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"
@@ -1688,7 +1688,7 @@
     "name": "CFP Franc",
     "country": "PF",
     "rate": 111000000,
-    "yield": 300,
+    "yield": 450,
     "flag": "🇵🇫",
     "contractAddress": "0x585046432d64696e612d746573746e6574000000000000000000000000000000",
     "status": "deployed"

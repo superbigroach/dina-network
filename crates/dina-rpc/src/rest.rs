@@ -290,11 +290,11 @@ async fn get_peers_handler(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// Faucet constants.
-const FAUCET_AMOUNT: u64 = 1_000_000_000; // 1,000 USDC in micro-USDC
-const FAUCET_COOLDOWN_SECS: u64 = 600; // 10 minutes
+const FAUCET_AMOUNT: u64 = 10_000_000_000; // 10,000 USDC in micro-USDC (generous for testnet)
+const FAUCET_COOLDOWN_SECS: u64 = 60; // 1 minute cooldown (testnet — fast iteration)
 /// C-2: Global faucet limits.
-const FAUCET_MAX_TOTAL: u64 = 1_000_000_000_000; // 1M USDC max total minted
-const FAUCET_MAX_PER_MINUTE: u64 = 100; // max 100 requests per 60-second window
+const FAUCET_MAX_TOTAL: u64 = 100_000_000_000_000; // 100M USDC max total minted (testnet)
+const FAUCET_MAX_PER_MINUTE: u64 = 500; // max 500 requests per 60-second window (testnet)
 
 async fn faucet_handler(
     State(state): State<AppState>,

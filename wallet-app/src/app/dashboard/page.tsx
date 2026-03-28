@@ -154,6 +154,29 @@ export default function DashboardPage() {
   const mockTotal = activeWallets.reduce((sum, w) => sum + w.balance, 0);
   const totalBalance = hasRealBalance ? realBalance : mockTotal;
 
+  // When we have real balance, distribute across wallet cards proportionally
+  const displayWallets = hasRealBalance
+    ? MOCK_WALLETS.map((w) => {
+        if (!w.isSetUp) return w;
+        // Main wallet gets 70%, Savings 20%, rest split remaining 10%
+        const allocations: Record<string, number> = {
+          'main-1': 0.70,
+          'savings-1': 0.15,
+          'backup-1': 0.05,
+          'agent-1': 0.04,
+          'agent-2': 0.03,
+          'speed-1': 0.03,
+        };
+        const pct = allocations[w.id] || 0;
+        return {
+          ...w,
+          balance: Math.floor(realBalance * pct),
+          lastYieldUpdate: balanceLastUpdate,
+          yieldRateBps: 450,
+        };
+      })
+    : MOCK_WALLETS;
+
   const yieldBps = 450; // 4.5% APY
   const weightedYieldBps = hasRealBalance
     ? yieldBps
@@ -234,7 +257,7 @@ export default function DashboardPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Get 1,000 Test USDC
+                Get 10,000 Test USDC
               </>
             )}
           </button>
@@ -242,7 +265,7 @@ export default function DashboardPage() {
 
         {/* Yield Stats */}
         <div className="mb-8">
-          <YieldDisplay wallets={MOCK_WALLETS} />
+          <YieldDisplay wallets={displayWallets} />
         </div>
 
         {/* Action Buttons */}
@@ -280,7 +303,7 @@ export default function DashboardPage() {
         <div className="mb-8">
           <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Wallets</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {MOCK_WALLETS.map((wallet) => (
+            {displayWallets.map((wallet) => (
               <WalletCard key={wallet.id} wallet={wallet} />
             ))}
           </div>
