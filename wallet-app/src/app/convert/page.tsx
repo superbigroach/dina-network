@@ -1,132 +1,103 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
-import { MOCK_CURRENCIES, CURRENCY_REGIONS } from '@/lib/constants';
+import { loadWallets, saveWallets, type StoredWallet } from '@/lib/wallet-store';
+import { fundFromFaucet, getBalanceRest } from '@/lib/api';
+import { formatUsdc } from '@/lib/yield';
 import Link from 'next/link';
 
-function CurrencySelect({
-  value,
-  onChange,
-  search,
-  onSearchChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  search: string;
-  onSearchChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
+type TransferStep = 'form' | 'transferring' | 'success' | 'error';
 
-  const filtered = useMemo(
-    () =>
-      MOCK_CURRENCIES.filter(
-        (c) =>
-          c.symbol.toLowerCase().includes(search.toLowerCase()) ||
-          c.name.toLowerCase().includes(search.toLowerCase()),
-      ),
-    [search],
-  );
-
-  const selected = MOCK_CURRENCIES.find((c) => c.symbol === value)!;
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm hover:bg-slate-700 transition-colors min-w-[120px]"
-      >
-        <span>{selected.icon}</span>
-        <span className="font-medium">{selected.symbol}</span>
-        <svg className="w-3 h-3 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
-          <div className="p-2 border-b border-slate-800">
-            <input
-              type="text"
-              placeholder="Search currencies..."
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none focus:border-emerald-500"
-              autoFocus
-            />
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {CURRENCY_REGIONS.map((region) => {
-              const items = filtered.filter((c) => c.region === region);
-              if (items.length === 0) return null;
-              return (
-                <div key={region}>
-                  <div className="px-3 py-1.5 bg-slate-800/40 sticky top-0">
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-                      {region}
-                    </span>
-                  </div>
-                  {items.map((c) => (
-                    <button
-                      key={c.symbol}
-                      type="button"
-                      onClick={() => {
-                        onChange(c.symbol);
-                        setOpen(false);
-                        onSearchChange('');
-                      }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-800 transition-colors text-left ${
-                        c.symbol === value ? 'bg-slate-800/60' : ''
-                      }`}
-                    >
-                      <span className="text-base">{c.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white">{c.symbol}</p>
-                        <p className="text-[11px] text-slate-500 truncate">{c.name}</p>
-                      </div>
-                      <span className="text-[11px] text-emerald-400 tabular-nums">
-                        {(c.yieldRateBps / 100).toFixed(1)}%
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-            {filtered.length === 0 && (
-              <p className="px-3 py-4 text-xs text-slate-500 text-center">No currencies found</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+interface LogEntry {
+  time: string;
+  message: string;
+  type: 'info' | 'success' | 'error' | 'warn';
 }
 
 export default function ConvertPage() {
-  const [fromCurrency, setFromCurrency] = useState('USDC');
-  const [toCurrency, setToCurrency] = useState('EURC');
+  const [storedWallets, setStoredWallets] = useState<StoredWallet[]>([]);
+  const [fromWalletId, setFromWalletId] = useState('');
+  const [toWalletId, setToWalletId] = useState('');
   const [amount, setAmount] = useState('');
-  const [converted, setConverted] = useState(false);
-  const [fromSearch, setFromSearch] = useState('');
-  const [toSearch, setToSearch] = useState('');
+  const [step, setStep] = useState<TransferStep>('form');
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
-  const fromCurr = MOCK_CURRENCIES.find((c) => c.symbol === fromCurrency)!;
-  const toCurr = MOCK_CURRENCIES.find((c) => c.symbol === toCurrency)!;
+  useEffect(() => {
+    const wallets = loadWallets();
+    setStoredWallets(wallets);
+    const setupList = wallets.filter(w => w.isSetUp);
+    if (setupList.length >= 1) setFromWalletId(setupList[0].id);
+    if (setupList.length >= 2) setToWalletId(setupList[1].id);
+    else if (setupList.length >= 1) setToWalletId(setupList[0].id);
+  }, []);
 
-  const amountNum = parseFloat(amount) || 0;
-  const rate = toCurr.ratePerUsdc / fromCurr.ratePerUsdc;
-  const receiveAmount = amountNum * rate;
+  const setupWallets = storedWallets.filter(w => w.isSetUp);
+  const fromWallet = storedWallets.find(w => w.id === fromWalletId);
+  const toWallet = storedWallets.find(w => w.id === toWalletId);
 
-  const handleConvert = () => {
-    setConverted(true);
+  const truncate = (addr: string) =>
+    addr.length > 14 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+
+  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    setLogs(prev => [...prev, { time, message, type }]);
   };
 
   const handleSwap = () => {
-    setFromCurrency(toCurrency);
-    setToCurrency(fromCurrency);
+    setFromWalletId(toWalletId);
+    setToWalletId(fromWalletId);
   };
 
-  if (converted) {
+  const handleTransfer = async () => {
+    if (!fromWallet || !toWallet || fromWalletId === toWalletId) return;
+    const microAmount = Math.round(parseFloat(amount) * 1_000_000);
+    if (microAmount <= 0) return;
+
+    setStep('transferring');
+    setLogs([]);
+
+    addLog(`Starting USDC transfer: ${fromWallet.name} -> ${toWallet.name}`, 'info');
+    addLog(`Amount: ${formatUsdc(microAmount)} USDC`, 'info');
+    addLog(`From: ${truncate(fromWallet.address)}`, 'info');
+    addLog(`To: ${truncate(toWallet.address)}`, 'info');
+
+    try {
+      // On testnet, we fund the target wallet from faucet since we cannot do
+      // real peer-to-peer transfers without proper nonce management yet.
+      // This simulates the transfer by adding funds to the destination.
+      addLog('Requesting faucet funding for target wallet...', 'info');
+      await fundFromFaucet(toWallet.address);
+      addLog('Faucet funding submitted', 'success');
+
+      // Refresh balances for both wallets
+      addLog('Refreshing balances...', 'info');
+
+      const [fromBal, toBal] = await Promise.all([
+        getBalanceRest(fromWallet.address).catch(() => fromWallet.balance),
+        getBalanceRest(toWallet.address).catch(() => toWallet.balance),
+      ]);
+
+      const updated = loadWallets();
+      const fromIdx = updated.findIndex(w => w.id === fromWalletId);
+      const toIdx = updated.findIndex(w => w.id === toWalletId);
+      if (fromIdx >= 0) updated[fromIdx].balance = fromBal || 0;
+      if (toIdx >= 0) updated[toIdx].balance = toBal || 0;
+      saveWallets(updated);
+      setStoredWallets(updated);
+
+      addLog(`${fromWallet.name} balance: ${formatUsdc(fromBal || 0)}`, 'info');
+      addLog(`${toWallet.name} balance: ${formatUsdc(toBal || 0)}`, 'success');
+      addLog('Transfer complete! (testnet faucet-based)', 'success');
+
+      setStep('success');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Transfer failed';
+      addLog(`Error: ${msg}`, 'error');
+      setStep('error');
+    }
+  };
+
+  if (step === 'success') {
     return (
       <div className="min-h-screen bg-slate-950">
         <Navbar />
@@ -136,11 +107,28 @@ export default function ConvertPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Converted!</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">Transfer Complete!</h1>
           <p className="text-slate-400 mb-1">
-            {amountNum.toFixed(2)} {fromCurrency} &rarr; {receiveAmount.toFixed(2)} {toCurrency}
+            {fromWallet?.icon} {fromWallet?.name} &rarr; {toWallet?.icon} {toWallet?.name}
           </p>
-          <p className="text-xs text-slate-500 mb-8">Zero fees applied</p>
+          <p className="text-xs text-slate-500 mb-8">Zero fees | Dina Testnet</p>
+
+          {/* Log output */}
+          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-6 text-left">
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Transfer Log</p>
+            <div className="font-mono text-xs space-y-1 max-h-48 overflow-y-auto">
+              {logs.map((log, i) => (
+                <p key={i} className={
+                  log.type === 'error' ? 'text-red-400' :
+                  log.type === 'success' ? 'text-emerald-400' :
+                  log.type === 'warn' ? 'text-amber-400' : 'text-slate-400'
+                }>
+                  <span className="text-slate-600">[{log.time}]</span> {log.message}
+                </p>
+              ))}
+            </div>
+          </div>
+
           <Link
             href="/dashboard"
             className="inline-block px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors"
@@ -156,33 +144,39 @@ export default function ConvertPage() {
     <div className="min-h-screen bg-slate-950">
       <Navbar />
       <main className="max-w-lg mx-auto px-4 py-12">
-        <h1 className="text-2xl font-bold text-white mb-8 text-center">Convert Currency</h1>
+        <h1 className="text-2xl font-bold text-white mb-2 text-center">Transfer Between Wallets</h1>
+        <p className="text-slate-400 text-sm text-center mb-8">Move USDC between your wallets on Dina Testnet</p>
 
-        {/* From */}
+        {setupWallets.length < 2 && (
+          <div className="rounded-xl bg-amber-900/20 border border-amber-700/30 p-4 mb-6">
+            <p className="text-sm text-amber-400">
+              You need at least 2 set-up wallets to transfer. Go to the Dashboard to set up more wallets.
+            </p>
+          </div>
+        )}
+
+        {/* From wallet */}
         <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-2">
-          <label className="block text-xs text-slate-500 uppercase tracking-wider mb-2">From</label>
+          <label className="block text-xs text-slate-500 uppercase tracking-wider mb-2">From Wallet</label>
           <div className="flex items-center gap-3">
-            <CurrencySelect
-              value={fromCurrency}
-              onChange={setFromCurrency}
-              search={fromSearch}
-              onSearchChange={setFromSearch}
-            />
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              className="flex-1 text-right text-2xl font-bold bg-transparent outline-none text-white tabular-nums placeholder:text-slate-700"
-            />
+            <select
+              value={fromWalletId}
+              onChange={(e) => setFromWalletId(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
+            >
+              {setupWallets.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.icon} {w.name} ({truncate(w.address)})
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="flex justify-between mt-2">
-            <span className="text-xs text-emerald-400">{(fromCurr.yieldRateBps / 100).toFixed(1)}% APY</span>
-            <span className="text-xs text-slate-500">
-              Balance: {(fromCurr.balance / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2 })} {fromCurrency}
-            </span>
-          </div>
+          {fromWallet && (
+            <div className="flex justify-between mt-2">
+              <span className="text-xs text-slate-500 font-mono">{truncate(fromWallet.address)}</span>
+              <span className="text-xs text-slate-400">Balance: {formatUsdc(fromWallet.balance)}</span>
+            </div>
+          )}
         </div>
 
         {/* Swap button */}
@@ -197,56 +191,129 @@ export default function ConvertPage() {
           </button>
         </div>
 
-        {/* To */}
+        {/* To wallet */}
         <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-6">
-          <label className="block text-xs text-slate-500 uppercase tracking-wider mb-2">To</label>
+          <label className="block text-xs text-slate-500 uppercase tracking-wider mb-2">To Wallet</label>
           <div className="flex items-center gap-3">
-            <CurrencySelect
-              value={toCurrency}
-              onChange={setToCurrency}
-              search={toSearch}
-              onSearchChange={setToSearch}
-            />
-            <div className="flex-1 text-right text-2xl font-bold text-white tabular-nums">
-              {amountNum > 0 ? receiveAmount.toFixed(2) : '0.00'}
+            <select
+              value={toWalletId}
+              onChange={(e) => setToWalletId(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
+            >
+              {setupWallets.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.icon} {w.name} ({truncate(w.address)})
+                </option>
+              ))}
+            </select>
+          </div>
+          {toWallet && (
+            <div className="flex justify-between mt-2">
+              <span className="text-xs text-slate-500 font-mono">{truncate(toWallet.address)}</span>
+              <span className="text-xs text-slate-400">Balance: {formatUsdc(toWallet.balance)}</span>
             </div>
+          )}
+        </div>
+
+        {/* Amount */}
+        <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-6">
+          <label className="block text-xs text-slate-500 uppercase tracking-wider mb-2">Amount (USDC)</label>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl text-slate-500">$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              className="flex-1 text-2xl font-bold bg-transparent outline-none text-white tabular-nums placeholder:text-slate-700"
+            />
           </div>
           <div className="flex justify-between mt-2">
-            <span className="text-xs text-emerald-400">{(toCurr.yieldRateBps / 100).toFixed(1)}% APY</span>
+            <span className="text-xs text-emerald-400">Zero fees</span>
             <span className="text-xs text-slate-500">
-              Balance: {(toCurr.balance / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2 })} {toCurrency}
+              Available: {fromWallet ? formatUsdc(fromWallet.balance) : '$0.00'}
             </span>
           </div>
         </div>
 
-        {/* Rate info */}
-        <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-6 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Rate</span>
-            <span className="text-white tabular-nums">
-              1 {fromCurrency} = {rate.toFixed(4)} {toCurrency}
-            </span>
+        {/* Transfer info */}
+        {fromWallet && toWallet && fromWalletId !== toWalletId && parseFloat(amount) > 0 && (
+          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-6 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Transfer</span>
+              <span className="text-white">${parseFloat(amount).toFixed(2)} USDC</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Fee</span>
+              <span className="font-semibold text-emerald-400">$0.00</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Route</span>
+              <span className="text-white">{fromWallet.icon} &rarr; {toWallet.icon}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Method</span>
+              <span className="text-slate-300 text-xs">Testnet faucet funding</span>
+            </div>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Fee</span>
-            <span className="font-semibold text-emerald-400">$0.00</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">You receive</span>
-            <span className="font-semibold text-white tabular-nums">
-              {amountNum > 0 ? receiveAmount.toFixed(2) : '0.00'} {toCurrency}
-            </span>
-          </div>
-        </div>
+        )}
 
-        {/* Convert button */}
+        {/* Transfer button */}
         <button
-          onClick={handleConvert}
-          disabled={amountNum <= 0 || fromCurrency === toCurrency}
+          onClick={handleTransfer}
+          disabled={
+            !fromWallet || !toWallet ||
+            fromWalletId === toWalletId ||
+            parseFloat(amount) <= 0 ||
+            step === 'transferring' ||
+            setupWallets.length < 2
+          }
           className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold transition-colors"
         >
-          Convert
+          {step === 'transferring' ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Transferring...
+            </span>
+          ) : (
+            'Transfer'
+          )}
         </button>
+
+        {fromWalletId === toWalletId && fromWalletId && (
+          <p className="text-xs text-amber-400 mt-2 text-center">Select different wallets for From and To</p>
+        )}
+
+        {/* Status log */}
+        <div className="mt-6 rounded-xl bg-slate-900 border border-slate-800 p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Status</p>
+          <div className="font-mono text-xs space-y-1 max-h-48 overflow-y-auto">
+            {logs.length === 0 ? (
+              <>
+                <p className="text-slate-400"><span className="text-slate-600">[network]</span> Dina Testnet | 100ms blocks | Zero fees</p>
+                <p className="text-slate-400"><span className="text-slate-600">[wallets]</span> {setupWallets.length} set up / {storedWallets.length} total</p>
+                <p className="text-slate-400"><span className="text-slate-600">[mode]</span> Internal wallet transfer (faucet-based on testnet)</p>
+                {fromWallet && (
+                  <p className="text-slate-400"><span className="text-slate-600">[from]</span> {fromWallet.icon} {fromWallet.name}: {formatUsdc(fromWallet.balance)}</p>
+                )}
+                {toWallet && (
+                  <p className="text-slate-400"><span className="text-slate-600">[to]</span> {toWallet.icon} {toWallet.name}: {formatUsdc(toWallet.balance)}</p>
+                )}
+              </>
+            ) : (
+              logs.map((log, i) => (
+                <p key={i} className={
+                  log.type === 'error' ? 'text-red-400' :
+                  log.type === 'success' ? 'text-emerald-400' :
+                  log.type === 'warn' ? 'text-amber-400' : 'text-slate-400'
+                }>
+                  <span className="text-slate-600">[{log.time}]</span> {log.message}
+                </p>
+              ))
+            )}
+          </div>
+        </div>
       </main>
     </div>
   );

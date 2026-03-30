@@ -10,13 +10,18 @@ use clap::Parser;
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 use tokio::signal;
-use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, error, info, warn};
 
 use dina_core::account::AccountState;
 use dina_core::block::{Block, BlockHeader};
 use dina_core::executor::BlockExecutor;
 use dina_core::types::{Address, Hash};
+use dina_consensus::{
+    ConsensusConfig, ConsensusOutput, InboundMessage, TurboBFT,
+};
+use dina_network::message::NetworkMessage;
+use dina_network::node::{DinaNode, NodeEvent};
 use dina_rpc::jsonrpc::NodeState;
 use dina_rpc::server::{RpcConfig, RpcServer};
 use dina_storage::DinaDB;
@@ -76,8 +81,13 @@ struct Cli {
     log_level: String,
 
     /// Block time in milliseconds (single-validator mode).
-    #[arg(long, default_value_t = 2000)]
+    #[arg(long, default_value_t = 100)]
     block_time_ms: u64,
+
+    /// Consensus round timeout in milliseconds before triggering a view change
+    /// (multi-validator mode). Default: 2000ms.
+    #[arg(long, default_value_t = 2000)]
+    consensus_timeout_ms: u64,
 
     /// Path to a PEM-encoded TLS certificate chain for the REST API.
     /// When both --tls-cert and --tls-key are provided, the REST server
@@ -285,19 +295,174 @@ fn build_block(
     block
 }
 
+// ── Type conversions between consensus and network message types ─────
+
+/// Convert a consensus Proposal to a network Proposal.
+fn consensus_proposal_to_network(p: &dina_consensus::Proposal) -> dina_network::message::Proposal {
+    let block_bytes = match bincode::serialize(&p.block) {
+        Ok(bytes) => {
+            debug!(
+                height = p.height,
+                round = p.round,
+                block_bytes = bytes.len(),
+                "serialized proposal block for network"
+            );
+            bytes
+        }
+        Err(e) => {
+            error!(
+                height = p.height,
+                round = p.round,
+                err = %e,
+                "CRITICAL: failed to serialize block in proposal — consensus will stall"
+            );
+            vec![]
+        }
+    };
+    let block_hash = p.block.hash();
+    dina_network::message::Proposal {
+        height: p.height,
+        round: p.round,
+        block: dina_network::message::BlockPayload {
+            data: block_bytes,
+            height: p.block.header.block_number,
+            hash: block_hash,
+        },
+        signature: p.signature,
+        proposer: p.proposer,
+    }
+}
+
+/// Convert a network Proposal to a consensus Proposal.
+fn network_proposal_to_consensus(
+    p: &dina_network::message::Proposal,
+) -> Option<dina_consensus::Proposal> {
+    let block: Block = match bincode::deserialize(&p.block.data) {
+        Ok(b) => b,
+        Err(e) => {
+            error!(
+                height = p.height,
+                round = p.round,
+                data_len = p.block.data.len(),
+                err = %e,
+                "failed to deserialize block from network proposal"
+            );
+            return None;
+        }
+    };
+    Some(dina_consensus::Proposal {
+        height: p.height,
+        round: p.round,
+        block,
+        proposer: p.proposer,
+        signature: p.signature,
+    })
+}
+
+/// Convert a consensus Vote to a network Vote.
+fn consensus_vote_to_network(v: &dina_consensus::Vote) -> dina_network::message::Vote {
+    dina_network::message::Vote {
+        height: v.height,
+        round: v.round,
+        block_hash: v.block_hash,
+        vote_type: match v.vote_type {
+            dina_consensus::VoteType::Prevote => dina_network::message::VoteType::Prevote,
+            dina_consensus::VoteType::Precommit => dina_network::message::VoteType::Precommit,
+        },
+        signature: v.signature,
+        voter: v.voter,
+    }
+}
+
+/// Convert a network Vote to a consensus Vote.
+fn network_vote_to_consensus(v: &dina_network::message::Vote) -> dina_consensus::Vote {
+    dina_consensus::Vote {
+        height: v.height,
+        round: v.round,
+        block_hash: v.block_hash,
+        vote_type: match v.vote_type {
+            dina_network::message::VoteType::Prevote => dina_consensus::VoteType::Prevote,
+            dina_network::message::VoteType::Precommit => dina_consensus::VoteType::Precommit,
+        },
+        voter: v.voter,
+        signature: v.signature,
+    }
+}
+
+/// Convert a consensus ViewChange to a network ViewChange.
+fn consensus_vc_to_network(
+    vc: &dina_consensus::ViewChange,
+) -> dina_network::message::ViewChange {
+    dina_network::message::ViewChange {
+        height: vc.height,
+        old_round: vc.old_round,
+        new_round: vc.new_round,
+        signature: vc.signature,
+        requester: vc.voter,
+    }
+}
+
+/// Convert a network ViewChange to a consensus ViewChange.
+fn network_vc_to_consensus(
+    vc: &dina_network::message::ViewChange,
+) -> dina_consensus::ViewChange {
+    dina_consensus::ViewChange {
+        height: vc.height,
+        old_round: vc.old_round,
+        new_round: vc.new_round,
+        voter: vc.requester,
+        signature: vc.signature,
+    }
+}
+
+/// Convert an ed25519_dalek SigningKey to a libp2p identity Keypair.
+fn dalek_key_to_libp2p(signing_key: &SigningKey) -> Result<libp2p::identity::Keypair> {
+    // ed25519_dalek uses 32-byte secret key; libp2p expects the same.
+    let secret_bytes = signing_key.to_bytes();
+    let libp2p_keypair = libp2p::identity::Keypair::ed25519_from_bytes(secret_bytes)
+        .map_err(|e| anyhow::anyhow!("failed to convert ed25519 key to libp2p keypair: {e}"))?;
+    Ok(libp2p_keypair)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // ── 1. Initialize tracing ───────────────────────────────────────────
+    // ── 1. Initialize tracing (log to both stderr and file for debugging) ──
     let filter = tracing_subscriber::EnvFilter::try_new(&cli.log_level)
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .with_thread_ids(true)
-        .init();
+    // Also write logs to data_dir/node.log for remote debugging via REST
+    let log_path = std::path::Path::new(&cli.data_dir).join("node.log");
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&log_path)
+        .ok();
+
+    if let Some(file) = log_file {
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_writer(std::sync::Mutex::new(file));
+        let stderr_layer = tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_thread_ids(true);
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(stderr_layer)
+            .with(file_layer)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_target(true)
+            .with_thread_ids(true)
+            .init();
+    }
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -386,7 +551,7 @@ async fn main() -> Result<()> {
     }
 
     // ── 8. Create shared NodeState for RPC ──────────────────────────────
-    let node_state = NodeState::new(cli.chain_id.clone());
+    let mut node_state = NodeState::new(cli.chain_id.clone());
 
     // Replace the default genesis block with the real one
     {
@@ -479,9 +644,12 @@ async fn main() -> Result<()> {
         }
     });
 
-    // ── 12. Validator: single-validator block production loop ────────────
+    // ── 12. Validator / consensus mode ────────────────────────────────────
     let shutdown = tokio::sync::watch::channel(false);
     let (shutdown_tx, shutdown_rx) = (shutdown.0, shutdown.1);
+
+    // Track extra spawned handles for graceful shutdown.
+    let mut extra_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
     let validator_handle = if cli.validator {
         let validator_key = if let Some(ref key_path) = cli.validator_key {
@@ -492,139 +660,514 @@ async fn main() -> Result<()> {
         };
 
         let validator_address = Address::from_pubkey(&validator_key.verifying_key());
-        info!(
-            address = %validator_address,
-            pubkey = %hex::encode(validator_key.verifying_key().to_bytes()),
-            block_time_ms = cli.block_time_ms,
-            "Starting single-validator block production"
-        );
 
-        let block_time = tokio::time::Duration::from_millis(cli.block_time_ms);
-        let chain_state_prod = chain_state.clone();
-        let mempool_prod = mempool.clone();
-        let node_state_prod = node_state.clone();
-        let db_prod = db.clone();
-        let mut shutdown_rx_prod = shutdown_rx.clone();
+        if !cli.bootstrap.is_empty() {
+            // ── Multi-validator TurboBFT mode ──────────────────────────────
+            info!(
+                address = %validator_address,
+                pubkey = %hex::encode(validator_key.verifying_key().to_bytes()),
+                bootstrap_peers = cli.bootstrap.len(),
+                consensus_timeout_ms = cli.consensus_timeout_ms,
+                "Starting multi-validator TurboBFT consensus"
+            );
 
-        Some(tokio::spawn(async move {
-            let mut interval = tokio::time::interval(block_time);
-            // Skip the first immediate tick
-            interval.tick().await;
+            // Parse bootstrap multiaddrs
+            let bootstrap_addrs: Vec<libp2p::Multiaddr> = cli
+                .bootstrap
+                .iter()
+                .filter_map(|s| s.parse().ok())
+                .collect();
 
-            loop {
-                tokio::select! {
-                    _ = interval.tick() => {},
-                    _ = shutdown_rx_prod.changed() => {
-                        info!("Block production loop shutting down");
+            // Convert ed25519_dalek key to libp2p keypair
+            let libp2p_keypair = dalek_key_to_libp2p(&node_key)?;
+            let listen_addr: libp2p::Multiaddr = cli.listen.parse()
+                .context("failed to parse listen address as multiaddr")?;
+
+            // Create the P2P node
+            let (dina_node, mut node_handle) =
+                DinaNode::new(libp2p_keypair, listen_addr, bootstrap_addrs)?;
+
+            // Take the event receiver from the handle
+            let node_event_rx = node_handle.take_event_rx()
+                .expect("event_rx should be available");
+            let node_command_handle = node_handle.command_handle();
+
+            // Spawn the P2P node event loop
+            let p2p_handle = tokio::spawn(async move {
+                if let Err(e) = dina_node.start().await {
+                    error!(err = %e, "P2P node event loop exited with error");
+                }
+            });
+            extra_handles.push(p2p_handle);
+
+            // Create consensus channels
+            let (consensus_output_tx, mut consensus_output_rx) =
+                mpsc::unbounded_channel::<ConsensusOutput>();
+            let (consensus_inbound_tx, consensus_inbound_rx) =
+                mpsc::unbounded_channel::<InboundMessage>();
+            let (tx_feed_tx, tx_feed_rx) =
+                mpsc::unbounded_channel::<Vec<dina_core::Transaction>>();
+
+            // Build TurboBFT consensus engine
+            // Include our own pubkey in the validator set (in case genesis doesn't have it)
+            let mut validator_keys = genesis_config.validators.clone();
+            let my_pubkey = validator_key.verifying_key().to_bytes();
+            if !validator_keys.contains(&my_pubkey) {
+                validator_keys.push(my_pubkey);
+                info!("Added own pubkey to validator set (not in genesis)");
+            }
+            let consensus_config = ConsensusConfig {
+                validator_keys,
+                block_time_ms: cli.block_time_ms,
+                timeout_ms: cli.consensus_timeout_ms,
+            };
+            let mut turbobft =
+                TurboBFT::new(consensus_config, validator_key.clone(), consensus_output_tx);
+
+            // Set the latest committed block (genesis) so proposals have a parent
+            {
+                let cs = chain_state.read().await;
+                turbobft.set_latest_committed_block(cs.latest_block().clone());
+            }
+
+            // Create a channel for RPC → mempool transaction submission
+            let (rpc_tx_sender, mut rpc_tx_receiver) =
+                mpsc::unbounded_channel::<dina_core::Transaction>();
+            node_state.consensus_tx_sender = Some(rpc_tx_sender);
+
+            // Spawn: RPC → mempool bridge
+            let mempool_rpc = mempool.clone();
+            let rpc_bridge_handle = tokio::spawn(async move {
+                while let Some(tx) = rpc_tx_receiver.recv().await {
+                    let mut pool = mempool_rpc.write().await;
+                    let _ = pool.add_transaction(tx);
+                }
+            });
+            extra_handles.push(rpc_bridge_handle);
+
+            // Spawn: feed transactions from mempool to consensus
+            let mempool_feed = mempool.clone();
+            let feed_handle = tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(tokio::time::Duration::from_millis(200));
+                loop {
+                    interval.tick().await;
+                    let pending = {
+                        let pool = mempool_feed.read().await;
+                        pool.get_pending(500)
+                    };
+                    // Always send (even empty) so the leader can propose empty blocks
+                    if tx_feed_tx.send(pending).is_err() {
                         break;
                     }
                 }
+            });
+            extra_handles.push(feed_handle);
 
-                // Collect pending transactions from mempool
-                let pending_txs = {
-                    let pool = mempool_prod.read().await;
-                    pool.get_pending(500) // Up to 500 txs per block
-                };
-
-                // Build a new block
-                let block = {
-                    let cs = chain_state_prod.read().await;
-                    let parent = cs.latest_block().clone();
-                    build_block(&parent, pending_txs, &validator_key)
-                };
-
-                let block_height = block.header.block_number;
-                let tx_count = block.transactions.len();
-
-                // Execute the block via BlockExecutor to compute state changes
-                let execution_result = {
-                    let cs = chain_state_prod.read().await;
-                    let mut executor = BlockExecutor::new(cs.accounts.clone());
-                    executor.execute_block(&block)
-                };
-
-                let _exec_result = match execution_result {
-                    Ok(r) => r,
-                    Err(e) => {
-                        error!(height = block_height, err = %e, "Block execution failed");
-                        continue;
-                    }
-                };
-
-                // Apply the block to ChainState (validates parent hash, height, timestamp)
-                {
-                    let mut cs = chain_state_prod.write().await;
-                    match cs.apply_block(block.clone()) {
-                        Ok(result) => {
-                            info!(
-                                height = block_height,
-                                hash = %block.hash(),
-                                txs = tx_count,
-                                successful = result.successful_txs,
-                                failed = result.failed_txs,
-                                fees = result.total_fees,
-                                "Block committed"
-                            );
+            // Spawn: Network -> Consensus bridge (also updates RPC peer count)
+            let inbound_tx = consensus_inbound_tx;
+            let mempool_net = mempool.clone();
+            let node_state_net = node_state.clone();
+            let node_cmd_peer_query = node_handle.command_handle();
+            let net_to_consensus_handle = tokio::spawn(async move {
+                let mut event_rx = node_event_rx;
+                while let Some(event) = event_rx.recv().await {
+                    match event {
+                        NodeEvent::PeerConnected(peer_id) => {
+                            // Query actual peer count from P2P layer
+                            if let Ok(count) = node_cmd_peer_query.peer_count().await {
+                                let mut pc = node_state_net.peer_count.write().await;
+                                *pc = count as u32;
+                            }
+                            info!(%peer_id, "P2P peer connected (RPC peer_count updated)");
                         }
+                        NodeEvent::PeerDisconnected(peer_id) => {
+                            if let Ok(count) = node_cmd_peer_query.peer_count().await {
+                                let mut pc = node_state_net.peer_count.write().await;
+                                *pc = count as u32;
+                            }
+                            info!(%peer_id, "P2P peer disconnected (RPC peer_count updated)");
+                        }
+                        NodeEvent::MessageReceived { message, .. } => {
+                            match message {
+                                NetworkMessage::Proposal(p) => {
+                                    info!(
+                                        height = p.height,
+                                        round = p.round,
+                                        proposer = hex::encode(&p.proposer[..8]),
+                                        "received proposal from network"
+                                    );
+                                    if let Some(cp) = network_proposal_to_consensus(&p) {
+                                        let _ = inbound_tx.send(InboundMessage::Proposal(cp));
+                                    } else {
+                                        warn!(
+                                            height = p.height,
+                                            round = p.round,
+                                            block_data_len = p.block.data.len(),
+                                            "dropped proposal: failed to deserialize block"
+                                        );
+                                    }
+                                }
+                                NetworkMessage::Vote(v) => {
+                                    debug!(
+                                        height = v.height,
+                                        round = v.round,
+                                        voter = hex::encode(&v.voter[..8]),
+                                        vote_type = ?v.vote_type,
+                                        "received vote from network"
+                                    );
+                                    let cv = network_vote_to_consensus(&v);
+                                    let _ = inbound_tx.send(InboundMessage::Vote(cv));
+                                }
+                                NetworkMessage::ViewChange(vc) => {
+                                    info!(
+                                        height = vc.height,
+                                        old_round = vc.old_round,
+                                        new_round = vc.new_round,
+                                        requester = hex::encode(&vc.requester[..8]),
+                                        "received view change from network"
+                                    );
+                                    let cvc = network_vc_to_consensus(&vc);
+                                    let _ = inbound_tx.send(InboundMessage::ViewChange(cvc));
+                                }
+                                NetworkMessage::Transaction(tx_payload) => {
+                                    // Deserialize and add to mempool
+                                    if let Ok(tx) = bincode::deserialize::<
+                                        dina_core::Transaction,
+                                    >(&tx_payload.data)
+                                    {
+                                        let mut pool = mempool_net.write().await;
+                                        let _ = pool.add_transaction(tx);
+                                    }
+                                }
+                                _ => {} // Block, SyncRequest, SyncResponse handled elsewhere
+                            }
+                        }
+                    }
+                }
+            });
+            extra_handles.push(net_to_consensus_handle);
+
+            // Spawn: Consensus -> Network bridge + block application
+            let chain_state_con = chain_state.clone();
+            let node_state_con = node_state.clone();
+            let db_con = db.clone();
+            let mempool_con = mempool.clone();
+            let consensus_to_net_handle = tokio::spawn(async move {
+                while let Some(output) = consensus_output_rx.recv().await {
+                    match output {
+                        ConsensusOutput::BroadcastProposal(p) => {
+                            info!(
+                                height = p.height,
+                                round = p.round,
+                                txs = p.block.transactions.len(),
+                                "broadcasting proposal to network"
+                            );
+                            let net_proposal = consensus_proposal_to_network(&p);
+                            let msg = NetworkMessage::Proposal(net_proposal);
+                            if let Err(e) = node_command_handle.broadcast_consensus(msg).await {
+                                error!(height = p.height, err = %e, "failed to broadcast proposal");
+                            }
+                        }
+                        ConsensusOutput::BroadcastVote(v) => {
+                            debug!(
+                                height = v.height,
+                                round = v.round,
+                                vote_type = ?v.vote_type,
+                                "broadcasting vote to network"
+                            );
+                            let net_vote = consensus_vote_to_network(&v);
+                            let msg = NetworkMessage::Vote(net_vote);
+                            if let Err(e) = node_command_handle.broadcast_consensus(msg).await {
+                                error!(height = v.height, err = %e, "failed to broadcast vote");
+                            }
+                        }
+                        ConsensusOutput::BroadcastViewChange(vc) => {
+                            info!(
+                                height = vc.height,
+                                old_round = vc.old_round,
+                                new_round = vc.new_round,
+                                "broadcasting view change to network"
+                            );
+                            let net_vc = consensus_vc_to_network(&vc);
+                            let msg = NetworkMessage::ViewChange(net_vc);
+                            if let Err(e) = node_command_handle.broadcast_consensus(msg).await {
+                                error!(height = vc.height, err = %e, "failed to broadcast view change");
+                            }
+                        }
+                        ConsensusOutput::BlockCommitted { block, certificate } => {
+                            let block_height = block.header.block_number;
+                            let tx_count = block.transactions.len();
+
+                            // Execute the block
+                            let execution_result = {
+                                let cs = chain_state_con.read().await;
+                                let mut executor = BlockExecutor::new(cs.accounts.clone());
+                                executor.execute_block(&block)
+                            };
+
+                            let _exec_result = match execution_result {
+                                Ok(r) => r,
+                                Err(e) => {
+                                    error!(
+                                        height = block_height,
+                                        err = %e,
+                                        "Consensus block execution failed"
+                                    );
+                                    continue;
+                                }
+                            };
+
+                            // Apply to chain state.
+                            // For consensus-committed blocks (3/4+ validator signatures),
+                            // we force-apply even if the chain state is behind, since the
+                            // consensus guarantees validity.
+                            {
+                                let mut cs = chain_state_con.write().await;
+                                match cs.apply_block(block.clone()) {
+                                    Ok(result) => {
+                                        info!(
+                                            height = block_height,
+                                            hash = %block.hash(),
+                                            txs = tx_count,
+                                            successful = result.successful_txs,
+                                            failed = result.failed_txs,
+                                            fees = result.total_fees,
+                                            cert_votes = certificate.votes.len(),
+                                            "Block committed via TurboBFT consensus"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        // Chain state may be behind — force-apply by
+                                        // fast-forwarding the chain height and accounts.
+                                        warn!(
+                                            height = block_height,
+                                            chain_height = cs.chain.current_height(),
+                                            err = %e,
+                                            "Chain state behind consensus — force-applying block"
+                                        );
+                                        cs.force_apply_block(block.clone());
+                                        info!(
+                                            height = block_height,
+                                            cert_votes = certificate.votes.len(),
+                                            "Force-applied consensus block"
+                                        );
+                                    }
+                                }
+                            }
+
+                            // Persist block
+                            if let Err(e) = db_con.store_block(&block) {
+                                error!(
+                                    height = block_height,
+                                    err = %e,
+                                    "Failed to store consensus block"
+                                );
+                            }
+
+                            // Persist accounts
+                            {
+                                let cs = chain_state_con.read().await;
+                                for (addr, acct) in cs.accounts.iter() {
+                                    if let Err(e) = db_con.set_account(*addr, acct) {
+                                        error!(
+                                            address = %addr, err = %e,
+                                            "Failed to persist account"
+                                        );
+                                    }
+                                }
+                            }
+
+                            // Remove committed txs from mempool
+                            {
+                                let tx_hashes: Vec<_> =
+                                    block.transactions.iter().map(|tx| tx.hash()).collect();
+                                if !tx_hashes.is_empty() {
+                                    let mut pool = mempool_con.write().await;
+                                    pool.remove_batch(&tx_hashes);
+                                }
+                            }
+
+                            // Update NodeState for RPC
+                            {
+                                let mut blocks = node_state_con.blocks.write().await;
+                                let mut idx = node_state_con.block_index.write().await;
+                                let pos = blocks.len();
+                                idx.insert(block.hash(), pos);
+                                blocks.push(block.clone());
+                            }
+                            node_state_con.prune_old_blocks().await;
+                            {
+                                let cs = chain_state_con.read().await;
+                                let mut accounts = node_state_con.accounts.write().await;
+                                *accounts = cs.accounts.clone();
+                            }
+                            {
+                                let block_ts = block.header.timestamp;
+                                let mut tx_idx = node_state_con.tx_index.write().await;
+                                for tx in &block.transactions {
+                                    let hash = tx.hash();
+                                    tx_idx.insert(hash, (tx.clone(), Some(block_height), Some(block_ts)));
+                                    // Notify any waiting /v1/transaction/confirm handlers
+                                    let _ = node_state_con.tx_confirmed_sender.send((hash, block_height));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            extra_handles.push(consensus_to_net_handle);
+
+            // Spawn the TurboBFT consensus loop itself.
+            // Wait for P2P peers to connect before starting consensus so that
+            // the first proposal isn't rejected with InsufficientPeers.
+            let peer_wait_state = node_state.clone();
+            Some(tokio::spawn(async move {
+                info!("Waiting for P2P peers before starting consensus...");
+                loop {
+                    let pc = *peer_wait_state.peer_count.read().await;
+                    if pc > 0 {
+                        info!(peers = pc, "Peers connected — starting TurboBFT consensus");
+                        break;
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+                // Give GossipSub mesh time to form after peers connect
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                turbobft.start(tx_feed_rx, consensus_inbound_rx).await;
+            }))
+        } else {
+            // ── Single-validator block production loop (existing) ───────────
+            info!(
+                address = %validator_address,
+                pubkey = %hex::encode(validator_key.verifying_key().to_bytes()),
+                block_time_ms = cli.block_time_ms,
+                "Starting single-validator block production"
+            );
+
+            let block_time = tokio::time::Duration::from_millis(cli.block_time_ms);
+            let chain_state_prod = chain_state.clone();
+            let mempool_prod = mempool.clone();
+            let node_state_prod = node_state.clone();
+            let db_prod = db.clone();
+            let mut shutdown_rx_prod = shutdown_rx.clone();
+
+            Some(tokio::spawn(async move {
+                let mut interval = tokio::time::interval(block_time);
+                // Skip the first immediate tick
+                interval.tick().await;
+
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {},
+                        _ = shutdown_rx_prod.changed() => {
+                            info!("Block production loop shutting down");
+                            break;
+                        }
+                    }
+
+                    // Collect pending transactions from mempool
+                    let pending_txs = {
+                        let pool = mempool_prod.read().await;
+                        pool.get_pending(500) // Up to 500 txs per block
+                    };
+
+                    // Build a new block
+                    let block = {
+                        let cs = chain_state_prod.read().await;
+                        let parent = cs.latest_block().clone();
+                        build_block(&parent, pending_txs, &validator_key)
+                    };
+
+                    let block_height = block.header.block_number;
+                    let tx_count = block.transactions.len();
+
+                    // Execute the block via BlockExecutor to compute state changes
+                    let execution_result = {
+                        let cs = chain_state_prod.read().await;
+                        let mut executor = BlockExecutor::new(cs.accounts.clone());
+                        executor.execute_block(&block)
+                    };
+
+                    let _exec_result = match execution_result {
+                        Ok(r) => r,
                         Err(e) => {
-                            error!(height = block_height, err = %e, "Failed to apply block to chain state");
+                            error!(height = block_height, err = %e, "Block execution failed");
                             continue;
                         }
+                    };
+
+                    // Apply the block to ChainState
+                    {
+                        let mut cs = chain_state_prod.write().await;
+                        match cs.apply_block(block.clone()) {
+                            Ok(result) => {
+                                info!(
+                                    height = block_height,
+                                    hash = %block.hash(),
+                                    txs = tx_count,
+                                    successful = result.successful_txs,
+                                    failed = result.failed_txs,
+                                    fees = result.total_fees,
+                                    "Block committed"
+                                );
+                            }
+                            Err(e) => {
+                                error!(height = block_height, err = %e, "Failed to apply block to chain state");
+                                continue;
+                            }
+                        }
                     }
-                }
 
-                // Persist the block to the database
-                if let Err(e) = db_prod.store_block(&block) {
-                    error!(height = block_height, err = %e, "Failed to store block in database");
-                }
+                    // Persist the block to the database
+                    if let Err(e) = db_prod.store_block(&block) {
+                        error!(height = block_height, err = %e, "Failed to store block in database");
+                    }
 
-                // Persist updated accounts to the database
-                {
-                    let cs = chain_state_prod.read().await;
-                    for (addr, acct) in cs.accounts.iter() {
-                        if let Err(e) = db_prod.set_account(*addr, acct) {
-                            error!(address = %addr, err = %e, "Failed to persist account");
+                    // Persist updated accounts to the database
+                    {
+                        let cs = chain_state_prod.read().await;
+                        for (addr, acct) in cs.accounts.iter() {
+                            if let Err(e) = db_prod.set_account(*addr, acct) {
+                                error!(address = %addr, err = %e, "Failed to persist account");
+                            }
+                        }
+                    }
+
+                    // Remove committed transactions from the mempool
+                    {
+                        let tx_hashes: Vec<_> =
+                            block.transactions.iter().map(|tx| tx.hash()).collect();
+                        if !tx_hashes.is_empty() {
+                            let mut pool = mempool_prod.write().await;
+                            pool.remove_batch(&tx_hashes);
+                        }
+                    }
+
+                    // Update NodeState so RPC sees the new block and accounts
+                    {
+                        let mut blocks = node_state_prod.blocks.write().await;
+                        let mut idx = node_state_prod.block_index.write().await;
+                        let pos = blocks.len();
+                        idx.insert(block.hash(), pos);
+                        blocks.push(block.clone());
+                    }
+                    node_state_prod.prune_old_blocks().await;
+                    {
+                        let cs = chain_state_prod.read().await;
+                        let mut accounts = node_state_prod.accounts.write().await;
+                        *accounts = cs.accounts.clone();
+                    }
+                    {
+                        let block_ts = block.header.timestamp;
+                        let mut tx_idx = node_state_prod.tx_index.write().await;
+                        for tx in &block.transactions {
+                            tx_idx.insert(tx.hash(), (tx.clone(), Some(block_height), Some(block_ts)));
                         }
                     }
                 }
-
-                // Remove committed transactions from the mempool
-                {
-                    let tx_hashes: Vec<_> = block.transactions.iter().map(|tx| tx.hash()).collect();
-                    if !tx_hashes.is_empty() {
-                        let mut pool = mempool_prod.write().await;
-                        pool.remove_batch(&tx_hashes);
-                    }
-                }
-
-                // Update NodeState so RPC sees the new block and accounts
-                {
-                    // Update blocks list
-                    let mut blocks = node_state_prod.blocks.write().await;
-                    let mut idx = node_state_prod.block_index.write().await;
-                    let pos = blocks.len();
-                    idx.insert(block.hash(), pos);
-                    blocks.push(block.clone());
-                }
-                // Prune old blocks from in-memory cache to prevent unbounded growth.
-                node_state_prod.prune_old_blocks().await;
-                {
-                    // Sync account state to RPC
-                    let cs = chain_state_prod.read().await;
-                    let mut accounts = node_state_prod.accounts.write().await;
-                    // Replace the entire account state so RPC reflects
-                    // the latest balances and nonces.
-                    *accounts = cs.accounts.clone();
-                }
-                {
-                    // Index transactions by hash for RPC lookups
-                    let mut tx_idx = node_state_prod.tx_index.write().await;
-                    for tx in &block.transactions {
-                        tx_idx.insert(tx.hash(), (tx.clone(), Some(block_height)));
-                    }
-                }
-            }
-        }))
+            }))
+        }
     } else {
         info!("Running as non-validator node (no block production)");
         None
@@ -728,6 +1271,11 @@ async fn main() -> Result<()> {
     status_handle.abort();
 
     if let Some(handle) = validator_handle {
+        handle.abort();
+    }
+
+    // Abort any extra handles (P2P node, consensus bridges, etc.)
+    for handle in extra_handles {
         handle.abort();
     }
 

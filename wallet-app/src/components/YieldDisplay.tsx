@@ -22,16 +22,18 @@ export function YieldDisplay({ wallets }: Props) {
   return (
     <div className="grid grid-cols-3 gap-4">
       <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Today&apos;s Yield</p>
+        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Daily Expected</p>
         <p className="text-lg font-bold text-emerald-400 tabular-nums">
           +{formatUsdc(totalDailyYield)}
         </p>
+        <p className="text-[10px] text-slate-600 mt-1">Updates daily</p>
       </div>
       <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">This Month</p>
+        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Monthly Expected</p>
         <p className="text-lg font-bold text-emerald-400 tabular-nums">
           +{formatUsdc(monthlyYield)}
         </p>
+        <p className="text-[10px] text-slate-600 mt-1">Based on current balance</p>
       </div>
       <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
         <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Blended APY</p>

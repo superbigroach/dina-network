@@ -4,6 +4,6 @@ pub mod view_change;
 pub mod vote;
 
 pub use leader::LeaderSchedule;
-pub use turbobft::{ConsensusConfig, ConsensusState, ConsensusStep, TurboBFT};
+pub use turbobft::{ConsensusConfig, ConsensusOutput, ConsensusState, ConsensusStep, InboundMessage, TurboBFT};
 pub use view_change::{ViewChange, ViewChangeCollector};
 pub use vote::{CommitCertificate, Proposal, Vote, VoteSet, VoteType};

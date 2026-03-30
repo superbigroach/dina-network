@@ -8,7 +8,7 @@
 use libp2p::gossipsub::{self, IdentTopic, MessageAuthenticity, MessageId, ValidationMode};
 use libp2p::identity::Keypair;
 use sha2::{Digest, Sha256};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::message::{BlockPayload, NetworkMessage, TransactionPayload};
 
@@ -43,6 +43,14 @@ pub fn build_gossipsub(keypair: &Keypair) -> Result<gossipsub::Behaviour, String
         .validation_mode(ValidationMode::Strict)
         .message_id_fn(message_id_fn)
         .max_transmit_size(2 * 1024 * 1024) // 2 MiB max message
+        // Lower mesh parameters for small validator sets (4-7 nodes).
+        // Defaults (mesh_n=6, mesh_n_low=4) prevent mesh formation when
+        // each node has only 3 peers, falling back to fanout-only mode
+        // which is unreliable for consensus messages.
+        .mesh_n(3)
+        .mesh_n_low(2)
+        .mesh_n_high(6)
+        .mesh_outbound_min(1)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -115,14 +123,19 @@ impl DinaGossip {
             .to_bytes()
             .map_err(|e| PublishError::Serialization(e.to_string()))?;
         let topic = IdentTopic::new(TOPIC_CONSENSUS);
-        debug!(
+        let label = msg.label();
+        info!(
             topic = TOPIC_CONSENSUS,
             bytes = data.len(),
-            "publishing consensus message"
+            label,
+            "publishing consensus message to gossipsub"
         );
         gossipsub
             .publish(topic, data)
-            .map_err(|e| PublishError::Gossipsub(e.to_string()))
+            .map_err(|e| {
+                warn!(label, err = %e, "gossipsub publish failed for consensus message");
+                PublishError::Gossipsub(e.to_string())
+            })
     }
 
     /// Validate an incoming gossip message by checking basic structural
@@ -191,7 +204,8 @@ mod tests {
     #[test]
     fn validate_rejects_zero_signature_vote() {
         let vote_msg = NetworkMessage::Vote(Vote {
-            view: 1,
+            height: 1,
+            round: 0,
             block_hash: Hash([0xaa; 32]),
             vote_type: VoteType::Prevote,
             signature: [0u8; 64],

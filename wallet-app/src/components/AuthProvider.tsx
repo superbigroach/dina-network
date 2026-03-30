@@ -19,7 +19,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       setLoading(false);
     });
-    return unsubscribe;
+    // Timeout: don't hang forever if Firebase auth is slow/blocked
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+    return () => { unsubscribe(); clearTimeout(timeout); };
   }, []);
 
   return (

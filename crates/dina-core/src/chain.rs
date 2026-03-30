@@ -62,6 +62,16 @@ impl ChainManager {
         Ok(())
     }
 
+    /// Force-add a block without validation. Used for consensus-committed blocks
+    /// when the chain state has fallen behind the consensus engine.
+    pub fn force_add_block(&mut self, block: Block) {
+        let hash = block.hash();
+        let height = block.header.block_number;
+        self.block_index.insert(hash, height);
+        self.blocks.push(block);
+        self.current_height = height;
+    }
+
     /// Get a block by its height. Returns `None` if the height exceeds the chain.
     pub fn get_block(&self, height: u64) -> Option<&Block> {
         self.blocks.get(height as usize)

@@ -1,0 +1,26 @@
+spec:
+  containers:
+  - args:
+    - --data-dir
+    - /data
+    - --rpc-bind
+    - 0.0.0.0
+    - --listen
+    - /ip4/0.0.0.0/tcp/9000
+    - --validator
+    image: us-central1-docker.pkg.dev/lucilla-b0493/dina-network/dina-node:latest
+    name: dina-node
+    securityContext:
+      privileged: false
+    stdin: false
+    tty: false
+    volumeMounts:
+    - mountPath: /data
+      name: host-path-0
+      readOnly: false
+  hostNetwork: true
+  restartPolicy: Always
+  volumes:
+  - hostPath:
+      path: /home/chronos/dina-data
+    name: host-path-0

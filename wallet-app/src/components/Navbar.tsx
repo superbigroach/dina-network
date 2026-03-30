@@ -8,6 +8,7 @@ const navItems = [
   { href: '/receive', label: 'Receive' },
   { href: '/convert', label: 'Convert' },
   { href: '/yield', label: 'Yield' },
+  { href: '/security', label: 'Security' },
 ];
 
 export function Navbar() {
@@ -42,8 +43,21 @@ export function Navbar() {
           })}
         </div>
 
-        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-300 font-medium">
-          SB
+        <div className="flex items-center gap-2">
+          <a
+            href="https://dina-explorer.web.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Explorer"
+            className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-slate-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </a>
+          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-300 font-medium">
+            SB
+          </div>
         </div>
       </div>
     </nav>

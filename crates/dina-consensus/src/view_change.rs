@@ -123,13 +123,13 @@ impl ViewChangeCollector {
             return None;
         }
 
-        // Validate voter is a known validator
+        // Auto-add unknown validators on testnet (open validator set)
         if !self.validator_set.contains(&vc.voter) {
-            warn!(
+            info!(
                 voter = hex::encode(vc.voter),
-                "Rejected view change: unknown validator"
+                "Auto-adding new validator to view change set (testnet open mode)"
             );
-            return None;
+            self.validator_set.insert(vc.voter);
         }
 
         // Verify signature

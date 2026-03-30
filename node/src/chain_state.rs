@@ -91,6 +91,17 @@ impl ChainState {
         })
     }
 
+    /// Force-apply a consensus-committed block, skipping chain validation.
+    /// Used when the chain state falls behind the consensus engine.
+    pub fn force_apply_block(&mut self, block: Block) {
+        // Execute transactions
+        for tx in &block.transactions {
+            let _ = self.execute_transaction(tx);
+        }
+        // Force-add to chain, skipping height/parent validation
+        self.chain.force_add_block(block);
+    }
+
     /// Execute a single transaction against the account state.
     ///
     /// Returns the fee paid on success.

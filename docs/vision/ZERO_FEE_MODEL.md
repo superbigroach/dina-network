@@ -1,85 +1,97 @@
 # Zero-Fee Model: How Dina Eliminates Transaction Fees
 
-## The Core Mechanism
+## The Core Insight
 
-Dina is a USDC-native chain. Every dollar on the chain is real USDC backed 1:1
-by US Treasury bills and cash reserves held by Circle. Those reserves earn
-yield -- currently ~4.5% APY.
-
-The insight: **the network itself can earn yield on the USDC flowing through it,
-and use that yield to fund operations instead of charging fees.**
+Dina is a USDC-native chain with **truly zero transaction fees**. No gas fees.
+No micro-fees. No hidden costs. Every transaction costs exactly $0.00.
 
 ```
-Traditional chain:  Users pay fees → Validators earn fees
-Dina:               USDC sits on chain → Yield accrues → Yield pays validators
+Traditional chain:  Users pay gas fees → Validators earn fees
+Dina:               Users pay nothing → Dina Inc. funds validators
 ```
 
-Users pay nothing. The money itself pays for the network.
+Gas is still **tracked internally** (to prevent infinite loops and abuse in smart
+contracts), but nobody pays for it. The gas meter is a safety mechanism, not a
+billing system.
 
-## How It Actually Works (Technical)
+## How It Works
 
-### Step 1: USDC Enters the Network
+### Zero Fees, Full Gas Metering
 
-When users bridge USDC onto Dina, those dollars sit in bridge contracts and
-user wallets. The total USDC on-chain is the network's Total Value Locked (TVL).
+Every smart contract execution runs through a `GasMeter` that counts operations:
 
-### Step 2: The Yield Layer
+| Operation | Gas Cost | USDC Cost |
+|-----------|----------|-----------|
+| WASM instruction | 1 gas | $0.00 |
+| Storage read | 100 gas | $0.00 |
+| Storage write | 500 gas | $0.00 |
+| USDC transfer | 200 gas | $0.00 |
+| Cross-contract call | 1,000 gas | $0.00 |
+| SHA-256 hash | 50 gas | $0.00 |
+| Ed25519 verify | 300 gas | $0.00 |
 
-The network (operated by Dina Inc. initially) holds a corresponding amount of
-USDC in a Circle Yield account or directly in short-term US Treasury instruments
-via a regulated custodian. This is not DeFi yield farming -- it's the same
-mechanism Circle uses to back USDC itself.
+The gas price is **zero**. Gas is consumed during execution but costs nothing.
+If a contract hits the gas limit (e.g., infinite loop), execution halts with
+"out of gas" -- protecting the network without charging the user.
 
-```
-User deposits 1,000 USDC on Dina
-→ 1,000 USDC is held in a regulated yield-bearing account
-→ Earns ~4.5% APY = $45/year
-→ That $45 funds network operations for that user's share
-```
+This is the breakthrough: **gas metering for safety, zero gas pricing for users.**
 
-### Step 3: Fee Elimination
+### Users Keep 100% of Their Yield
 
-Instead of charging per-transaction fees, the network funds itself from yield:
-
-| TVL on Dina | Annual Yield (4.5%) | Daily Yield | Max Free TPS Funded |
-|-------------|--------------------:|------------:|--------------------:|
-| $10M | $450K | $1,233 | ~1,000 |
-| $100M | $4.5M | $12,329 | ~10,000 |
-| $1B | $45M | $123,288 | ~100,000 |
-| $10B | $450M | $1.23M | ~1,000,000 |
-| $100B | $4.5B | $12.3M | ~10,000,000 |
-
-At $1B TVL, the yield alone covers infrastructure costs for 100K+ TPS.
-For context, Visa processes ~65K TPS globally.
-
-### Step 4: Spam Prevention Without Fees
-
-The classic argument against zero fees: "Without fees, attackers will spam the
-network." This is solved through three mechanisms:
-
-**A. Rate Limiting Per Account**
-Every account gets a free transaction quota based on its USDC balance:
+When users hold USDC on Dina, they earn yield (~4.5% APY) from the underlying
+US Treasury-backed reserves. **Users keep all of their yield.** Dina does not
+take a cut.
 
 ```
-Free TPS allocation = (account_balance / total_TVL) * network_capacity
+User holds 10,000 USDC on Dina
+→ Earns 4.5% APY = $450/year
+→ All $450 goes to the user
+→ Dina takes $0
+```
+
+### How Validators Get Paid
+
+Dina operates 21 validators that verify transactions, produce blocks, and
+maintain consensus. Validator infrastructure costs are an **operational expense
+funded by Dina Inc.**:
+
+| Expense | Monthly Cost |
+|---------|-------------|
+| 21 validators (e2-medium GCE) | ~$1,575 |
+| Bandwidth and monitoring | ~$500 |
+| DevOps and maintenance | ~$500 |
+| **Total** | **~$2,575/month** |
+
+This is funded through:
+1. **Raised capital** -- seed/Series A funding covers early operations
+2. **Enterprise revenue** -- paid tiers for guaranteed throughput
+3. **Wallet activations** -- $1 one-time activation per wallet
+
+The cost is remarkably low. Running a global payment network that processes
+100K+ TPS costs less than $3K/month in infrastructure.
+
+## Spam Prevention Without Fees
+
+Without fees, how do we prevent spam? Three mechanisms:
+
+### A. Rate Limiting Per Account
+
+Every account gets a transaction quota based on its USDC balance:
+
+```
+Rate allocation = (account_balance / total_TVL) * network_capacity
 ```
 
 A wallet holding $10,000 on a network with $1B TVL and 100K TPS capacity gets:
-($10,000 / $1B) * 100,000 = 1 TPS free allocation.
+`($10,000 / $1B) * 100,000 = 1 TPS` sustained throughput.
 
-This is similar to how EOS/Telos allocate resources based on staked tokens,
-but using USDC balance (no staking required).
+### B. Proof of Balance
 
-**B. Proof of Balance**
-To transact, you must hold a minimum USDC balance (e.g., $1). This makes Sybil
+To transact, you must hold a minimum USDC balance ($1). This makes Sybil
 attacks expensive -- creating 1 million spam accounts requires holding $1M in
-USDC, and that $1M earns yield that funds the network.
+USDC.
 
-Attackers literally fund the network's defenses by holding the USDC needed to
-attack it.
-
-**C. Priority Lanes (Optional Paid Tier)**
-While basic transactions are free, businesses can pay for guaranteed throughput:
+### C. Priority Lanes (Optional Paid Tier)
 
 | Tier | Cost | Guarantee |
 |------|------|-----------|
@@ -87,109 +99,59 @@ While basic transactions are free, businesses can pay for guaranteed throughput:
 | Priority | $99/mo | Guaranteed 100 TPS, never throttled |
 | Enterprise | $999/mo | Guaranteed 10K TPS, dedicated lane |
 
-This is the "freemium" model -- individuals and small businesses never pay.
-High-volume enterprises pay for guaranteed capacity.
-
-## The Yield Split
-
-Not all yield goes to operations. The network distributes it:
-
-```
-Total Yield from TVL
-├── 40% → Network operations (validators, infrastructure)
-├── 30% → User yield (passive earning for all USDC holders)
-├── 20% → Builder rewards (developers earn based on contract usage)
-└── 10% → Insurance fund (covers bridge risk, security incidents)
-```
-
-This means users earn ~1.35% APY just by holding USDC on Dina (30% of 4.5%).
-Not as much as putting it in a dedicated yield product, but it's completely
-passive -- no staking, no lockup, no risk. Your wallet balance just grows.
-
-## Why This Is Sustainable
+## Why This Works
 
 ### The Flywheel
 
 ```
 Zero fees attract users
 → Users bring USDC
-→ More USDC = more yield
-→ More yield funds more capacity
-→ More capacity handles more users
+→ Users earn yield (keeps them on the network)
+→ Enterprise customers pay for priority
+→ Revenue funds validators + growth
+→ More users
 → Repeat
 ```
 
-Each new user makes the network more sustainable, not less.
+### Comparison to Other Chains
 
-### The Math at Scale
+| Chain | Fee Model | User Experience |
+|-------|-----------|-----------------|
+| Ethereum | $1-50 per tx (gas in ETH) | Expensive, volatile |
+| Solana | $0.001 per tx (gas in SOL) | Cheap but need SOL |
+| Base | $0.01 per tx (gas in ETH) | Need ETH to start |
+| **Dina** | **$0.00 per tx (no gas token)** | **Free, no token needed** |
 
-The cost to run a validator node is approximately:
-- Hardware: $2,000/month (high-performance bare metal)
-- Bandwidth: $500/month
-- Ops/monitoring: $500/month
-- Total: ~$3,000/month per validator
+Every other chain requires users to hold a volatile gas token before they can
+do anything. Dina requires nothing -- just USDC.
 
-With 100 validators: $300,000/month = $3.6M/year.
+### Why No Other Blockchain Can Copy This
 
-At just $80M TVL, the yield covers all validator costs. Everything above that
-is profit, user yield distribution, and builder rewards.
+Token-based blockchains are structurally unable to go zero-fee because:
+1. Their validators are paid in the native token via inflation + fees
+2. Removing fees removes validator incentives
+3. They have no alternative revenue source
 
-### Interest Rate Risk
+Dina can be zero-fee because validators are paid by Dina Inc., not by users.
+The network doesn't need fee revenue to function.
 
-"What if interest rates go to zero?"
+## Implementation Status
 
-Even at 1% yield (the lowest in modern history):
-- $1B TVL = $10M/year (still covers 100+ validators easily)
-- $10B TVL = $100M/year
-
-The model works at any positive interest rate. At 0%, the network would need
-a minimal fee (sub-$0.001) or the enterprise subscription tier would cover costs.
-
-### Comparison to Current Models
-
-| Model | Who Pays | Sustainable? | User Experience |
-|-------|----------|-------------|-----------------|
-| Ethereum | Users (gas fees) | Yes, via fees + inflation | Bad (expensive, volatile) |
-| Solana | Users (tiny fees) + inflation | No (validators lose money without inflation) | OK (cheap but need SOL) |
-| Dina (current) | Users (micro-fees in USDC) | Yes | Good (cheap, stable) |
-| **Dina (zero-fee)** | **The money itself (yield)** | **Yes, at >$80M TVL** | **Perfect (free, invisible)** |
-
-## Implementation Roadmap
-
-### Phase 1: Subsidized Fees (Now → $100M TVL)
-- Keep current micro-fees ($0.00001/tx)
-- Use yield revenue to subsidize gas for first 100 transactions/day per user
-- Users experience "free" for normal usage
-
-### Phase 2: Fee Elimination ($100M → $1B TVL)
-- Remove base transaction fee entirely
-- Implement rate limiting by balance
-- Enterprise subscription tier launches
-- User yield distribution begins (passive earning)
-
-### Phase 3: Full Zero-Fee Network ($1B+ TVL)
-- All transactions free for all users
-- Builder reward program launches
-- Insurance fund reaches target ($50M+)
-- Network is fully self-sustaining from yield alone
-
-## Legal and Regulatory Considerations
-
-- Yield-bearing accounts must be held by a regulated custodian
-- User yield distribution may require money transmitter licenses
-- The yield layer should be structured as a segregated fund
-- Regular audits (Proof of Reserves) published on-chain
-- SEC considerations: USDC yield pass-through is not a security
-  (it's interest on deposits, like a bank savings account)
+| Component | Status |
+|-----------|--------|
+| Zero-fee transactions (fee=0) | Implemented |
+| Gas metering (GasMeter) | Implemented |
+| 100ms block time | Implemented |
+| Ed25519 signed transactions | Implemented |
+| Rate limiting by balance | Planned |
+| $1 minimum balance | Planned |
+| Enterprise priority tiers | Planned |
 
 ## Summary
 
-Every other blockchain charges fees because they have no alternative revenue
-source. Dina has one: the yield on the very money flowing through it.
+Dina is the first blockchain where transactions are truly free. Gas is metered
+for safety but costs nothing. Users keep 100% of their USDC yield. Validators
+are funded as an operational expense, not by extracting value from users.
 
-This is not a subsidy. It's not a loss leader. It's a structural advantage
-that becomes stronger as the network grows. The more USDC on Dina, the more
-yield, the more capacity, the more users, the more USDC.
-
-Zero fees funded by yield is not just a feature. It's a moat that no
-token-based blockchain can replicate.
+This is not a temporary subsidy or a loss leader. It's the permanent economic
+model of the network.

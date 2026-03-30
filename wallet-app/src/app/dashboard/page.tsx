@@ -1,16 +1,14 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/components/AuthProvider';
-import { signOut } from '@/lib/firebase';
 import { Navbar } from '@/components/Navbar';
 import { BalanceStream } from '@/components/BalanceStream';
-import { WalletCard } from '@/components/WalletCard';
+// WalletCard replaced with inline wallet grid
 import { YieldDisplay } from '@/components/YieldDisplay';
 import { TransactionList } from '@/components/TransactionList';
 import { CurrencyList } from '@/components/CurrencyList';
-import { MOCK_CURRENCIES, CHAIN_ID } from '@/lib/constants';
+import { CHAIN_ID } from '@/lib/constants';
 import { getHealth, getBalanceRest, fundFromFaucet, getRecentTransactions } from '@/lib/api';
+import { loadWallets, saveWallets, setupWallet, refreshAllBalances, totalBalance, fundedCount, ensureKeypairs, type StoredWallet } from '@/lib/wallet-store';
 import { Wallet, Transaction, Currency } from '@/lib/types';
 import Link from 'next/link';
 
@@ -21,27 +19,29 @@ interface NetworkStatus {
 }
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
   // Testnet wallet state
+  const [wallets, setWallets] = useState<StoredWallet[]>([]);
   const [dinaAddress, setDinaAddress] = useState<string | null>(null);
   const [realBalance, setRealBalance] = useState<number | null>(null);
-  const [balanceLastUpdate, setBalanceLastUpdate] = useState<number>(Math.floor(Date.now() / 1000));
+  const [settingUp, setSettingUp] = useState<string | null>(null);
+  const [balanceLastUpdate, setBalanceLastUpdate] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('dina_balance_ts');
+      if (stored) return parseInt(stored, 10);
+    }
+    return Math.floor(Date.now() / 1000);
+  });
+  // Persist balance timestamp so yield counter survives page reload
+  const updateBalanceTimestamp = useCallback((ts: number) => {
+    setBalanceLastUpdate(ts);
+    localStorage.setItem('dina_balance_ts', String(ts));
+  }, []);
   const [funding, setFunding] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [fundInfoWallet, setFundInfoWallet] = useState<string | null>(null);
+  const [faucetResult, setFaucetResult] = useState<{time: number; address: string; balance: number} | null>(null);
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/');
-    }
-  }, [user, loading, router]);
-
-  async function handleSignOut() {
-    await signOut();
-    router.push('/');
-  }
+  // No auth on testnet
 
   const [network, setNetwork] = useState<NetworkStatus>({
     connected: false,
@@ -78,40 +78,33 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Initialize testnet wallet — generate address, fund from faucet if empty, fetch balance
+  // Initialize wallets from store and refresh balances
   useEffect(() => {
     let cancelled = false;
 
     async function initWallet() {
-      // Load or generate a testnet address
-      let address = localStorage.getItem('dina_address');
-      if (!address) {
-        const bytes = new Uint8Array(32);
-        crypto.getRandomValues(bytes);
-        address = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        localStorage.setItem('dina_address', address);
-      }
+      // Ensure all set-up wallets have valid Ed25519 keypairs
+      const stored = await ensureKeypairs();
       if (cancelled) return;
-      setDinaAddress(address);
+      setWallets(stored);
 
+      const mainWallet = stored[0];
+      setDinaAddress(mainWallet.address);
+
+      // Refresh all balances from chain
       try {
-        // Check current balance
-        let balance = await getBalanceRest(address);
-
-        // Auto-fund from faucet if balance is zero
-        if (balance === 0 || balance === undefined) {
-          await fundFromFaucet(address);
-          balance = await getBalanceRest(address);
-        }
-
+        const updated = await refreshAllBalances(stored);
         if (!cancelled) {
-          setRealBalance(balance || 0);
-          setBalanceLastUpdate(Math.floor(Date.now() / 1000));
+          setWallets(updated);
+          const total = totalBalance(updated);
+          setRealBalance(total);
+          if (!localStorage.getItem('dina_balance_ts')) {
+            updateBalanceTimestamp(Math.floor(Date.now() / 1000));
+          }
         }
       } catch {
-        // Faucet or balance fetch failed
         if (!cancelled) {
-          setRealBalance(null);
+          setRealBalance(totalBalance(stored));
         }
       }
     }
@@ -120,18 +113,21 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Refresh balance periodically
+  // Refresh all wallet balances periodically
   useEffect(() => {
-    if (!dinaAddress) return;
+    if (!dinaAddress || wallets.length === 0) return;
     const interval = setInterval(async () => {
       try {
-        const balance = await getBalanceRest(dinaAddress);
-        setRealBalance(balance || 0);
-        setBalanceLastUpdate(Math.floor(Date.now() / 1000));
+        // Always read latest wallets from localStorage (not stale React state)
+        const current = loadWallets();
+        const updated = await refreshAllBalances(current);
+        const newTotal = totalBalance(updated);
+        setWallets(updated);
+        setRealBalance(newTotal);
       } catch {
-        // ignore — keep last known balance
+        // ignore
       }
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(interval);
   }, [dinaAddress]);
 
@@ -141,158 +137,82 @@ export default function DashboardPage() {
     getRecentTransactions(dinaAddress).then(setTransactions).catch(() => {});
   }, [dinaAddress, realBalance]);
 
-  // Fund wallet handler
+  // Set up a sub-wallet (generate address + fund from faucet)
+  const handleSetupWallet = useCallback(async (walletId: string) => {
+    setSettingUp(walletId);
+    try {
+      const updated = await setupWallet(walletId);
+      setWallets(updated);
+      setRealBalance(totalBalance(updated));
+      updateBalanceTimestamp(Math.floor(Date.now() / 1000));
+    } catch {
+      // setup failed
+    } finally {
+      setSettingUp(null);
+    }
+  }, [updateBalanceTimestamp]);
+
+  // Fund main wallet handler
   const handleFundWallet = useCallback(async () => {
     if (!dinaAddress) return;
     setFunding(true);
+    setFaucetResult(null);
+    const start = Date.now();
     try {
       await fundFromFaucet(dinaAddress);
-      const balance = await getBalanceRest(dinaAddress);
-      setRealBalance(balance || 0);
-      setBalanceLastUpdate(Math.floor(Date.now() / 1000));
+      // Refresh all wallets from chain
+      const current = loadWallets();
+      const updated = await refreshAllBalances(current);
+      const elapsed = Date.now() - start;
+      setWallets(updated);
+      setRealBalance(totalBalance(updated));
+      updateBalanceTimestamp(Math.floor(Date.now() / 1000));
+      setFaucetResult({ time: elapsed, address: dinaAddress, balance: totalBalance(updated) });
     } catch {
       // faucet failed — do nothing
     } finally {
       setFunding(false);
     }
-  }, [dinaAddress]);
+  }, [dinaAddress, updateBalanceTimestamp]);
 
-  // Build REAL wallet list — one funded main wallet, 8 unfunded sub-wallets
+  // Build wallet list from persistent store
   const now = Math.floor(Date.now() / 1000);
   const hasRealBalance = realBalance !== null && realBalance > 0;
-  const totalBalance = hasRealBalance ? realBalance : 0;
 
-  const realWallets: Wallet[] = [
-    {
-      id: 'main-1',
-      name: 'Main Wallet',
-      type: 'main',
-      icon: '🏦',
-      balance: hasRealBalance ? realBalance : 0,
-      yieldRateBps: 450,
-      lastYieldUpdate: balanceLastUpdate,
-      isDefault: true,
-      isSetUp: true,
-    },
-    {
-      id: 'savings-1',
-      name: 'Savings',
-      type: 'savings',
-      icon: '🐷',
-      balance: 0,
-      yieldRateBps: 450,
-      lastYieldUpdate: now,
-      isSetUp: false,
-    },
-    {
-      id: 'backup-1',
-      name: 'Backup',
-      type: 'backup',
-      icon: '🔒',
-      balance: 0,
-      yieldRateBps: 450,
-      lastYieldUpdate: now,
-      isSetUp: false,
-    },
-    {
-      id: 'agent-1',
-      name: 'Shopping',
-      type: 'agent',
-      icon: '🛒',
-      balance: 0,
-      yieldRateBps: 350,
-      lastYieldUpdate: now,
-      dailyLimit: 500_000_000,
-      isSetUp: false,
-    },
-    {
-      id: 'agent-2',
-      name: 'Bills',
-      type: 'agent',
-      icon: '📄',
-      balance: 0,
-      yieldRateBps: 350,
-      lastYieldUpdate: now,
-      dailyLimit: 200_000_000,
-      isSetUp: false,
-    },
-    {
-      id: 'agent-3',
-      name: 'Agent 3',
-      type: 'agent',
-      icon: '🤖',
-      balance: 0,
-      yieldRateBps: 350,
-      lastYieldUpdate: now,
-      isSetUp: false,
-    },
-    {
-      id: 'speed-1',
-      name: 'Business',
-      type: 'speed',
-      icon: '⚡',
-      balance: 0,
-      yieldRateBps: 300,
-      lastYieldUpdate: now,
-      isSetUp: false,
-    },
-    {
-      id: 'speed-2',
-      name: 'Speed 2',
-      type: 'speed',
-      icon: '⚡',
-      balance: 0,
-      yieldRateBps: 300,
-      lastYieldUpdate: now,
-      isSetUp: false,
-    },
-    {
-      id: 'speed-3',
-      name: 'Speed 3',
-      type: 'speed',
-      icon: '⚡',
-      balance: 0,
-      yieldRateBps: 300,
-      lastYieldUpdate: now,
-      isSetUp: false,
-    },
-  ];
+  const realWallets: Wallet[] = wallets.map((w, i) => ({
+    id: w.id,
+    name: w.name,
+    type: w.type,
+    icon: w.icon,
+    balance: w.balance,
+    yieldRateBps: 450,
+    lastYieldUpdate: balanceLastUpdate,
+    isDefault: i === 0,
+    isSetUp: w.isSetUp,
+  }));
 
   const yieldBps = 450; // 4.5% APY
 
-  // Build real currency list — USDC shows real balance, others $0
-  const realCurrencies: Currency[] = MOCK_CURRENCIES.map(c => ({
-    ...c,
-    balance: c.symbol === 'USDC' ? (hasRealBalance ? realBalance : 0) : 0,
-  }));
+  // Only USDC — no fake currencies
+  const realCurrencies: Currency[] = [{
+    symbol: 'USDC',
+    name: 'US Dollar',
+    balance: hasRealBalance ? realBalance : 0,
+    yieldRateBps: 450,
+    ratePerUsdc: 1_000_000,
+    icon: '\u{1F1FA}\u{1F1F8}',
+    region: 'Major',
+  }];
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  // No loading guard — dashboard renders immediately on testnet
 
   return (
     <div className="min-h-screen bg-slate-950">
       <Navbar />
       {/* User bar */}
       <div className="max-w-6xl mx-auto px-4 pt-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {user.photoURL && (
-            <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" />
-          )}
-          <span className="text-sm text-slate-400">
-            {user.displayName || user.email}
-          </span>
-        </div>
-        <button
-          onClick={handleSignOut}
-          className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-        >
-          Sign out
-        </button>
+        <span className="text-sm text-slate-400">Testnet User</span>
+        <span className="text-xs text-slate-600">dina-testnet-1</span>
       </div>
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Hero: Total Balance */}
@@ -301,7 +221,7 @@ export default function DashboardPage() {
             Testnet Balance
           </p>
           <BalanceStream
-            baseBalance={totalBalance}
+            baseBalance={realBalance ?? 0}
             yieldRateBps={yieldBps}
             lastUpdate={balanceLastUpdate}
             size="lg"
@@ -345,6 +265,41 @@ export default function DashboardPage() {
           </button>
         </div>
 
+        {/* Faucet Result Details */}
+        {faucetResult && (
+          <div className="flex justify-center mb-6">
+            <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 max-w-md w-full">
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Faucet Transaction</p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Amount</span>
+                  <span className="text-emerald-400 font-mono font-semibold">+$10,000.00 USDC</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Speed</span>
+                  <span className="text-emerald-400 font-mono">{faucetResult.time}ms</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Fee</span>
+                  <span className="text-emerald-400 font-mono">$0.00 (zero fees)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Network</span>
+                  <span className="text-white">Dina Testnet</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Block time</span>
+                  <span className="text-white">100ms</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-slate-800">
+                  <p className="text-[10px] text-slate-500 uppercase">Wallet Address</p>
+                  <p className="text-xs text-slate-400 font-mono break-all mt-0.5">{faucetResult.address}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Yield Stats */}
         <div className="mb-8">
           <YieldDisplay wallets={realWallets} />
@@ -381,43 +336,91 @@ export default function DashboardPage() {
           </Link>
         </div>
 
+        {/* Activity Log */}
+        <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-8">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Activity Log</p>
+          <div className="font-mono text-xs text-slate-400 space-y-1 max-h-48 overflow-y-auto">
+            {dinaAddress && (
+              <p><span className="text-slate-600">[wallet]</span> {dinaAddress}</p>
+            )}
+            {realBalance !== null && (
+              <p><span className="text-slate-600">[balance]</span> <span className="text-emerald-400">{(realBalance / 1_000_000).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} USDC</span></p>
+            )}
+            <p><span className="text-slate-600">[network]</span> Dina Testnet | Chain: {CHAIN_ID}</p>
+            <p><span className="text-slate-600">[blocks]</span> 100ms block time | Zero fees</p>
+            <p><span className="text-slate-600">[yield]</span> 4.50% APY on all wallets</p>
+            {network.connected && (
+              <p><span className="text-slate-600">[status]</span> <span className="text-emerald-400">Connected</span> | Block #{network.height.toLocaleString()}</p>
+            )}
+            {!network.connected && (
+              <p><span className="text-slate-600">[status]</span> <span className="text-amber-400">Connecting...</span></p>
+            )}
+            {faucetResult && (
+              <>
+                <p><span className="text-emerald-400">[faucet]</span> +$10,000.00 USDC | {faucetResult.time}ms | Fee: $0.00</p>
+              </>
+            )}
+            {transactions.map(tx => (
+              <p key={tx.id}>
+                <span className={tx.type === 'receive' ? 'text-emerald-400' : 'text-amber-400'}>[{tx.type}]</span>{' '}
+                {tx.type === 'receive' ? '+' : '-'}{(tx.amount / 1_000_000).toFixed(2)} USDC
+                {tx.counterparty ? ` | ${tx.counterparty}` : ''}
+              </p>
+            ))}
+          </div>
+        </div>
+
         {/* Wallet Grid */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Wallets</h2>
-            <span className="text-xs text-slate-600">1 of 9 funded on testnet</span>
+            <span className="text-xs text-slate-600">{fundedCount(wallets)} of 9 set up on testnet</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {realWallets.map((wallet) => (
-              <div key={wallet.id} className="relative">
-                <WalletCard wallet={wallet} />
-                {!wallet.isSetUp && (
-                  <button
-                    onClick={() => setFundInfoWallet(fundInfoWallet === wallet.id ? null : wallet.id)}
-                    className="absolute top-2 right-2 text-slate-500 hover:text-slate-300 transition-colors"
-                    title="Info"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                    </svg>
-                  </button>
-                )}
-                {fundInfoWallet === wallet.id && (
-                  <div className="absolute inset-0 z-10 bg-slate-900/95 rounded-xl border border-slate-700 p-4 flex flex-col items-center justify-center text-center gap-2">
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      On mainnet, each wallet will be a separate on-chain account.
-                      On testnet, all funds are in your main wallet.
-                    </p>
-                    <button
-                      onClick={() => setFundInfoWallet(null)}
-                      className="mt-1 px-3 py-1 text-xs rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                    >
-                      Got it
-                    </button>
+            {realWallets.map((wallet) => {
+              const storedW = wallets.find(w => w.id === wallet.id);
+              return (
+                <div key={wallet.id} className={`rounded-xl border p-4 ${wallet.isSetUp ? 'bg-slate-900 border-slate-800' : 'bg-slate-900/50 border-slate-800/50'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{wallet.icon}</span>
+                      <span className="text-sm font-semibold text-white">{wallet.name}</span>
+                    </div>
+                    {wallet.isDefault && (
+                      <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">DEFAULT</span>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                  {wallet.isSetUp ? (
+                    <>
+                      <p className="text-lg font-bold text-white tabular-nums mb-1">
+                        ${(wallet.balance / 1_000_000).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </p>
+                      <p className="text-xs text-emerald-400 mb-1">4.5% APY</p>
+                      {storedW?.address && (
+                        <div className="flex items-center gap-1">
+                          <p className="text-[10px] text-slate-600 font-mono truncate flex-1">{storedW.address}</p>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(storedW.address); }}
+                            className="text-[10px] text-slate-500 hover:text-emerald-400 shrink-0"
+                            title="Copy address"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleSetupWallet(wallet.id)}
+                      disabled={settingUp === wallet.id}
+                      className="mt-2 px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white font-medium transition-colors w-full"
+                    >
+                      {settingUp === wallet.id ? 'Setting up...' : 'Set up'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

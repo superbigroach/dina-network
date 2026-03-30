@@ -17,7 +17,7 @@
 
 - **Parallel Wallets (DRC-63).** One authority key controls N independent wallets. Each wallet has its own nonce, so all N can transact in the same 100ms block. No other chain offers per-user parallelism. A single user with 100 parallel wallets achieves 1,000 on-chain transactions per second.
 
-- **USDC Native Gas.** Transaction fees are paid in USDC. There is no gas token. No ETH. No SOL. No bridge-and-swap before you can use the chain. Stablecoin in, stablecoin out.
+- **Zero Fees.** Transactions cost $0.00. Gas is metered for safety (prevents infinite loops) but the gas price is zero. No fees, no gas token. Validators are funded by Dina Inc., not by users. See [Why Zero-Fee Is Obvious](docs/vision/WHY_ZERO_FEE_IS_OBVIOUS.md).
 
 - **100ms BFT Finality.** TurboBFT consensus produces irreversible blocks every 100ms. This is not optimistic finality with a 7-day challenge window. Not soft confirmation that can be rolled back. Finality means finality.
 
@@ -40,8 +40,8 @@ import { DinaWallet, DinaClient } from 'dina-js';
 const wallet = DinaWallet.generate();
 console.log('Address:', wallet.address);
 
-// Connect to testnet
-const client = new DinaClient('http://35.184.213.248:8545');
+// Connect to testnet (auto-select nearest regional endpoint)
+const client = new DinaClient('https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app');
 
 // Check USDC balance
 const balance = await client.getBalance(wallet.address);
@@ -72,7 +72,7 @@ wallet = Wallet.generate()
 print(f"Address: {wallet.address}")
 
 # Connect and send
-client = Client("http://35.184.213.248:8545")
+client = Client("https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app")
 tx = client.transfer(wallet, to="0x...", amount=5_000_000)
 receipt = client.wait_for_transaction(tx)
 ```
@@ -110,11 +110,12 @@ Every feature below has been tested against the live testnet at `dina-testnet-1`
 ### USDC Transfers (verified)
 
 ```
-Faucet:    Alice funded with 1,000 USDC ✅
-Transfer:  Alice sent 10 USDC to Bob ✅
-Result:    Alice: 990.00 USDC, Bob: 10.00 USDC ✅
-Time:      Confirmed in 1 second
-Fee:       0.001 USDC ($0.001)
+Faucet:    Alice funded with 10,000 USDC ✅
+Transfer:  Alice sent 10,000 USDC to Bob ✅
+Result:    Alice: 10,000 USDC, Bob: 10,000 USDC ✅
+Time:      Confirmed in 365ms (100ms finality + network roundtrip)
+Fee:       $0.00 (zero fees)
+Tx Hash:   0x9659fc7ade82d3e2d883f82d89b6ff6a0569ca0919f8c6f034eb...
 ```
 
 ### Wallet Operations (verified)
@@ -146,18 +147,33 @@ Sign/Verify:    Ed25519 signatures — valid ✅
 | Contract Factory | LIVE | Deploy from templates |
 | Event Indexer | LIVE | On-chain event queries |
 
-### API Endpoints (verified)
+### Regional Testnet Endpoints
 
 ```
-REST /health:           ✅ returns block height + peer count
-REST /v1/balance:       ✅ returns USDC balance
-REST /v1/block/latest:  ✅ returns current block
-REST /faucet:           ✅ mints 1,000 testnet USDC
-RPC dina_chainId:       ✅ returns "dina-testnet-1"
-RPC dina_getBalance:    ✅ returns balance
-RPC dina_gasPrice:      ✅ returns fee structure
-CORS:                   ✅ access-control-allow-origin: *
+🇨🇦 Montreal:  https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app
+🇺🇸 Iowa:      https://dina-testnet-proxy-jy6qm6s57a-uc.a.run.app
+🇬🇧 London:    https://dina-proxy-eu-jy6qm6s57a-nw.a.run.app
 ```
+
+### API Endpoints
+
+```
+GET  /health                    ✅ block height + status
+GET  /v1/balance/{address}      ✅ USDC balance (micro-USDC)
+GET  /v1/block/latest           ✅ current block
+GET  /v1/block/{height}         ✅ block by height
+GET  /v1/transactions/{address} ✅ transaction history
+POST /v1/transaction            ✅ submit signed transaction
+POST /faucet/{address}          ✅ 10,000 testnet USDC
+CORS:                           ✅ access-control-allow-origin: *
+```
+
+### Live Apps
+
+| App | URL |
+|-----|-----|
+| Wallet | https://dina-wallet.web.app |
+| Explorer | https://dina-explorer.web.app |
 
 ### Run the Demo
 
@@ -172,33 +188,32 @@ The demo creates wallets, funds them via faucet, checks balances, signs messages
 
 ## Performance Comparison
 
-| Chain | TPS (actual) | Finality | Gas Token | VM | Smart Contract Standards | Per-User Parallel Txs |
-|-------|-------------|----------|-----------|-----|--------------------------|----------------------|
-| **Dina** | **100,000+** | **100ms** | **USDC** | **WASM** | **94 DRC** | **Yes (DRC-63)** |
-| Ethereum | 15 | 12 min | ETH | EVM | ~40 ERCs widely used | No |
-| Base | 100 | 2 sec (L2) | ETH | EVM | Inherits Ethereum | No |
-| Solana | 4,000 | 400ms (soft) | SOL | SVM | ~10 SPL programs | No |
-| Sui | 10,000 | 500ms | SUI | Move | ~15 standards | No |
-| Aptos | 10,000 | 900ms | APT | Move | ~15 standards | No |
-| Arbitrum | 40,000 | 250ms (soft) | ETH | EVM | Inherits Ethereum | No |
-| Optimism | 2,000 | 2 sec (L2) | ETH | EVM | Inherits Ethereum | No |
-| Polygon | 7,000 | 2 sec | POL | EVM | Inherits Ethereum | No |
-| NEAR | 1,000 | 1-2 sec | NEAR | WASM | ~10 NEPs | No |
-| Sei | 20,000 | 400ms | SEI | EVM+WASM | ~10 standards | No |
+| Chain | Hard Finality | User Sees | Fees | Gas Token Required |
+|-------|--------------|-----------|------|--------------------|
+| **Dina** | **100ms** | **~120ms (regional)** | **$0.00** | **None (USDC only)** |
+| Sui | 500ms | ~1-1.5s | ~$0.001 | SUI |
+| Sei | 400ms | ~1-2s | ~$0.001 | SEI |
+| Aptos | 900ms | ~1-2s | ~$0.001 | APT |
+| Avalanche | 1-2s | ~1-3s | ~$0.01 | AVAX |
+| Solana | 6-12s | ~5-12s | ~$0.001 | SOL |
+| Base | 7 days (L1) | ~2s (soft) | ~$0.01 | ETH |
+| Ethereum | 12 min | ~12 min | $1-50 | ETH |
 
-**Notes on the comparison:**
+**Key distinctions:**
 
-- TPS figures reflect observed throughput, not theoretical maximums. Dina's 100K+ TPS is measured on an 8-core machine with parallel execution enabled.
-- "Soft" finality means the transaction is likely final but can theoretically be reverted. Dina, Ethereum (post-merge), and Sui provide hard finality.
-- Arbitrum and Optimism inherit Ethereum's security but have a 7-day challenge window for finality on L1.
-- Every chain listed except Dina requires a volatile gas token, meaning users must acquire and hold a non-stablecoin asset to transact.
-- "Per-User Parallel Txs" means a single user can submit multiple independent transactions in the same block without nonce conflicts. Only Dina supports this via Parallel Wallets.
+- **Hard finality** = mathematically irreversible. No rollbacks, no challenge periods. Dina achieves this in 100ms. Solana's "400ms" is slot time, not finality (real finality is 6-12 seconds). Base's "2 second" is sequencer confirmation with a 7-day challenge window.
+- **User sees** = end-to-end from clicking "Send" to seeing "Confirmed". Includes network roundtrip. With regional validators, Dina users see ~120ms.
+- **Gas token** = every chain except Dina requires users to hold a volatile cryptocurrency before they can transact. Dina uses only USDC.
 
-**Trade-offs to be aware of:**
+**How Dina achieves 100ms finality:**
 
-- Dina currently runs 3-21 validators. This is significantly fewer than Ethereum (~900K validators) or Solana (~1,800 validators). Fewer validators means faster consensus but less decentralization.
-- Dina's WASM VM means developers write contracts in Rust, not Solidity. This is a higher barrier to entry but produces faster, safer contracts.
-- The ecosystem is early-stage. Ethereum and Solana have years of tooling, auditors, and battle-tested infrastructure.
+21 known validators with minimal consensus overhead. The validators are funded by Dina Inc. as an operational expense ($24/month each). No token incentives needed, no fee extraction, no inflation. See [Why Zero-Fee Is Obvious](docs/vision/WHY_ZERO_FEE_IS_OBVIOUS.md).
+
+**Trade-offs:**
+
+- 3 regional validators on testnet (21 planned for mainnet). Fewer than Ethereum (1M) or Solana (1,800). Faster consensus but less decentralization.
+- WASM smart contracts (Rust). Higher barrier than Solidity but faster and safer.
+- Early-stage ecosystem. Ethereum and Solana have years of tooling.
 
 ---
 

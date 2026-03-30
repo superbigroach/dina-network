@@ -35,11 +35,13 @@ pub struct BlockPayload {
 /// A consensus proposal from the current round leader.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
-    /// The view (round) number.
-    pub view: u64,
+    /// Block height being proposed.
+    pub height: u64,
+    /// Consensus round within this height.
+    pub round: u32,
     /// The proposed block payload.
     pub block: BlockPayload,
-    /// Ed25519 signature from the proposer over (view || block_hash).
+    /// Ed25519 signature from the proposer.
     #[serde(with = "BigArray")]
     pub signature: [u8; 64],
     /// Proposer's public key bytes.
@@ -49,13 +51,15 @@ pub struct Proposal {
 /// A validator vote on a proposal.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vote {
-    /// The view (round) number this vote is for.
-    pub view: u64,
+    /// Block height this vote is for.
+    pub height: u64,
+    /// Consensus round this vote is for.
+    pub round: u32,
     /// Hash of the block being voted on.
     pub block_hash: Hash,
     /// Whether this is a prevote or precommit.
     pub vote_type: VoteType,
-    /// Ed25519 signature over (view || block_hash || vote_type).
+    /// Ed25519 signature over (height || round || block_hash || vote_type).
     #[serde(with = "BigArray")]
     pub signature: [u8; 64],
     /// Voter's public key bytes.
@@ -72,11 +76,13 @@ pub enum VoteType {
 /// A view-change request triggered when the leader is unresponsive.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ViewChange {
-    /// The current view being abandoned.
-    pub old_view: u64,
-    /// The proposed new view.
-    pub new_view: u64,
-    /// Ed25519 signature over (old_view || new_view).
+    /// Block height for this view change.
+    pub height: u64,
+    /// The round being abandoned.
+    pub old_round: u32,
+    /// The proposed new round.
+    pub new_round: u32,
+    /// Ed25519 signature over (height || old_round || new_round).
     #[serde(with = "BigArray")]
     pub signature: [u8; 64],
     /// Requester's public key bytes.
@@ -159,7 +165,8 @@ mod tests {
     #[test]
     fn roundtrip_vote() {
         let msg = NetworkMessage::Vote(Vote {
-            view: 10,
+            height: 10,
+            round: 0,
             block_hash: Hash([0xcd; 32]),
             vote_type: VoteType::Precommit,
             signature: [0xff; 64],

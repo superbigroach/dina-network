@@ -110,6 +110,14 @@ impl CommandHandle {
             .map_err(|_| anyhow::anyhow!("node event loop has shut down"))
     }
 
+    /// Send a consensus message (proposal, vote, view-change) to be broadcast.
+    pub async fn broadcast_consensus(&self, msg: NetworkMessage) -> Result<(), anyhow::Error> {
+        self.command_tx
+            .send(NodeCommand::BroadcastConsensus(msg))
+            .await
+            .map_err(|_| anyhow::anyhow!("node event loop has shut down"))
+    }
+
     /// Query the current peer count.
     pub async fn peer_count(&self) -> Result<usize, anyhow::Error> {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -184,7 +192,7 @@ impl DinaNode {
         };
 
         // Build the swarm with TCP + Noise + Yamux
-        let swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
@@ -197,6 +205,15 @@ impl DinaNode {
 
         let (command_tx, command_rx) = mpsc::channel(256);
         let (event_tx, event_rx) = mpsc::channel(256);
+
+        // Dial bootstrap peers directly so we connect even before Kademlia
+        // finds them (especially useful when addrs lack /p2p/ component).
+        for addr in &bootstrap_peers {
+            match swarm.dial(addr.clone()) {
+                Ok(_) => info!(%addr, "dialing bootstrap peer"),
+                Err(e) => warn!(%addr, %e, "failed to dial bootstrap peer"),
+            }
+        }
 
         let node = DinaNode {
             swarm,
@@ -275,15 +292,28 @@ impl DinaNode {
     async fn handle_swarm_event(&mut self, event: SwarmEvent<DinaBehaviourEvent>) {
         match event {
             // --- Connection events ---
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                info!(%peer_id, "connection established");
+            SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, .. } => {
                 self.peer_manager.on_connected(peer_id);
+                let total = self.peer_manager.peer_count();
+                info!(
+                    %peer_id,
+                    remote_addr = %endpoint.get_remote_address(),
+                    connections = num_established.get(),
+                    total_peers = total,
+                    "connection established"
+                );
                 let _ = self.event_tx.try_send(NodeEvent::PeerConnected(peer_id));
             }
 
-            SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                debug!(%peer_id, "connection closed");
+            SwarmEvent::ConnectionClosed { peer_id, num_established, .. } => {
                 self.peer_manager.on_disconnected(&peer_id);
+                let total = self.peer_manager.peer_count();
+                info!(
+                    %peer_id,
+                    remaining_connections = num_established,
+                    total_peers = total,
+                    "connection closed"
+                );
                 let _ = self.event_tx.try_send(NodeEvent::PeerDisconnected(peer_id));
             }
 
@@ -397,6 +427,22 @@ impl DinaNode {
                 error!(%error, "listener error");
             }
 
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                if let Some(peer_id) = peer_id {
+                    warn!(%peer_id, %error, "outgoing connection failed");
+                } else {
+                    warn!(%error, "outgoing connection failed (unknown peer)");
+                }
+            }
+
+            SwarmEvent::IncomingConnectionError { send_back_addr, error, .. } => {
+                warn!(
+                    remote = %send_back_addr,
+                    %error,
+                    "incoming connection failed"
+                );
+            }
+
             // Catch-all for events we don't need to handle individually.
             _ => {}
         }
@@ -448,6 +494,19 @@ impl DinaNode {
         let stale = self.peer_manager.prune_stale();
         if !stale.is_empty() {
             debug!(count = stale.len(), "pruned stale peers");
+        }
+
+        let peer_count = self.peer_manager.peer_count();
+        let discovered = self.discovery_state.discovered_count();
+        info!(
+            connected_peers = peer_count,
+            discovered_peers = discovered,
+            "P2P status"
+        );
+
+        // Re-trigger Kademlia bootstrap periodically to keep discovering peers
+        if let Err(e) = self.swarm.behaviour_mut().kademlia.bootstrap() {
+            debug!(%e, "periodic Kademlia bootstrap attempt (no known peers yet?)");
         }
     }
 

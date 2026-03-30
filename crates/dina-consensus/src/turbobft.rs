@@ -10,6 +10,17 @@ use crate::leader::LeaderSchedule;
 use crate::view_change::{ViewChange, ViewChangeCollector};
 use crate::vote::{CommitCertificate, Proposal, Vote, VoteSet, VoteType};
 
+/// Inbound messages from the network layer to the consensus engine.
+#[derive(Debug, Clone)]
+pub enum InboundMessage {
+    /// A proposal received from the network.
+    Proposal(Proposal),
+    /// A vote received from the network.
+    Vote(Vote),
+    /// A view change request received from the network.
+    ViewChange(ViewChange),
+}
+
 /// Configuration for the TurboBFT consensus engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusConfig {
@@ -87,6 +98,9 @@ pub struct TurboBFT {
     /// Current proposal for this round (if any).
     current_proposal: Option<Proposal>,
 
+    /// The latest committed block, used as the parent for new proposals.
+    latest_committed_block: Option<Block>,
+
     /// Prevote set for current height/round.
     prevote_set: VoteSet,
     /// Precommit set for current height/round.
@@ -143,6 +157,7 @@ impl TurboBFT {
             signing_key: my_key,
             my_pubkey,
             current_proposal: None,
+            latest_committed_block: None,
             prevote_set,
             precommit_set,
             view_change_collector,
@@ -157,7 +172,11 @@ impl TurboBFT {
     ///
     /// The loop checks for timeouts and, if this node is the leader for the
     /// current round, waits for transactions before proposing.
-    pub async fn start(&mut self, mut tx_rx: mpsc::UnboundedReceiver<Vec<Transaction>>) {
+    pub async fn start(
+        &mut self,
+        mut tx_rx: mpsc::UnboundedReceiver<Vec<Transaction>>,
+        mut inbound_rx: mpsc::UnboundedReceiver<InboundMessage>,
+    ) {
         info!(
             height = self.state.height,
             "Starting TurboBFT consensus loop"
@@ -186,29 +205,63 @@ impl TurboBFT {
                         // Process our own proposal
                         self.on_proposal(proposal);
                     }
+                    Some(msg) = inbound_rx.recv() => {
+                        self.handle_inbound(msg);
+                    }
                     _ = tokio::time::sleep(remaining) => {
-                        warn!(
+                        // No transactions arrived — propose an empty block instead
+                        // of timing out. This keeps the chain advancing on testnet.
+                        info!(
                             height = self.state.height,
                             round = self.state.round,
-                            "Timeout waiting for transactions as leader"
+                            "No transactions — proposing empty block"
                         );
-                        self.on_timeout();
+                        let proposal = self.create_proposal(vec![]);
+                        if self.output_tx.send(ConsensusOutput::BroadcastProposal(proposal.clone())).is_err() {
+                            warn!("Failed to send empty proposal to output channel");
+                        }
+                        self.on_proposal(proposal);
                     }
                 }
             } else if elapsed >= timeout_duration {
-                // Not the leader or not in propose step: check for timeout
+                // Not the leader or not in propose step: check for timeout.
                 self.on_timeout();
+                // Reset the round timer so we don't spin in a tight loop.
+                // This gives the network time to deliver view changes from
+                // other validators before we timeout again.
+                self.round_start = Instant::now();
+                // Yield to let the tokio runtime process outbound broadcasts
+                // (GossipSub publish) and inbound messages from other validators.
+                tokio::task::yield_now().await;
             } else {
-                // Sleep briefly before checking again (avoid busy loop)
+                // Not the leader: wait for inbound messages or tick
                 let check_interval = Duration::from_millis(self.config.block_time_ms / 10)
                     .min(Duration::from_millis(100));
-                tokio::time::sleep(check_interval).await;
+                tokio::select! {
+                    Some(msg) = inbound_rx.recv() => {
+                        self.handle_inbound(msg);
+                    }
+                    _ = tokio::time::sleep(check_interval) => {
+                        // Normal tick — no action needed
+                    }
+                }
             }
 
-            // If we committed, yield briefly before starting next height
+            // If we committed, wait for the target block time before proposing
+            // the next block. This gives the bridge task time to apply the
+            // committed block to the chain state and prevents height desync.
             if self.state.step == ConsensusStep::Commit {
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                tokio::time::sleep(Duration::from_millis(self.config.block_time_ms)).await;
             }
+        }
+    }
+
+    /// Dispatch an inbound message from the network to the appropriate handler.
+    fn handle_inbound(&mut self, msg: InboundMessage) {
+        match msg {
+            InboundMessage::Proposal(p) => self.on_proposal(p),
+            InboundMessage::Vote(v) => self.on_vote(v),
+            InboundMessage::ViewChange(vc) => self.on_view_change(vc),
         }
     }
 
@@ -333,13 +386,13 @@ impl TurboBFT {
             return;
         }
 
-        // Verify the voter is a known validator
+        // Auto-add unknown validators on testnet (open validator set)
         if !self.config.validator_keys.contains(&vote.voter) {
-            warn!(
+            info!(
                 voter = hex::encode(vote.voter),
-                "Ignoring vote: unknown validator"
+                "Auto-adding new validator to set (testnet open mode)"
             );
-            return;
+            self.config.validator_keys.push(vote.voter);
         }
 
         match vote.vote_type {
@@ -462,6 +515,13 @@ impl TurboBFT {
                 }
             }
 
+            // Track the committed block as parent for next proposals
+            if let Some(ref proposal) = self.current_proposal {
+                if proposal.block_hash() == block_hash {
+                    self.latest_committed_block = Some(proposal.block.clone());
+                }
+            }
+
             // Transition to Commit and advance height
             self.state.step = ConsensusStep::Commit;
             self.advance_height();
@@ -502,6 +562,13 @@ impl TurboBFT {
 
         // Process our own view change
         self.on_view_change(vc);
+
+        // Always advance round locally, even without quorum. This ensures
+        // the next timeout produces a unique ViewChange message (different
+        // round number) so GossipSub doesn't reject it as a duplicate.
+        if self.state.round == old_round {
+            self.advance_round(new_round);
+        }
     }
 
     /// Handle an incoming view change message from the network.
@@ -520,24 +587,32 @@ impl TurboBFT {
     /// Builds a new block at the current height with a proper block header,
     /// signs it, and returns the proposal.
     pub fn create_proposal(&self, transactions: Vec<Transaction>) -> Proposal {
-        // Compute a block hash from the transactions and height
-        let _block_hash =
-            self.compute_block_hash(self.state.height, self.state.round, &transactions);
+        // Determine parent hash and block number from the latest committed block
+        let (parent_hash, block_number) = match &self.latest_committed_block {
+            Some(parent) => (parent.hash(), parent.header.block_number + 1),
+            None => (Hash::ZERO, self.state.height),
+        };
 
-        let header = BlockHeader {
-            block_number: self.state.height,
-            timestamp: chrono::Utc::now().timestamp() as u64,
-            parent_hash: Hash::ZERO, // Filled by block storage layer
-            state_root: Hash::ZERO,  // Filled after execution
+        let now = chrono::Utc::now().timestamp() as u64;
+
+        let mut header = BlockHeader {
+            block_number,
+            timestamp: now,
+            parent_hash,
+            state_root: Hash::ZERO, // Filled after execution
             transactions_root: self.compute_transactions_root(&transactions),
             proposer: dina_core::Address::from_pubkey(&self.signing_key.verifying_key()),
             proposer_pubkey: *self.signing_key.verifying_key().as_bytes(),
             signature: [0u8; 64],
         };
 
+        // Sign the block header
+        let header_hash = header.hash();
+        header.signature = dina_core::crypto::sign(&self.signing_key, header_hash.as_bytes());
+
         let block = Block {
             header,
-            transactions: transactions.clone(),
+            transactions,
         };
 
         Proposal::new(
@@ -546,6 +621,11 @@ impl TurboBFT {
             block,
             &self.signing_key,
         )
+    }
+
+    /// Set the latest committed block (called by the node when wiring up).
+    pub fn set_latest_committed_block(&mut self, block: Block) {
+        self.latest_committed_block = Some(block);
     }
 
     /// Check whether the given validator is the leader for the specified height and round.

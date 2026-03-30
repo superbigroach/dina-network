@@ -1,678 +1,338 @@
-# Developer Guide
+# Dina Network — Developer Guide
 
-## Overview
+## Testnet Endpoints
 
-This guide covers everything you need to build on the Dina Network: setting up your environment, deploying smart contracts, using the SDKs, and integrating advanced features like payment channels, privacy, and Cognitum Seed hardware.
+Dina runs regional validators with HTTPS proxies. Your app auto-selects the
+fastest endpoint based on user location.
 
-## Prerequisites
+### HTTPS Proxies (for browsers / frontend apps)
 
-### Required
+| Region | URL | Validator |
+|--------|-----|-----------|
+| 🇨🇦 Montreal | `https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app` | northamerica-northeast1 |
+| 🇺🇸 Iowa | `https://dina-testnet-proxy-jy6qm6s57a-uc.a.run.app` | us-central1 |
+| 🇬🇧 London | `https://dina-proxy-eu-jy6qm6s57a-nw.a.run.app` | europe-west2 |
 
-- **Rust** 1.70+ with `wasm32-unknown-unknown` target
-- **Git** for cloning the repository
+### Direct Validator Access (for backends / servers / bots)
 
-### Install Rust
+| Region | REST API | RPC | P2P |
+|--------|----------|-----|-----|
+| 🇨🇦 Montreal | `http://34.118.177.132:8080` | `http://34.118.177.132:8545` | `34.118.177.132:9944` |
+| 🇺🇸 Iowa | `http://35.184.213.248:8080` | `http://35.184.213.248:8545` | `35.184.213.248:9944` |
+| 🇬🇧 London | `http://35.246.48.82:8080` | `http://35.246.48.82:8545` | `35.246.48.82:9944` |
 
-```bash
-# Linux/macOS
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
+**When to use which:**
+- **Browser apps** -- use HTTPS proxies (browsers block HTTP from HTTPS pages)
+- **Backend servers** -- use direct validator HTTP (faster, no proxy overhead)
+- **Co-located servers** -- same GCP region as validator = ~5ms + 100ms finality = ~105ms total
 
-# Windows
-# Download and run rustup-init.exe from https://rustup.rs
+### Chain Info
+
+| Parameter | Value |
+|-----------|-------|
+| Chain ID | `dina-testnet-1` |
+| Block time | 100ms |
+| Hard finality | 1 block (100ms) |
+| Transaction fees | $0.00 (zero) |
+| Currency | USDC (6 decimals, 1 USDC = 1,000,000 micro-USDC) |
+| Signing | Ed25519 |
+| Address format | 64-char hex (SHA-256 of Ed25519 public key) |
+
+---
+
+## REST API Reference
+
+### Health Check
+
+```
+GET /health
 ```
 
-### Install WASM Target
-
-```bash
-rustup target add wasm32-unknown-unknown
+Response:
+```json
+{"status": "ok", "height": 12345, "peers": 0}
 ```
 
-### Windows-Specific Setup
+### Get Balance
 
-The codebase requires the GNU toolchain on Windows:
-
-```powershell
-# Install MSYS2, then in MSYS2 shell:
-pacman -S mingw-w64-x86_64-toolchain
-
-# Add to PATH
-$env:PATH += ";C:\msys64\mingw64\bin"
-
-# Verify
-dlltool --version
+```
+GET /v1/balance/{address}
 ```
 
-## Building from Source
-
-```bash
-git clone https://github.com/lucilla-app/dina_network.git
-cd dina_network
-
-# Build everything
-cargo build
-
-# Run tests
-cargo test --workspace
-
-# Lint
-cargo clippy --workspace -- -D warnings
-
-# Build only the node
-cargo build --bin dina-node
-
-# Build only the CLI
-cargo build --bin dina
-
-# Build a specific contract to WASM
-cargo build -p drc1-token --target wasm32-unknown-unknown
+Response:
+```json
+{"address": "8e5aad01e9...", "balance": 10000000000}
 ```
 
-## Running a Local Testnet
+Balance is in micro-USDC. Divide by 1,000,000 to get USDC.
 
-### Single Validator
+### Submit Transaction
 
-The simplest way to get a local chain running:
+```
+POST /v1/transaction
+Content-Type: application/json
 
-```bash
-cargo run --bin dina-node -- --validator --data-dir ./data
+{"tx_hex": "<hex-encoded JSON of signed Transaction>"}
 ```
 
-This starts:
-- A validator node with auto-generated Ed25519 identity
-- JSON-RPC server on `http://127.0.0.1:8545`
-- REST API server on `http://0.0.0.0:8080`
-- P2P listener on `/ip4/0.0.0.0/tcp/9944`
-- Default testnet genesis with a faucet account holding 1 billion USDC
-
-### Multi-Validator Local Testnet
-
-```bash
-# Terminal 1: Validator A
-cargo run --bin dina-node -- \
-  --validator \
-  --data-dir ./data-a \
-  --rpc-port 8545 \
-  --rest-port 8080 \
-  --listen /ip4/127.0.0.1/tcp/9944
-
-# Terminal 2: Validator B
-cargo run --bin dina-node -- \
-  --validator \
-  --data-dir ./data-b \
-  --rpc-port 8546 \
-  --rest-port 8081 \
-  --listen /ip4/127.0.0.1/tcp/9945 \
-  --bootstrap /ip4/127.0.0.1/tcp/9944
-
-# Terminal 3: Validator C
-cargo run --bin dina-node -- \
-  --validator \
-  --data-dir ./data-c \
-  --rpc-port 8547 \
-  --rest-port 8082 \
-  --listen /ip4/127.0.0.1/tcp/9946 \
-  --bootstrap /ip4/127.0.0.1/tcp/9944
+Response:
+```json
+{"tx_hash": "0x9659fc7ade82d3e2d883..."}
 ```
 
-### Docker Compose
+### Get Transaction History
 
-```bash
-docker-compose up
+```
+GET /v1/transactions/{address}
 ```
 
-The `docker-compose.yml` in the project root starts a 3-validator testnet.
+Response:
+```json
+{
+  "transactions": [
+    {
+      "tx_hash": "0x9659fc7a...",
+      "type": "send",
+      "from": "0x8e5aad01...",
+      "to": "0xbe84130e...",
+      "amount": 10000000000,
+      "fee": 0,
+      "nonce": 1774761321505,
+      "block_height": 177316,
+      "status": "confirmed"
+    }
+  ]
+}
+```
 
-### Verify the Network is Running
+### Get Block
+
+```
+GET /v1/block/latest
+GET /v1/block/{height}
+```
+
+### Faucet (testnet only)
+
+```
+POST /faucet/{address}
+```
+
+Dispenses 10,000 USDC to the given address. 30-second cooldown per address.
+
+---
+
+## Quick Start Examples
+
+### JavaScript -- Send USDC (browser)
+
+```javascript
+// Race regional endpoints to find fastest
+const ENDPOINTS = [
+  'https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app',
+  'https://dina-testnet-proxy-jy6qm6s57a-uc.a.run.app',
+  'https://dina-proxy-eu-jy6qm6s57a-nw.a.run.app',
+];
+
+async function findFastest() {
+  return await Promise.any(
+    ENDPOINTS.map(async (ep) => {
+      await fetch(`${ep}/health`);
+      return ep;
+    })
+  );
+}
+
+// Check balance
+const BASE = await findFastest();
+const res = await fetch(`${BASE}/v1/balance/${address}`);
+const { balance } = await res.json();
+console.log(`Balance: ${balance / 1_000_000} USDC`);
+
+// Fund from faucet (testnet)
+await fetch(`${BASE}/faucet/${address}`, { method: 'POST' });
+```
+
+### JavaScript -- Sign and Send Transaction
+
+```javascript
+import * as ed from '@noble/ed25519';
+import { sha256, sha512 } from '@noble/hashes/sha2.js';
+
+// Set up Ed25519 (required for @noble/ed25519 v3)
+ed.hashes.sha512 = (...msgs) => {
+  const h = sha512.create();
+  for (const m of msgs) h.update(m);
+  return h.digest();
+};
+
+// Generate keypair
+const privateKey = ed.utils.randomSecretKey();
+const publicKey = ed.getPublicKey(privateKey);
+const address = toHex(sha256(publicKey));
+
+// Build Transaction::Transfer JSON (matches Rust serde format)
+const tx = {
+  Transfer: {
+    from: Array.from(hexToBytes(fromAddress)),
+    to: Array.from(hexToBytes(toAddress)),
+    amount: 5000000,     // 5 USDC
+    memo: null,
+    device_witness: null,
+    nonce: Date.now(),
+    fee: 0,              // zero fees
+    pub_key: Array.from(publicKey),
+    signature: Array.from(ed.sign(signingPayload, privateKey)),
+  }
+};
+
+// Hex-encode the JSON and submit
+const txHex = toHex(new TextEncoder().encode(JSON.stringify(tx)));
+const result = await fetch(`${BASE}/v1/transaction`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ tx_hex: txHex }),
+});
+const { tx_hash } = await result.json();
+console.log('Confirmed:', tx_hash); // ~100-350ms
+```
+
+### Python -- Check Balance
+
+```python
+import requests
+
+BASE = "https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app"
+address = "8e5aad01e92c7aaa73c035a9db569488860110e5e3a2734730f705d421d330d4"
+
+resp = requests.get(f"{BASE}/v1/balance/{address}")
+balance = resp.json()["balance"]
+print(f"Balance: ${balance / 1_000_000:.2f} USDC")
+
+# Fund from faucet
+requests.post(f"{BASE}/faucet/{address}")
+```
+
+### cURL
 
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app/health
 
-# Get network info
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"dina_networkInfo","params":[],"id":1}'
+# Get balance
+curl https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app/v1/balance/YOUR_ADDRESS
 
-# Check balance of the faucet
-curl http://localhost:8080/v1/balance/0000000000000000000000000000000000000000000000000000000000000001
+# Fund from faucet
+curl -X POST https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app/faucet/YOUR_ADDRESS
+
+# Get latest block
+curl https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app/v1/block/latest
+
+# Transaction history
+curl https://dina-proxy-ca-jy6qm6s57a-nn.a.run.app/v1/transactions/YOUR_ADDRESS
 ```
 
-## SDK Quickstart
+---
 
-### TypeScript SDK (dina-js)
-
-```bash
-cd sdk/dina-js
-npm install
-```
-
-```typescript
-import { DinaClient, Wallet } from 'dina-js';
-
-// Connect to local testnet
-const client = new DinaClient('http://localhost:8545');
-
-// Generate a wallet
-const wallet = Wallet.generate();
-console.log('Address:', wallet.address);
-
-// Check balance
-const balance = await client.getBalance(wallet.address);
-console.log('Balance:', balance, 'micro-USDC');
-
-// Send a transfer
-const txHash = await client.transfer({
-  from: wallet,
-  to: '0xrecipient_address_hex',
-  amount: 1_000_000, // 1 USDC
-  fee: 1000,
-});
-console.log('TX Hash:', txHash);
-
-// Query a block
-const block = await client.getLatestBlock();
-console.log('Block height:', block.block_number);
-```
-
-### Python SDK (dina-py)
-
-```bash
-cd sdk/dina-py
-pip install -e .
-```
-
-```python
-from dina_py import DinaClient, Wallet
-
-# Connect to local testnet
-client = DinaClient("http://localhost:8545")
-
-# Generate a wallet
-wallet = Wallet.generate()
-print(f"Address: {wallet.address}")
-
-# Check balance
-balance = client.get_balance(wallet.address)
-print(f"Balance: {balance} micro-USDC")
-
-# Send a transfer
-tx_hash = client.transfer(
-    from_wallet=wallet,
-    to="0xrecipient_address_hex",
-    amount=1_000_000,  # 1 USDC
-    fee=1000,
-)
-print(f"TX Hash: {tx_hash}")
-```
-
-### Rust SDK (dina-sdk)
-
-The Rust SDK is used for writing smart contracts that compile to WASM. Add it to your `Cargo.toml`:
-
-```toml
-[dependencies]
-dina-sdk = { path = "../dina_network/crates/dina-sdk" }
-
-[lib]
-crate-type = ["cdylib"]
-```
-
-## Deploying Contracts
-
-### Writing a Contract
-
-Every Dina contract implements the `dispatch(state, method, args, caller)` pattern:
-
-```rust
-// contracts/my-contract/src/lib.rs
-
-use dina_sdk::prelude::*;
-
-#[dina_contract]
-pub struct MyToken {
-    name: String,
-    symbol: String,
-    total_supply: u64,
-    balances: Map<Address, u64>,
-}
-
-#[dina_impl]
-impl MyToken {
-    #[init]
-    pub fn new(name: String, symbol: String, initial_supply: u64) -> Self {
-        let mut balances = Map::new();
-        balances.insert(caller(), initial_supply);
-        Self {
-            name,
-            symbol,
-            total_supply: initial_supply,
-            balances,
-        }
-    }
-
-    #[view]
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    #[view]
-    pub fn balance_of(&self, owner: Address) -> u64 {
-        self.balances.get(&owner).copied().unwrap_or(0)
-    }
-
-    pub fn transfer(&mut self, to: Address, amount: u64) -> bool {
-        let sender = caller();
-        let sender_balance = self.balance_of(sender);
-        if sender_balance < amount {
-            return false;
-        }
-        self.balances.insert(sender, sender_balance - amount);
-        let recipient_balance = self.balance_of(to);
-        self.balances.insert(to, recipient_balance + amount);
-        emit_event("Transfer", &(sender, to, amount));
-        true
-    }
-
-    #[payable]
-    pub fn buy(&mut self) -> u64 {
-        let payment = attached_usdc();
-        let buyer = caller();
-        // 1 USDC = 100 tokens
-        let tokens = payment * 100;
-        let balance = self.balance_of(buyer);
-        self.balances.insert(buyer, balance + tokens);
-        self.total_supply += tokens;
-        tokens
-    }
-}
-```
-
-### Compiling to WASM
-
-```bash
-cargo build -p my-contract --target wasm32-unknown-unknown --release
-
-# The WASM file will be at:
-# target/wasm32-unknown-unknown/release/my_contract.wasm
-```
-
-### Deploying via CLI
-
-```bash
-# Generate a deployer keypair
-./target/release/dina keygen --output deployer.key
-
-# Deploy the contract
-./target/release/dina deploy \
-  --wasm target/wasm32-unknown-unknown/release/my_contract.wasm \
-  --init '{"name":"My Token","symbol":"MTK","initial_supply":1000000}' \
-  --key deployer.key
-```
-
-### Deploying via JSON-RPC
-
-```bash
-# Hex-encode the WASM file
-WASM_HEX=$(xxd -p target/wasm32-unknown-unknown/release/my_contract.wasm | tr -d '\n')
-
-# Submit a DeployContract transaction
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"jsonrpc\": \"2.0\",
-    \"method\": \"dina_sendTransaction\",
-    \"params\": [\"$SIGNED_TX_HEX\"],
-    \"id\": 1
-  }"
-```
-
-## Interacting with Contracts
-
-### Call a Contract Method
-
-```bash
-# Via JSON-RPC
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "dina_sendTransaction",
-    "params": ["<hex-encoded-CallContract-tx>"],
-    "id": 1
-  }'
-```
-
-### Contract Dispatch Model
-
-Contracts expose a single entry point: `__dispatch(method_ptr, method_len, args_ptr, args_len) -> i64`. The WASM runtime:
-
-1. Allocates memory for the method name and arguments via `__alloc`
-2. Writes the method name and argument bytes into guest memory
-3. Calls `__dispatch` which routes to the correct Rust function
-4. Reads the return value from the packed i64 (high 32 bits = ptr, low 32 bits = len)
-
-### Host Functions Available to Contracts
-
-Contracts can call these host functions:
-
-| Function | Gas Cost | Description |
-|----------|----------|-------------|
-| `dina_storage_read(key_ptr, key_len)` | 100 | Read from persistent storage |
-| `dina_storage_write(key_ptr, key_len, val_ptr, val_len)` | 500 | Write to persistent storage |
-| `dina_transfer(to_ptr, amount)` | 200 | Transfer USDC to an address |
-| `dina_caller()` | 5 | Get the caller's address |
-| `dina_self_address()` | 5 | Get the contract's own address |
-| `dina_attached_value()` | 5 | Get USDC attached to the call |
-| `dina_block_time()` | 5 | Get current block timestamp |
-| `dina_block_height()` | 5 | Get current block height |
-| `dina_emit_event(topic_ptr, topic_len, data_ptr, data_len)` | 100 | Emit an event |
-| `dina_sha256(data_ptr, data_len, out_ptr)` | 50 | Compute SHA-256 hash |
-| `dina_ed25519_verify(msg_ptr, msg_len, sig_ptr, pubkey_ptr)` | 300 | Verify Ed25519 signature |
-| `dina_cross_call(addr_ptr, method_ptr, method_len, args_ptr, args_len)` | 1000 | Call another contract |
-
-## Using Payment Channels
-
-Payment channels enable offline device-to-device transactions at approximately 5ms per update.
-
-### Opening a Channel
-
-```typescript
-// TypeScript SDK
-const channel = await client.openChannel({
-  counterparty: '0xdevice_b_address',
-  deposit: 10_000_000, // 10 USDC
-  wallet: myWallet,
-});
-console.log('Channel ID:', channel.channelId);
-```
-
-### Off-Chain Payments
-
-Once a channel is open, payments happen locally without blockchain interaction:
-
-```typescript
-// Send 0.50 USDC through the channel
-const update = await channel.pay(500_000);
-// ~5ms, no gas, no network required
-
-// Send another payment
-const update2 = await channel.pay(250_000);
-// State: A has 9.25 USDC, B has 0.75 USDC
-```
-
-### Closing a Channel
-
-```typescript
-// Cooperative close (both parties agree)
-await channel.closeCooperative();
-
-// Unilateral close (one party submits state)
-await channel.closeUnilateral();
-// Starts 100-block challenge period
-```
-
-### Channel State Model
-
-Each state update contains:
-- `channel_id`: 32-byte identifier
-- `balance_a`, `balance_b`: Current balances (must sum to `total_locked`)
-- `sequence`: Monotonically increasing counter
-- `timestamp`: When the update was created
-
-Both parties sign every state update. Higher sequence numbers supersede lower ones during disputes.
-
-## Privacy Features
-
-### Encrypted Memos
-
-Attach an encrypted memo that only the recipient can read:
-
-```typescript
-// Encrypt a memo for the recipient
-const memo = await client.encryptMemo(
-  recipientX25519PublicKey,
-  'Payment for invoice #1234'
-);
-
-// Send transfer with encrypted memo
-await client.transfer({
-  from: wallet,
-  to: recipientAddress,
-  amount: 5_000_000,
-  memo: memo,
-});
-```
-
-```python
-# Python
-memo = client.encrypt_memo(recipient_x25519_pubkey, b"Payment for invoice #1234")
-client.transfer(wallet, to_address, amount=5_000_000, memo=memo)
-```
-
-### Stealth Addresses
-
-Send payments that are unlinkable to the recipient's public address:
-
-```typescript
-// Recipient publishes their stealth meta-address
-const meta = recipient.getStealthMetaAddress();
-// Contains: scan_pubkey, spend_pubkey
-
-// Sender derives a one-time address
-const stealth = deriveStealthAddress(meta);
-// stealth.address is unique to this transaction
-// stealth.ephemeral_pubkey must be published
-
-// Send to the stealth address
-await client.transfer({
-  from: wallet,
-  to: stealth.address,
-  amount: 1_000_000,
-});
-
-// Recipient scans the chain for their payments
-const payments = await recipient.scanForStealthPayments();
-```
-
-### View Keys
-
-Grant auditors read-only access to your transaction history:
-
-```typescript
-// Grant a viewer limited access
-await wallet.grantViewAccess(auditorAddress, {
-  scope: 'transfers_only',
-  expiry: Date.now() + 86400 * 30 * 1000, // 30 days
-});
-
-// Revoke access
-await wallet.revokeViewAccess(auditorAddress);
-```
-
-## Cognitum Seed Integration
-
-### MCP Tool Calls
-
-Cognitum Seed devices interact with Dina through the Model Context Protocol:
-
-```rust
-// On the Cognitum Seed firmware (Rust)
-use dina_mcp::McpToolCall;
-
-// Send a transfer
-let call = McpToolCall {
-    tool_name: "dina/transfer".to_string(),
-    arguments: serde_json::json!({
-        "to": "0xrecipient",
-        "amount": 50000,
-    }),
-};
-
-let result = mcp_client.call_tool(call).await?;
-if result.success {
-    println!("Transfer sent: {:?}", result.data);
-}
-```
-
-### Device Registration
-
-```rust
-// Register the device on-chain
-let call = McpToolCall {
-    tool_name: "dina/register_device".to_string(),
-    arguments: serde_json::json!({
-        "device_pubkey": hex::encode(device_ed25519_pubkey),
-        "owner": hex::encode(owner_address),
-        "firmware_hash": hex::encode(firmware_sha256),
-        "attestation_signature": hex::encode(attestation_sig),
-    }),
-};
-```
-
-### BLE Mesh Relay
-
-When offline, Cognitum Seeds can settle payment channels through the BLE mesh relay:
-
-```rust
-use dina_relay::{RelayBlob, RelayBroadcaster, BroadcastConfig};
-
-// Create a settlement blob
-let blob = RelayBlob {
-    version: 1,
-    sender: my_address,
-    receiver: counterparty_address,
-    amount: 50_000,
-    sequence: channel_sequence,
-    created_at: current_unix_time,
-    ttl_secs: 300,
-    relay_fee: 10,
-    channel_state_hash: state_hash,
-    sender_signature: sign(&signing_key, &blob.signing_bytes()),
-    receiver_signature: countersign,
-    hop_count: 0,
-    max_hops: 10,
-};
-
-// Broadcast over BLE
-let broadcaster = RelayBroadcaster::new(BroadcastConfig::default());
-broadcaster.broadcast(&blob).await?;
-```
-
-## Example Contracts
-
-The `examples/` directory contains complete example contracts:
-
-| Example | Description | Path |
-|---------|-------------|------|
-| `hello-world` | Minimal contract demonstrating dispatch pattern | `examples/hello-world/` |
-| `escrow` | Two-party escrow with release and refund | `examples/escrow/` |
-| `voting` | On-chain voting with proposal and ballot | `examples/voting/` |
-| `subscription` | Recurring payment subscription service | `examples/subscription/` |
-| `marketplace` | P2P marketplace with listings and purchases | `examples/marketplace/` |
-
-### Running Example Tests
-
-```bash
-cargo test -p hello-world
-cargo test -p escrow
-cargo test -p voting
-```
-
-## Contributing to the Codebase
-
-### Code Style
-
-- Use `thiserror` for error types in library crates, `anyhow` in binaries only
-- Never use `unwrap()` in library crates; return `Result` with descriptive errors
-- All public APIs must have doc comments
-- Smart contracts must be `no_std` compatible
-- Use Rust edition 2021 (not 2024)
-
-### Testing Requirements
-
-- Every crate must have unit tests
-- Integration tests go in `tests/` at workspace root
-- Contract tests use the SDK's `TestRuntime` harness
-- Run `cargo test --workspace` before submitting any PR
-- Run `cargo clippy --workspace -- -D warnings` for lint
-
-### Pull Request Process
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Write code with tests
-4. Ensure all tests pass: `cargo test --workspace`
-5. Ensure no clippy warnings: `cargo clippy --workspace -- -D warnings`
-6. Submit a pull request
-
-### Adding a New DRC Contract
-
-1. Create `contracts/drc{N}-{name}/` with:
-   - `Cargo.toml` (set `crate-type = ["cdylib"]`, depend on `dina-sdk`)
-   - `src/lib.rs` implementing `dispatch(state, method, args, caller) -> Result<Vec<u8>>`
-2. Add the crate to `members` in root `Cargo.toml`
-3. Write tests using `dina-sdk::TestRuntime`
-4. Document the standard in `docs/DRC_STANDARDS.md`
-
-### Project Layout
+## Architecture
 
 ```
-dina_network/
-  crates/            14 library crates (core, consensus, network, etc.)
-  node/              Validator/full-node binary (dina-node)
-  cli/               CLI wallet and admin tool (dina)
-  contracts/         30 DRC standard reference implementations
-  sdk/
-    dina-js/         TypeScript/JavaScript SDK
-    dina-py/         Python SDK
-  examples/          Example contracts (hello-world, escrow, voting, etc.)
-  tests/             Workspace-level integration tests
-  benches/           Benchmarks
-  docs/              Documentation (you are here)
-  genesis.json       Default testnet genesis configuration
-  docker-compose.yml Multi-validator Docker setup
+USER (anywhere in the world)
+    |
+    | HTTPS (auto-selects nearest)
+    |
+    |---> Montreal Proxy ---> Montreal Validator (100ms blocks)
+    |---> Iowa Proxy     ---> Iowa Validator     (100ms blocks)
+    +---> London Proxy   ---> London Validator   (100ms blocks)
 ```
 
-## Troubleshooting
+### Components
 
-### Contract compilation fails with "unknown import"
+**Validator (GCE VM, $24/month each)** -- Runs the blockchain:
+- Receives and verifies transactions (Ed25519 signatures)
+- Checks nonces and balances
+- Executes WASM smart contracts with gas metering
+- Produces blocks every 100ms
+- Stores chain state
 
-**Cause**: The contract uses a host function that is not registered.
+**HTTPS Proxy (Cloud Run, ~$0-2/month each)** -- Browser compatibility:
+- Translates HTTPS to HTTP
+- Adds CORS headers
+- No logic, just forwarding
 
-**Fix**: Check that your `dina-sdk` version matches the node version. Only use host functions listed in the host function table above.
+### Latency by Connection Type
 
-### "out of gas" error
+| Connection | Path | Expected |
+|---|---|---|
+| Browser (same region) | HTTPS Proxy -> Validator | ~120-150ms |
+| Browser (cross-region) | HTTPS Proxy -> Validator | ~250-350ms |
+| Server (same region) | Direct HTTP -> Validator | ~105ms |
+| Server (co-located) | Same data center | ~102ms |
 
-**Cause**: The contract execution exceeded the gas limit.
+### Why 100ms Finality
 
-**Fix**: Increase the `fee` field in your transaction. The default maximum gas is 10,000,000 (10 USDC). Optimize your contract to use fewer storage operations (500 gas each).
+21 known validators means minimal consensus rounds. Each block is final
+the moment it's produced -- no "soft confirmation" period, no rollback window.
 
-### Contract call returns empty data
+### Zero Fees
 
-**Cause**: The contract's `__dispatch` function returned a zero-length result.
+Gas is metered (prevents infinite loops) but costs $0.00. The GasMeter runs
+on every WASM contract call, counting operations. When the limit is hit,
+execution halts. But the gas price is zero -- nobody pays.
 
-**Fix**: Ensure your contract method returns data. View methods should serialize their return value. Check that the method name in the call matches the contract exactly.
+Validators are funded by Dina Inc. as an operational expense, not by user fees.
 
-### WASM module too large
+---
 
-**Cause**: Release builds with debug info or unoptimized code.
+## 9-Wallet System
 
-**Fix**: Build with optimization:
-```bash
-cargo build -p my-contract --target wasm32-unknown-unknown --release
-```
+Every user gets 9 independent wallets with their own Ed25519 keypair:
 
-Add to your contract's `Cargo.toml`:
-```toml
-[profile.release]
-opt-level = "z"    # Optimize for size
-lto = true         # Link-time optimization
-strip = true       # Strip debug info
-```
+| Wallet | Type | Purpose |
+|--------|------|---------|
+| Smart 1 | Smart Account | Main wallet |
+| Smart 2 | Smart Account | Savings |
+| Smart 3 | Smart Account | Backup |
+| Agent 1 | Agent Wallet | AI shopping bot |
+| Agent 2 | Agent Wallet | Bill payments |
+| Agent 3 | Agent Wallet | Custom agent |
+| Parallel 1 | Parallel Wallet | Business payments |
+| Parallel 2 | Parallel Wallet | Streaming payments |
+| Parallel 3 | Parallel Wallet | API access |
 
-### Transaction rejected: "invalid nonce"
+All earn 4.5% APY. Users keep 100%.
 
-**Cause**: The transaction nonce does not match the account's current nonce.
+---
 
-**Fix**: Query the account's current nonce with `dina_getAccount` and use that value for the next transaction.
+## Live Apps
+
+| App | URL |
+|-----|-----|
+| Wallet | https://dina-wallet.web.app |
+| Explorer | https://dina-explorer.web.app |
+
+---
+
+## Speed Comparison (Hard Finality)
+
+| Chain | Finality | User Sees | Fees |
+|-------|----------|-----------|------|
+| **Dina** | **100ms** | **~120ms** | **$0.00** |
+| Sui | 500ms | ~1s | need SUI token |
+| Sei | 400ms | ~1s | need SEI token |
+| Aptos | 900ms | ~1.5s | need APT token |
+| Solana | 6-12s | ~6s | need SOL token |
+| Ethereum | 12 min | ~12 min | $1-50 + need ETH |
+
+---
+
+## Costs
+
+| Component | Count | Monthly |
+|-----------|-------|---------|
+| Validators (GCE) | 3 regional | $72 |
+| Proxies (Cloud Run) | 3 regional | ~$3 |
+| **Total** | | **~$75/month** |
+
+21 validators at mainnet: ~$525/month for a global network faster than
+any blockchain in existence.

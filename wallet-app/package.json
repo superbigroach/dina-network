@@ -8,6 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@noble/ed25519": "^3.0.1",
+    "@noble/hashes": "^2.0.1",
     "firebase": "^12.11.0",
     "next": "^15.1.0",
     "react": "^19.0.0",

@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
-import { MOCK_WALLET_ADDRESS, MOCK_WALLET_ADDRESS_FULL } from '@/lib/constants';
+import { loadWallets, type StoredWallet } from '@/lib/wallet-store';
+import { formatUsdc } from '@/lib/yield';
 
 function QrPlaceholder({ value }: { value: string }) {
   // Generate a deterministic SVG pattern from the address string
@@ -57,9 +58,26 @@ function QrPlaceholder({ value }: { value: string }) {
 
 export default function ReceivePage() {
   const [copied, setCopied] = useState(false);
+  const [storedWallets, setStoredWallets] = useState<StoredWallet[]>([]);
+  const [selectedWalletId, setSelectedWalletId] = useState('main');
+
+  useEffect(() => {
+    const wallets = loadWallets();
+    setStoredWallets(wallets);
+    // Default to first set-up wallet
+    const firstSetup = wallets.find(w => w.isSetUp);
+    if (firstSetup) setSelectedWalletId(firstSetup.id);
+  }, []);
+
+  const setupWallets = storedWallets.filter(w => w.isSetUp);
+  const selectedWallet = storedWallets.find(w => w.id === selectedWalletId);
+  const displayAddress = selectedWallet?.address || 'Loading...';
+
+  const truncate = (addr: string) =>
+    addr.length > 14 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(MOCK_WALLET_ADDRESS_FULL).catch(() => {});
+    navigator.clipboard.writeText(displayAddress).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -68,7 +86,7 @@ export default function ReceivePage() {
     if (navigator.share) {
       navigator.share({
         title: 'Dina Wallet Address',
-        text: `Send USDC to my Dina wallet: ${MOCK_WALLET_ADDRESS_FULL}`,
+        text: `Send USDC to my Dina wallet: ${displayAddress}`,
       }).catch(() => {});
     }
   };
@@ -78,18 +96,36 @@ export default function ReceivePage() {
       <Navbar />
       <main className="max-w-lg mx-auto px-4 py-12 text-center">
         <h1 className="text-2xl font-bold text-white mb-2">Receive Money</h1>
-        <p className="text-slate-400 mb-8">Share your QR code or address to receive funds</p>
+        <p className="text-slate-400 mb-6">Share your QR code or address to receive funds</p>
+
+        {/* Wallet selector */}
+        {setupWallets.length > 1 && (
+          <div className="mb-6 text-left">
+            <label className="block text-sm text-slate-400 mb-2">Select wallet</label>
+            <select
+              value={selectedWalletId}
+              onChange={(e) => setSelectedWalletId(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-emerald-600 transition-colors"
+            >
+              {setupWallets.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.icon} {w.name} — {formatUsdc(w.balance)} ({truncate(w.address)})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* QR Code */}
         <div className="inline-block rounded-2xl bg-white p-4 mb-8 shadow-xl shadow-emerald-900/10">
-          <QrPlaceholder value={MOCK_WALLET_ADDRESS_FULL} />
+          <QrPlaceholder value={displayAddress} />
         </div>
 
         {/* Address */}
         <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-6">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Your address</p>
           <p className="text-sm font-mono text-slate-300 break-all mb-3">
-            {MOCK_WALLET_ADDRESS_FULL}
+            {displayAddress}
           </p>
           <button
             onClick={handleCopy}
@@ -111,8 +147,25 @@ export default function ReceivePage() {
         </button>
 
         <p className="text-xs text-slate-600 mt-4">
-          Supports USDC on Base, Ethereum, and Dina Network
+          Supports USDC on Dina Network testnet
         </p>
+
+        {/* Status box */}
+        <div className="mt-6 rounded-xl bg-slate-900 border border-slate-800 p-4 text-left">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Wallet Info</p>
+          <div className="font-mono text-xs text-slate-400 space-y-1">
+            {selectedWallet && (
+              <>
+                <p><span className="text-slate-600">[wallet]</span> {selectedWallet.icon} {selectedWallet.name}</p>
+                <p><span className="text-slate-600">[address]</span> {selectedWallet.address}</p>
+                <p><span className="text-slate-600">[balance]</span> <span className="text-emerald-400">{formatUsdc(selectedWallet.balance)} USDC</span></p>
+                <p><span className="text-slate-600">[type]</span> {selectedWallet.type}</p>
+              </>
+            )}
+            <p><span className="text-slate-600">[network]</span> Dina Testnet | 100ms blocks | Zero fees</p>
+            <p><span className="text-slate-600">[wallets]</span> {setupWallets.length} set up / {storedWallets.length} total</p>
+          </div>
+        </div>
       </main>
     </div>
   );

@@ -82,6 +82,14 @@ pub fn load_genesis_config(path: &str) -> Result<GenesisConfig> {
 
 /// Create a default testnet genesis configuration.
 ///
+/// Convert a 64-character hex string to a [u8; 32] array.
+fn hex_to_bytes32(hex: &str) -> [u8; 32] {
+    let bytes = hex::decode(hex).expect("invalid hex in validator pubkey");
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&bytes);
+    arr
+}
+
 /// Includes a faucet account holding 1 billion USDC (1_000_000_000 * 10^6
 /// micro-USDC) for funding testnet accounts.
 pub fn default_testnet_genesis() -> GenesisConfig {
@@ -96,16 +104,27 @@ pub fn default_testnet_genesis() -> GenesisConfig {
     // 1 billion USDC with 6 decimals = 1_000_000_000_000_000 micro-USDC
     let faucet_balance: u64 = 1_000_000_000 * 1_000_000;
 
-    let now = chrono::Utc::now().timestamp() as u64;
+    // Fixed timestamp so all validators produce the same genesis block.
+    // 1774800000 ≈ 2026-04-25T22:40:00Z — a deterministic point in time.
+    let fixed_timestamp: u64 = 1774800000;
+
+    // Real validator pubkeys for the 4-validator testnet.
+    // Montreal, Iowa, London, Oregon — generated from persistent node keys.
+    let testnet_validators: Vec<[u8; 32]> = vec![
+        hex_to_bytes32("549a78fa12c936273f6bdbfe47f3312edc8ad437c761e15e072dcfb4ccfd3f5f"), // Montreal
+        hex_to_bytes32("9cf8d621693c92506628682b62070b1f40119c674cfe00f273fb7103c36b7473"), // Iowa
+        hex_to_bytes32("281a274377e0221fa19994ce26bc7e36c49a6e9fe7a26c528fc84f741128b034"), // London
+        hex_to_bytes32("9fb9a89134dbf300126e0285babf89307d7fb565f514cd68a5e1fcacdd205856"), // Oregon
+    ];
 
     GenesisConfig {
         chain_id: "dina-testnet-1".to_string(),
-        timestamp: now,
+        timestamp: fixed_timestamp,
         initial_accounts: vec![GenesisAccount {
             address: faucet_address,
             balance: faucet_balance,
         }],
-        validators: Vec::new(),
+        validators: testnet_validators,
     }
 }
 
@@ -148,6 +167,10 @@ mod tests {
             genesis.initial_accounts[0].balance,
             1_000_000_000 * 1_000_000
         );
+        // Fixed timestamp for deterministic genesis across validators
+        assert_eq!(genesis.timestamp, 1774800000);
+        // 3 placeholder validators
+        assert_eq!(genesis.validators.len(), 4);
     }
 
     #[test]

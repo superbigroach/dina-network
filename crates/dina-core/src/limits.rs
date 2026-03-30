@@ -53,6 +53,10 @@ pub struct ProtocolLimits {
 
 impl ProtocolLimits {
     /// Production mainnet limits -- the most restrictive profile.
+    ///
+    /// Dina Network is zero-fee: `min_transaction_fee = 0`.
+    /// Gas metering (see `GasMeter`) still enforces computational limits
+    /// to prevent infinite loops and resource exhaustion in smart contracts.
     pub fn mainnet() -> Self {
         Self {
             max_transaction_size: 1_048_576, // 1 MB
@@ -65,8 +69,8 @@ impl ProtocolLimits {
             max_events_per_tx: 50,
             max_cross_contract_depth: 10,
             max_storage_keys_per_tx: 1_000,
-            min_transaction_fee: 100,               // $0.0001
-            max_transaction_fee: 10_000_000,        // $10
+            min_transaction_fee: 0,                 // zero-fee network
+            max_transaction_fee: 0,                 // zero-fee network
             max_transfer_amount: 1_000_000_000_000, // $1,000,000
             max_channel_duration_blocks: 864_000,   // ~30 days at 3s blocks
             max_validator_count: 7,
@@ -348,32 +352,41 @@ mod tests {
     #[test]
     fn validate_transaction_ok() {
         let limits = ProtocolLimits::mainnet();
-        let tx = make_transfer(Address([0x01; 32]), Address([0x02; 32]), 1_000_000, 200);
+        let tx = make_transfer(Address([0x01; 32]), Address([0x02; 32]), 1_000_000, 0);
         assert!(limits.validate_transaction(&tx).is_ok());
     }
 
     #[test]
     fn validate_transaction_fee_too_low() {
-        let limits = ProtocolLimits::mainnet();
+        // Testnet still has min_fee = 10
+        let limits = ProtocolLimits::testnet();
         let tx = make_transfer(
             Address([0x01; 32]),
             Address([0x02; 32]),
             1_000,
-            1, // below min_transaction_fee of 100
+            1, // below testnet min_transaction_fee of 10
         );
         assert!(limits.validate_transaction(&tx).is_err());
     }
 
     #[test]
     fn validate_transaction_fee_too_high() {
-        let limits = ProtocolLimits::mainnet();
+        // Testnet has max_fee = 100,000,000
+        let limits = ProtocolLimits::testnet();
         let tx = make_transfer(
             Address([0x01; 32]),
             Address([0x02; 32]),
             1_000,
-            100_000_000, // above max_transaction_fee of 10,000,000
+            200_000_000, // above testnet max_transaction_fee
         );
         assert!(limits.validate_transaction(&tx).is_err());
+    }
+
+    #[test]
+    fn mainnet_zero_fee_accepted() {
+        let limits = ProtocolLimits::mainnet();
+        let tx = make_transfer(Address([0x01; 32]), Address([0x02; 32]), 1_000, 0);
+        assert!(limits.validate_transaction(&tx).is_ok());
     }
 
     #[test]
@@ -506,7 +519,7 @@ mod tests {
     #[test]
     fn validate_block_ok() {
         let limits = ProtocolLimits::mainnet();
-        let tx = make_transfer(Address([0x01; 32]), Address([0x02; 32]), 1_000, 200);
+        let tx = make_transfer(Address([0x01; 32]), Address([0x02; 32]), 1_000, 0);
         let block = make_block(vec![tx]);
         assert!(limits.validate_block(&block).is_ok());
     }
@@ -520,12 +533,13 @@ mod tests {
 
     #[test]
     fn validate_block_invalid_transaction() {
-        let limits = ProtocolLimits::mainnet();
+        // Use testnet limits which enforce min_fee = 10
+        let limits = ProtocolLimits::testnet();
         let bad_tx = make_transfer(
             Address([0x01; 32]),
             Address([0x02; 32]),
             1_000,
-            1, // fee too low
+            1, // fee too low for testnet
         );
         let block = make_block(vec![bad_tx]);
         assert!(limits.validate_block(&block).is_err());

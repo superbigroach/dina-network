@@ -177,11 +177,15 @@ pub struct NodeState {
     pub block_index: Arc<RwLock<HashMap<Hash, usize>>>,
     pub tx_pool: Arc<RwLock<Vec<Transaction>>>,
     #[allow(clippy::type_complexity)]
-    pub tx_index: Arc<RwLock<HashMap<Hash, (Transaction, Option<u64>)>>>,
+    pub tx_index: Arc<RwLock<HashMap<Hash, (Transaction, Option<u64>, Option<u64>)>>>,
     pub devices: Arc<RwLock<HashMap<String, DeviceIdentity>>>,
     pub peer_count: Arc<RwLock<u32>>,
     pub chain_id: String,
     pub fee_schedule: FeeSchedule,
+    /// Channel to submit transactions to the consensus mempool (multi-validator mode).
+    pub consensus_tx_sender: Option<tokio::sync::mpsc::UnboundedSender<Transaction>>,
+    /// Broadcast channel for notifying when transactions are confirmed in blocks.
+    pub tx_confirmed_sender: tokio::sync::broadcast::Sender<(Hash, u64)>,
 }
 
 impl NodeState {
@@ -202,7 +206,9 @@ impl NodeState {
             devices: Arc::new(RwLock::new(HashMap::new())),
             peer_count: Arc::new(RwLock::new(0)),
             chain_id,
-            fee_schedule: FeeSchedule::default_testnet(),
+            fee_schedule: FeeSchedule::zero_fee(),
+            consensus_tx_sender: None,
+            tx_confirmed_sender: tokio::sync::broadcast::channel(1024).0,
         }
     }
 
@@ -329,7 +335,7 @@ impl DinaRpcServer for DinaRpcServerImpl {
         // Index the transaction (not yet in a block).
         {
             let mut idx = self.state.tx_index.write().await;
-            idx.insert(tx_hash, (tx.clone(), None));
+            idx.insert(tx_hash, (tx.clone(), None, None));
         }
 
         // Add to the mempool.
@@ -416,7 +422,7 @@ impl DinaRpcServer for DinaRpcServerImpl {
             .map_err(|e| rpc_err(ERR_INVALID_PARAMS, format!("invalid hash: {e}")))?;
 
         let idx = self.state.tx_index.read().await;
-        let (tx, block_num) = idx
+        let (tx, block_num, _block_ts) = idx
             .get(&target)
             .ok_or_else(|| rpc_err(ERR_NOT_FOUND, "transaction not found"))?;
 

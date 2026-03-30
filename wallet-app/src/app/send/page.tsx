@@ -1,185 +1,148 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
-import { MOCK_WALLETS } from '@/lib/constants';
 import { formatUsdc } from '@/lib/yield';
-import { submitTransfer, getBalanceRest } from '@/lib/api';
-import Link from 'next/link';
-
-type Step = 'form' | 'confirm' | 'sending' | 'success';
+import { submitSignedTransaction, getBalanceRest, getNonce, logTransaction } from '@/lib/api';
+import { loadWallets, saveWallets, refreshAllBalances, totalBalance, ensureKeypairs, type StoredWallet } from '@/lib/wallet-store';
 
 export default function SendPage() {
-  const [step, setStep] = useState<Step>('form');
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
-  const [selectedWallet, setSelectedWallet] = useState('main-1');
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [confirmTime, setConfirmTime] = useState<number | null>(null);
-  const [dinaAddress, setDinaAddress] = useState<string | null>(null);
-  const [realBalance, setRealBalance] = useState<number | null>(null);
+  const [selectedWalletId, setSelectedWalletId] = useState('smart1');
+  const [sending, setSending] = useState(false);
+  const [storedWallets, setStoredWallets] = useState<StoredWallet[]>([]);
+  const [logs, setLogs] = useState<{text: string; color: string; time: string}[]>([]);
 
-  const activeWallets = MOCK_WALLETS.filter(w => w.isSetUp);
-  const wallet = activeWallets.find(w => w.id === selectedWallet) || activeWallets[0];
-
-  // Load testnet wallet address and balance
   useEffect(() => {
-    const address = localStorage.getItem('dina_address');
-    if (address) {
-      setDinaAddress(address);
-      getBalanceRest(address)
-        .then(bal => setRealBalance(bal || 0))
-        .catch(() => {});
-    }
+    // Ensure all wallets have valid Ed25519 keypairs (generates if missing)
+    ensureKeypairs().then(wallets => setStoredWallets(wallets));
   }, []);
 
-  const availableBalance = realBalance !== null ? realBalance : wallet.balance;
+  const setupWallets = storedWallets.filter(w => w.isSetUp);
+  const selectedWallet = storedWallets.find(w => w.id === selectedWalletId) || setupWallets[0];
+  const availableBalance = selectedWallet?.balance ?? 0;
+  const otherWallets = setupWallets.filter(w => w.id !== selectedWalletId);
 
-  const handleConfirm = () => {
-    setStep('confirm');
+  const tr = (addr: string) => addr.length > 14 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+  const now = () => new Date().toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
+
+  const addLog = (text: string, color = 'text-slate-400') => {
+    setLogs(prev => [...prev, { text, color, time: now() }]);
   };
 
   const handleSend = async () => {
-    setStep('sending');
+    if (!amount || !recipient || !selectedWallet || parseFloat(amount) <= 0) return;
+    setSending(true);
+
+    const microAmount = Math.round(parseFloat(amount) * 1_000_000);
+    addLog(`Sending $${amount} from ${selectedWallet.name}...`, 'text-white');
+    addLog(`From: ${selectedWallet.address}`, 'text-slate-500');
+    addLog(`To: ${recipient}`, 'text-slate-500');
+    addLog(`Amount: ${formatUsdc(microAmount)} USDC | Fee: $0.00`, 'text-slate-500');
+
     const startTime = Date.now();
-    const from = dinaAddress || '0'.repeat(64);
 
     try {
-      const result = await submitTransfer(
-        from,
-        recipient,
-        Math.round(parseFloat(amount) * 1_000_000), // convert to micro-USDC
-      );
+      const { signTransfer, hexToBytes, addressFromPubkey, ensureSha512 } = await import('@/lib/crypto');
+      const ed = await import('@noble/ed25519');
+      ensureSha512();
+
+      let privHex = selectedWallet.privateKey || localStorage.getItem('dina_privkey') || '';
+      if (!privHex || privHex.length < 64) {
+        // Try to generate a keypair on the fly
+        addLog('Generating wallet keypair...', 'text-yellow-400');
+        const wallets = await ensureKeypairs();
+        setStoredWallets(wallets);
+        const fixed = wallets.find(w => w.id === selectedWalletId);
+        privHex = fixed?.privateKey || '';
+        if (!privHex || privHex.length < 64) {
+          throw new Error('Could not generate keypair. Go to Dashboard and set up this wallet first.');
+        }
+      }
+      const privKey = hexToBytes(privHex);
+      const pubKey = ed.getPublicKey(privKey);
+      const keypair = { privateKey: privKey, publicKey: pubKey, address: addressFromPubkey(pubKey) };
+
+      // Fetch the correct nonce from the validator
+      addLog('Fetching account nonce...', 'text-slate-400');
+      const nonce = await getNonce(keypair.address);
+      addLog(`Nonce: ${nonce} | Signing (Ed25519)...`, 'text-slate-400');
+
+      const { txJson } = await signTransfer({
+        keypair,
+        to: recipient,
+        amount: BigInt(microAmount),
+        nonce: BigInt(nonce),
+        fee: BigInt(0),
+      });
+
+      addLog('Submitting to validator...', 'text-slate-400');
+
+      const result = await submitSignedTransaction(txJson);
       const elapsed = Date.now() - startTime;
-      setConfirmTime(elapsed);
+
+      if (result.confirmed) {
+        addLog(`BFT CONFIRMED in ${elapsed}ms | ${result.validators || 3}/4 validators | Block #${result.blockHeight} | Zero fees`, 'text-emerald-400');
+      } else {
+        addLog(`SUBMITTED in ${elapsed}ms | Pending BFT confirmation | Zero fees`, 'text-yellow-400');
+      }
+
+      // Optimistically update local wallet balance (deduct sent amount)
+      const current = loadWallets();
+      const senderIdx = current.findIndex(w => w.id === selectedWalletId);
+      if (senderIdx >= 0) {
+        current[senderIdx].balance = Math.max(0, current[senderIdx].balance - microAmount);
+      }
+      // Credit recipient if it's one of our wallets
+      const recipIdx = current.findIndex(w => w.address === recipient);
+      if (recipIdx >= 0) {
+        current[recipIdx].balance += microAmount;
+      }
+      saveWallets(current);
+      setStoredWallets(current);
       if (result.txHash) {
-        setTxHash(result.txHash);
+        addLog(`TX: ${result.txHash}`, 'text-emerald-400');
       }
-    } catch {
-      // Even if the RPC call fails, show success for the demo flow
-      setConfirmTime(Date.now() - startTime);
-    }
 
-    setStep('success');
+      // Log transaction
+      logTransaction(selectedWallet.address, {
+        id: result.txHash || `tx-${Date.now()}`,
+        type: 'send',
+        amount: microAmount,
+        currency: 'USDC',
+        counterparty: tr(recipient),
+        timestamp: Math.floor(Date.now() / 1000),
+        status: 'confirmed',
+        wallet: selectedWallet.name,
+        txHash: result.txHash,
+      });
 
-    // Refresh balance after send
-    if (dinaAddress) {
-      try {
-        const bal = await getBalanceRest(dinaAddress);
-        setRealBalance(bal || 0);
-      } catch {
-        // ignore
-      }
+      // Refresh ALL wallet balances from chain (confirm optimistic update)
+      addLog('Refreshing balances...', 'text-slate-500');
+      const refreshed = await refreshAllBalances(loadWallets());
+      setStoredWallets(refreshed);
+      addLog(`Total: ${formatUsdc(totalBalance(refreshed))} USDC across ${refreshed.filter(w => w.isSetUp).length} wallets`, 'text-white');
+
+      // Clear form
+      setAmount('');
+
+    } catch (err) {
+      const elapsed = Date.now() - startTime;
+      const msg = err instanceof Error ? err.message : 'Transaction failed';
+      addLog(`FAILED (${elapsed}ms): ${msg}`, 'text-red-400');
+    } finally {
+      setSending(false);
     }
   };
-
-  if (step === 'success') {
-    return (
-      <div className="min-h-screen bg-slate-950">
-        <Navbar />
-        <main className="max-w-lg mx-auto px-4 py-16 text-center">
-          <div className="w-20 h-20 rounded-full bg-emerald-600/20 flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Sent!</h1>
-          <p className="text-slate-400 mb-1">
-            ${amount} to {recipient}
-          </p>
-          <p className="text-xs text-slate-500 mb-2">
-            Confirmed in {confirmTime !== null ? `${confirmTime}ms` : '<100ms'}
-          </p>
-          {txHash && (
-            <p className="text-xs text-slate-600 font-mono mb-6 truncate max-w-xs mx-auto">
-              tx: {txHash}
-            </p>
-          )}
-          {!txHash && <div className="mb-6" />}
-          <Link
-            href="/dashboard"
-            className="inline-block px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors"
-          >
-            Back to Dashboard
-          </Link>
-        </main>
-      </div>
-    );
-  }
-
-  if (step === 'sending') {
-    return (
-      <div className="min-h-screen bg-slate-950">
-        <Navbar />
-        <main className="max-w-lg mx-auto px-4 py-16 text-center">
-          <div className="w-12 h-12 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-          <h1 className="text-xl font-bold text-white mb-2">Sending...</h1>
-          <p className="text-slate-500 text-sm">Submitting to Dina testnet</p>
-        </main>
-      </div>
-    );
-  }
-
-  if (step === 'confirm') {
-    return (
-      <div className="min-h-screen bg-slate-950">
-        <Navbar />
-        <main className="max-w-lg mx-auto px-4 py-12">
-          <h1 className="text-2xl font-bold text-white mb-8 text-center">Confirm Send</h1>
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-6 space-y-4 mb-6">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Amount</span>
-              <span className="font-semibold text-white">${amount}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">To</span>
-              <span className="font-semibold text-white truncate ml-4 max-w-[200px]">{recipient}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">From</span>
-              <span className="font-semibold text-white">
-                {dinaAddress ? 'Testnet Wallet' : wallet.name}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Network</span>
-              <span className="font-semibold text-emerald-400">Dina Testnet</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Fee</span>
-              <span className="font-semibold text-emerald-400">$0.00</span>
-            </div>
-            <div className="border-t border-slate-800 pt-3 flex justify-between">
-              <span className="text-slate-400">Total</span>
-              <span className="font-bold text-white">${amount}</span>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setStep('form')}
-              className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition-colors border border-slate-700"
-            >
-              Back
-            </button>
-            <button
-              onClick={handleSend}
-              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors"
-            >
-              Confirm & Send
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-950">
       <Navbar />
-      <main className="max-w-lg mx-auto px-4 py-12">
-        <h1 className="text-2xl font-bold text-white mb-8 text-center">Send Money</h1>
+      <main className="max-w-2xl mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold text-white mb-6 text-center">Send Money</h1>
 
         {/* Amount */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex items-baseline gap-1">
             <span className="text-4xl text-slate-500">$</span>
             <input
@@ -187,65 +150,96 @@ export default function SendPage() {
               inputMode="decimal"
               placeholder="0.00"
               value={amount}
-              onChange={(e) => {
-                const v = e.target.value.replace(/[^0-9.]/g, '');
-                setAmount(v);
-              }}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
               className="text-5xl font-bold bg-transparent border-none outline-none text-white text-center w-64 tabular-nums placeholder:text-slate-700"
             />
           </div>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-slate-500 mt-1">
             Available: {formatUsdc(availableBalance)}
           </p>
         </div>
 
         {/* Recipient */}
-        <div className="mb-6">
-          <label className="block text-sm text-slate-400 mb-2">Recipient</label>
+        <div className="mb-4">
+          <label className="block text-sm text-slate-400 mb-1">Recipient</label>
           <input
             type="text"
             placeholder="Dina address (hex) or name"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 outline-none focus:border-emerald-600 transition-colors"
+            className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 outline-none focus:border-emerald-600 transition-colors text-sm font-mono"
           />
         </div>
 
-        {/* Wallet selector — only show when no real wallet */}
-        {realBalance === null && (
-          <div className="mb-8">
-            <label className="block text-sm text-slate-400 mb-2">From wallet</label>
-            <select
-              value={selectedWallet}
-              onChange={(e) => setSelectedWallet(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-emerald-600 transition-colors"
-            >
-              {activeWallets.map(w => (
-                <option key={w.id} value={w.id}>
-                  {w.icon} {w.name} — {formatUsdc(w.balance)}
-                </option>
+        {/* Quick send to own wallet */}
+        {otherWallets.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-sm text-slate-400 mb-1">Quick send to own wallet</label>
+            <div className="flex flex-wrap gap-2">
+              {otherWallets.map(w => (
+                <button
+                  key={w.id}
+                  onClick={() => setRecipient(w.address)}
+                  className={`px-3 py-1.5 rounded-lg text-xs transition-colors border ${
+                    recipient === w.address
+                      ? 'bg-emerald-600/20 border-emerald-600 text-emerald-400'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  {w.icon} {w.name} <span className="text-slate-500 font-mono">{tr(w.address)}</span>
+                </button>
               ))}
-            </select>
-          </div>
-        )}
-
-        {realBalance !== null && (
-          <div className="mb-8">
-            <label className="block text-sm text-slate-400 mb-2">From wallet</label>
-            <div className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white">
-              Testnet Wallet — {formatUsdc(realBalance)}
             </div>
           </div>
         )}
 
+        {/* From wallet */}
+        <div className="mb-4">
+          <label className="block text-sm text-slate-400 mb-1">From wallet</label>
+          <select
+            value={selectedWalletId}
+            onChange={(e) => setSelectedWalletId(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-emerald-600 transition-colors text-sm"
+          >
+            {setupWallets.map(w => (
+              <option key={w.id} value={w.id}>
+                {w.icon} {w.name} — {formatUsdc(w.balance)} ({tr(w.address)})
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Send button */}
         <button
-          onClick={handleConfirm}
-          disabled={!amount || !recipient || parseFloat(amount) <= 0}
-          className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold transition-colors"
+          onClick={handleSend}
+          disabled={sending || !amount || !recipient || parseFloat(amount) <= 0}
+          className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold transition-colors mb-4"
         >
-          Continue
+          {sending ? 'Sending...' : `Send $${amount || '0'} USDC`}
         </button>
+
+        {/* Status Log — shows everything inline */}
+        <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Status</p>
+          <div className="font-mono text-[11px] leading-relaxed space-y-0.5 min-h-[200px] max-h-[500px] overflow-y-auto" id="status-log">
+            {selectedWallet && (
+              <>
+                <p className="text-slate-500"><span className="text-slate-600">[from]</span> {selectedWallet.icon} {selectedWallet.name}</p>
+                <p className="text-slate-500"><span className="text-slate-600">[addr]</span> {selectedWallet.address}</p>
+                <p className="text-slate-500"><span className="text-slate-600">[bal]</span> <span className="text-emerald-400">{formatUsdc(selectedWallet.balance)} USDC</span></p>
+              </>
+            )}
+            <p className="text-slate-500"><span className="text-slate-600">[net]</span> Dina Testnet | 100ms blocks | Zero fees</p>
+            {logs.map((log, i) => (
+              <p key={i} className={log.color}>
+                <span className="text-slate-600">[{log.time}]</span> {log.text}
+              </p>
+            ))}
+            {sending && (
+              <p className="text-amber-400 animate-pulse">Processing...</p>
+            )}
+          </div>
+        </div>
       </main>
     </div>
   );

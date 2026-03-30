@@ -131,13 +131,16 @@ async fn get_balance_handler(
     };
 
     let accounts = state.node.accounts.read().await;
-    let balance = accounts.get_account(&addr).map(|a| a.balance).unwrap_or(0);
+    let account = accounts.get_account(&addr);
+    let balance = account.map(|a| a.balance).unwrap_or(0);
+    let nonce = account.map(|a| a.nonce).unwrap_or(0);
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "address": address,
             "balance": balance,
+            "nonce": nonce,
         })),
     )
 }
@@ -238,8 +241,22 @@ async fn submit_transaction_handler(
     // Index and add to mempool.
     {
         let mut idx = state.node.tx_index.write().await;
-        idx.insert(tx_hash, (tx.clone(), None));
+        idx.insert(tx_hash, (tx.clone(), None, None));
     }
+    // Send to consensus mempool if available (multi-validator mode)
+    if let Some(ref tx_sender) = state.node.consensus_tx_sender {
+        let _ = tx_sender.send(tx.clone());
+    }
+
+    // Optimistically apply transfer to RPC account state for instant balance
+    // updates. The consensus will re-apply when the block is committed.
+    if let Transaction::Transfer { from, to, amount, .. } = &tx {
+        let mut accounts = state.node.accounts.write().await;
+        if accounts.transfer(from, to, *amount).is_ok() {
+            info!(%tx_hash, amount, "optimistically applied transfer to RPC accounts");
+        }
+    }
+
     {
         let mut pool = state.node.tx_pool.write().await;
         pool.push(tx);
@@ -391,6 +408,10 @@ async fn faucet_handler(
             pub_key: [0u8; 32], // coinbase has no real key
             signature: dina_core::transaction::Sig64([0u8; 64]),
         };
+        // Send to consensus mempool if available (multi-validator mode)
+        if let Some(ref tx_sender) = state.node.consensus_tx_sender {
+            let _ = tx_sender.send(faucet_tx.clone());
+        }
         let mut pool = state.node.tx_pool.write().await;
         pool.push(faucet_tx);
     }
@@ -487,6 +508,254 @@ async fn health_detailed_handler(State(state): State<AppState>) -> impl IntoResp
 // Router construction
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Transaction history by address
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct TxHistoryEntry {
+    tx_hash: String,
+    #[serde(rename = "type")]
+    tx_type: String,
+    from: String,
+    to: String,
+    amount: u64,
+    fee: u64,
+    nonce: u64,
+    block_height: Option<u64>,
+    timestamp: Option<u64>,
+    status: String,
+}
+
+async fn get_transactions_handler(
+    State(state): State<AppState>,
+    Path(address): Path<String>,
+) -> impl IntoResponse {
+    let raw = address.strip_prefix("0x").unwrap_or(&address).to_lowercase();
+
+    let target = match Address::from_str(&raw) {
+        Ok(a) => a,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "invalid address" })),
+            );
+        }
+    };
+
+    let idx = state.node.tx_index.read().await;
+    let mut entries: Vec<TxHistoryEntry> = Vec::new();
+
+    for (hash, (tx, block_height, block_ts)) in idx.iter() {
+        let (from, to, amount, fee, nonce) = match tx {
+            Transaction::Transfer { from, to, amount, fee, nonce, .. } => {
+                (*from, *to, *amount, *fee, *nonce)
+            }
+            _ => continue,
+        };
+
+        if from == target || to == target {
+            entries.push(TxHistoryEntry {
+                tx_hash: hash.to_string(),
+                tx_type: if from == target { "send".into() } else { "receive".into() },
+                from: from.to_string(),
+                to: to.to_string(),
+                amount,
+                fee,
+                nonce,
+                block_height: *block_height,
+                timestamp: *block_ts,
+                status: if block_height.is_some() { "confirmed".into() } else { "pending".into() },
+            });
+        }
+    }
+
+    // Sort by block height descending (confirmed first), then by nonce
+    entries.sort_by(|a, b| {
+        b.block_height.unwrap_or(u64::MAX).cmp(&a.block_height.unwrap_or(u64::MAX))
+    });
+
+    // Limit to 50 most recent
+    entries.truncate(50);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "transactions": entries })),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// All recent transactions (no address filter)
+// ---------------------------------------------------------------------------
+
+async fn get_all_transactions_handler(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let idx = state.node.tx_index.read().await;
+    let mut entries: Vec<TxHistoryEntry> = Vec::new();
+
+    for (hash, (tx, block_height, block_ts)) in idx.iter() {
+        let (from, to, amount, fee, nonce) = match tx {
+            Transaction::Transfer { from, to, amount, fee, nonce, .. } => {
+                (*from, *to, *amount, *fee, *nonce)
+            }
+            _ => continue,
+        };
+
+        entries.push(TxHistoryEntry {
+            tx_hash: hash.to_string(),
+            tx_type: if from == Address([0u8; 32]) { "faucet".into() } else { "transfer".into() },
+            from: from.to_string(),
+            to: to.to_string(),
+            amount,
+            fee,
+            nonce,
+            block_height: *block_height,
+            timestamp: *block_ts,
+            status: if block_height.is_some() { "confirmed".into() } else { "pending".into() },
+        });
+    }
+
+    // Sort by block height descending
+    entries.sort_by(|a, b| {
+        b.block_height.unwrap_or(u64::MAX).cmp(&a.block_height.unwrap_or(u64::MAX))
+    });
+
+    entries.truncate(100);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "transactions": entries, "total": entries.len() })),
+    )
+}
+
+/// Submit a transaction and wait for BFT consensus confirmation.
+/// Returns the block height and time when the TX was included.
+async fn submit_and_confirm_handler(
+    State(state): State<AppState>,
+    Json(body): Json<SubmitTxBody>,
+) -> impl IntoResponse {
+    let raw = body.tx_hex.strip_prefix("0x").unwrap_or(&body.tx_hex);
+    let bytes = match hex::decode(raw) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("invalid hex: {e}") })),
+            );
+        }
+    };
+
+    let tx: Transaction = match serde_json::from_slice(&bytes) {
+        Ok(t) => t,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("invalid transaction: {e}") })),
+            );
+        }
+    };
+
+    let tx_hash = tx.hash();
+
+    // Verify signature
+    {
+        let sender = tx.sender();
+        if sender != Address([0u8; 32]) && !tx.verify_signature() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "invalid signature" })),
+            );
+        }
+    }
+
+    // Subscribe to confirmations BEFORE submitting (avoid race)
+    let mut rx = state.node.tx_confirmed_sender.subscribe();
+
+    // Add to index and mempool
+    {
+        let mut idx = state.node.tx_index.write().await;
+        idx.insert(tx_hash, (tx.clone(), None, None));
+    }
+    if let Some(ref tx_sender) = state.node.consensus_tx_sender {
+        let _ = tx_sender.send(tx.clone());
+    }
+    // Optimistic account update
+    if let Transaction::Transfer { from, to, amount, .. } = &tx {
+        let mut accounts = state.node.accounts.write().await;
+        let _ = accounts.transfer(from, to, *amount);
+    }
+    {
+        let mut pool = state.node.tx_pool.write().await;
+        pool.push(tx);
+    }
+
+    // Wait for consensus confirmation (max 10 seconds)
+    let timeout = tokio::time::Duration::from_secs(10);
+    let result = tokio::time::timeout(timeout, async {
+        loop {
+            match rx.recv().await {
+                Ok((confirmed_hash, block_height)) => {
+                    if confirmed_hash == tx_hash {
+                        return Some(block_height);
+                    }
+                }
+                Err(_) => return None,
+            }
+        }
+    })
+    .await;
+
+    match result {
+        Ok(Some(block_height)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "tx_hash": tx_hash.to_string(),
+                "confirmed": true,
+                "block_height": block_height,
+                "validators": 3,
+            })),
+        ),
+        _ => {
+            // TX was submitted and optimistically applied, but consensus
+            // confirmation didn't arrive within timeout
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "tx_hash": tx_hash.to_string(),
+                    "confirmed": false,
+                    "pending": true,
+                })),
+            )
+        }
+    }
+}
+
+/// Serve the last N lines of the node log file for remote debugging.
+async fn debug_logs_handler(
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let lines = params.get("lines").and_then(|s| s.parse::<usize>().ok()).unwrap_or(100);
+    let filter = params.get("filter").cloned().unwrap_or_default();
+
+    // Read from /data/node.log (the data directory mount)
+    let content = match tokio::fs::read_to_string("/data/node.log").await {
+        Ok(c) => c,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot read logs: {e}")),
+    };
+
+    let all_lines: Vec<&str> = content.lines().collect();
+    let filtered: Vec<&str> = if filter.is_empty() {
+        all_lines.iter().rev().take(lines).copied().collect()
+    } else {
+        all_lines.iter().rev().filter(|l| l.contains(&filter)).take(lines).copied().collect()
+    };
+
+    let mut result: Vec<&str> = filtered;
+    result.reverse();
+    (StatusCode::OK, result.join("\n"))
+}
+
 /// Build the REST API router with all routes and shared state.
 pub fn rest_router(state: NodeState) -> Router {
     let shared = Arc::new(RestAppState {
@@ -507,9 +776,13 @@ pub fn rest_router(state: NodeState) -> Router {
         .route("/v1/block/latest", get(get_latest_block_handler))
         .route("/v1/block/{height}", get(get_block_handler))
         .route("/v1/transaction", post(submit_transaction_handler))
+        .route("/v1/transaction/confirm", post(submit_and_confirm_handler))
+        .route("/v1/transactions", get(get_all_transactions_handler))
+        .route("/v1/transactions/{address}", get(get_transactions_handler))
         .route("/v1/device/{pubkey}", get(get_device_handler))
         .route("/v1/peers", get(get_peers_handler))
         .route("/faucet/{address}", post(faucet_handler))
+        .route("/debug/logs", get(debug_logs_handler))
         .with_state(shared)
         // H-2: CORS is kept open for portal/frontend compatibility on testnet.
         // The faucet is protected by global rate limits (C-2) and per-address
