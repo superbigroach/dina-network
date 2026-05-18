@@ -1,5 +1,9 @@
+use p256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+use p256::PublicKey;
+use p256::pkcs8::DecodePublicKey;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
 // DRC-111  Smart Wallet  -- human wallet with passkeys, sessions, guardians
@@ -171,13 +175,22 @@ impl SmartWalletState {
 
     // -- Passkey execution --------------------------------------------------
 
-    /// Execute an action after verifying the passkey.
-    /// In a real contract, `signature` and `authenticator_data` would be
-    /// verified against the P-256 public key stored in the credential.
-    /// Here we verify the credential_id exists and increment the counter.
+    /// Verify a WebAuthn P-256/ECDSA signature and execute an action.
+    ///
+    /// WebAuthn signing produces a signature over:
+    ///   signed_data = authenticatorData || SHA-256(clientDataJSON)
+    ///
+    /// The signature is DER-encoded ECDSA-P256. The public key is the
+    /// P-256 compressed (33-byte) or uncompressed (65-byte) point stored
+    /// in PasskeyCredential.public_key. Private keys never leave the
+    /// authenticator's secure enclave -- this contract only stores and
+    /// verifies the public key.
     pub fn execute_with_passkey(
         &mut self,
         credential_id: &[u8],
+        authenticator_data: Vec<u8>,
+        client_data_json: Vec<u8>,
+        signature: Vec<u8>,
         counter: u64,
         action: WalletAction,
         timestamp_ms: u64,
@@ -188,15 +201,39 @@ impl SmartWalletState {
             .get_mut(credential_id)
             .expect("DRC111: passkey credential not found");
 
-        // Counter must be strictly increasing (replay protection)
+        // Counter must be strictly increasing (replay protection).
         assert!(
             counter > credential.counter,
             "DRC111: passkey counter must be strictly increasing ({} <= {})",
             counter,
             credential.counter
         );
-        credential.counter = counter;
 
+        // P-256 / WebAuthn signature verification
+        // 1. Parse the stored public key.
+        // 2. Build: authenticatorData || SHA-256(clientDataJSON).
+        // 3. Parse DER-encoded ECDSA signature.
+        // 4. Verify with the p256 crate (constant-time).
+
+        let verifying_key = VerifyingKey::from_public_key_der(&credential.public_key)
+            .or_else(|_| {
+                PublicKey::from_sec1_bytes(&credential.public_key)
+                    .map(VerifyingKey::from)
+            })
+            .expect("DRC111: invalid P-256 public key in credential");
+
+        let client_data_hash: [u8; 32] = Sha256::digest(&client_data_json).into();
+        let mut signed_data = authenticator_data.clone();
+        signed_data.extend_from_slice(&client_data_hash);
+
+        let ecdsa_sig = Signature::from_der(&signature)
+            .expect("DRC111: invalid DER-encoded ECDSA signature");
+
+        verifying_key
+            .verify(&signed_data, &ecdsa_sig)
+            .expect("DRC111: P-256 signature verification failed");
+
+        credential.counter = counter;
         self.execute_action(action, timestamp_ms, day);
     }
 
@@ -560,6 +597,9 @@ struct InitArgs {
 #[derive(Serialize, Deserialize, Debug)]
 struct ExecuteWithPasskeyArgs {
     credential_id: Vec<u8>,
+    authenticator_data: Vec<u8>,
+    client_data_json: Vec<u8>,
+    signature: Vec<u8>,
     counter: u64,
     action: WalletAction,
     timestamp_ms: u64,
@@ -653,7 +693,16 @@ pub fn dispatch(
             let s = state.as_mut().expect("DRC111: not initialised");
             let a: ExecuteWithPasskeyArgs =
                 serde_json::from_slice(args).expect("DRC111: bad execute_with_passkey args");
-            s.execute_with_passkey(&a.credential_id, a.counter, a.action, a.timestamp_ms, a.day);
+            s.execute_with_passkey(
+                &a.credential_id,
+                a.authenticator_data,
+                a.client_data_json,
+                a.signature,
+                a.counter,
+                a.action,
+                a.timestamp_ms,
+                a.day,
+            );
             serde_json::to_vec("ok").unwrap()
         }
 

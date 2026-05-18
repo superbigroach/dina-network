@@ -13,6 +13,11 @@ ed.etc.sha512Sync = (...m: Uint8Array[]) => {
 /**
  * Ed25519 wallet for the Dina Network.
  *
+ * **Server wallets only** -- for treasury, mint, and infrastructure keys.
+ * These are NOT user-facing wallets. User wallets are passkey-based and
+ * are handled by `PasskeyWallet`. Private keys for user wallets never
+ * leave the device secure enclave.
+ *
  * Wraps @noble/ed25519 to provide key generation, signing, and verification.
  * The wallet derives a Dina address from the public key via SHA-256.
  */
@@ -27,7 +32,11 @@ export class DinaWallet {
     this.address = addressFromPublicKey(publicKey);
   }
 
-  /** Generate a new random wallet. */
+  /**
+   * Generate a new random wallet.
+   *
+   * **Server wallets only.** Use `PasskeyWallet.register()` for user wallets.
+   */
   static generate(): DinaWallet {
     const privateKey = ed.utils.randomPrivateKey();
     const publicKey = ed.getPublicKey(privateKey);
@@ -36,6 +45,10 @@ export class DinaWallet {
 
   /**
    * Restore a wallet from a private key.
+   *
+   * **Server wallets only.** Use `PasskeyWallet` for user-facing wallets --
+   * passkey wallets never expose or accept raw private keys.
+   *
    * @param key - 32-byte private key as Uint8Array or 64-char hex string.
    */
   static fromPrivateKey(key: Uint8Array | string): DinaWallet {
@@ -47,9 +60,14 @@ export class DinaWallet {
     return new DinaWallet(privateKey, publicKey);
   }
 
-  // Mnemonic derivation removed — requires proper BIP-39 PBKDF2 implementation.
+  // Mnemonic derivation removed -- requires proper BIP-39 PBKDF2 implementation.
   // The previous version used SHA-256 instead of PBKDF2, producing keys
   // incompatible with any correct BIP-39 implementation.
+
+  // NOTE: exportPrivateKey() has been intentionally removed.
+  // This wallet class is for server-side use only (treasury/mint wallets).
+  // User wallets use PasskeyWallet, which is passkey-only -- the private key
+  // lives exclusively in the device secure enclave and is never exportable.
 
   /** Sign a message, returning a hex-encoded 64-byte Ed25519 signature. */
   sign(message: Uint8Array): Signature {
@@ -57,7 +75,7 @@ export class DinaWallet {
     return bytesToHex(sig);
   }
 
-  /** Verify a signature against a message using this wallet's public key. */
+  /** Verify a signature against a message using this wallet public key. */
   verify(message: Uint8Array, signature: Signature): boolean {
     const sigBytes = hexToBytes(signature);
     return ed.verify(sigBytes, message, this.publicKey);
@@ -69,10 +87,5 @@ export class DinaWallet {
       address: this.address,
       publicKey: bytesToHex(this.publicKey),
     };
-  }
-
-  /** Export the private key as hex. Handle with care. */
-  exportPrivateKey(): string {
-    return bytesToHex(this._privateKey);
   }
 }

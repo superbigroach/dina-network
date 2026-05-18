@@ -20,6 +20,10 @@ export type {
 // Wallet
 export { DinaWallet } from './wallet';
 
+// Passkey wallet (browser environment required)
+export { PasskeyWallet } from './passkey';
+export type { PasskeyRegistration, PasskeyAssertion } from './passkey';
+
 // Client
 export { DinaClient, DinaRpcError } from './client';
 
