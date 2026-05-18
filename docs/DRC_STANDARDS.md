@@ -490,7 +490,15 @@ fn revoke_firmware(firmware_id: u64);
 
 ### DRC-111: Smart Wallet
 
-**Purpose:** Programmable wallet with session keys, social recovery, and batched transactions. Provides the account abstraction layer for Dina.
+**Purpose:** Programmable account-abstraction wallet for human users on Dina. DRC-111 is the on-chain counterpart to the `PasskeyWallet` SDK type: the contract is deployed once per user and bound to their WebAuthn credential's public key. All transactions must include a valid WebAuthn assertion (`authenticatorData`, `clientDataJSON`, `signature`, `counter`); the contract verifies the assertion and rejects any call whose counter is not strictly greater than the last accepted value, preventing replay attacks without requiring the application to manage nonces manually.
+
+**Passkey credential binding:** At deployment time, the owner's Ed25519 public key — derived from the WebAuthn credential registered in the device's Secure Enclave — is written into the contract. Ownership can only be transferred through the guardian recovery mechanism; there is no `set_owner` backdoor. This makes the private key permanently isolated inside hardware: not in the app, not on the server, not in the database.
+
+**Session keys:** A session key is a short-lived Ed25519 key that the application generates client-side and registers with the contract. The `KeyPermission` struct scopes each session key to a spending ceiling, an allowlist of recipient addresses, and an expiry timestamp. Session keys let the app sign low-value or routine transactions without triggering a biometric prompt on every call, while the on-chain permission enforcement ensures they cannot exceed their budget or interact with unauthorized contracts.
+
+**Guardian recovery:** The owner registers one or more guardian addresses. If the owner loses their device, a majority of guardians can collectively submit a `recover` call with the new owner's public key and their signatures. The contract enters a 24-hour timelock before applying the ownership change, giving the legitimate owner a window to call `cancel_recovery` if the request was unauthorized. Use this standard — rather than a custodial key backup — for any wallet holding user funds.
+
+**When to use DRC-111:** Use it for every end-user wallet in a consumer application. Do not use it for server-side treasury or mint operations — those should use a plain Ed25519 `DinaWallet` loaded from a secrets manager. See `docs/WALLET_GUIDE.md` for full integration patterns and security guidance.
 
 **Interface:**
 ```rust
@@ -500,8 +508,21 @@ fn execute_batch(calls: Vec<Call>) -> Vec<Vec<u8>>;
 fn add_guardian(guardian: Address);
 fn remove_guardian(guardian: Address);
 fn recover(new_owner: Address, guardian_signatures: Vec<[u8; 64]>);
+fn cancel_recovery();
+fn finalize_recovery();
 fn get_session_keys() -> Vec<SessionKeyInfo>;
+fn get_guardians() -> Vec<Address>;
+fn pending_recovery() -> Option<RecoveryRequest>;
 ```
+
+**Events:**
+- `SessionKeyAdded { key: [u8; 32], permissions: KeyPermission, expiry: u64 }`
+- `SessionKeyRemoved { key: [u8; 32] }`
+- `GuardianAdded { guardian: Address }`
+- `GuardianRemoved { guardian: Address }`
+- `RecoveryInitiated { new_owner: [u8; 32], unlocks_at: u64 }`
+- `RecoveryCancelled { by: Address }`
+- `RecoveryFinalized { new_owner: [u8; 32] }`
 
 ---
 
