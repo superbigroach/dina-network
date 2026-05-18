@@ -37,6 +37,8 @@ npm install dina-js
 import { DinaWallet, DinaClient } from 'dina-js';
 
 // Generate a new wallet (Ed25519)
+// NOTE: For user-facing wallets, use `PasskeyWallet` instead (see Wallet Model section).
+// `DinaWallet` is for server-side treasury wallets.
 const wallet = DinaWallet.generate();
 console.log('Address:', wallet.address);
 
@@ -100,6 +102,62 @@ cargo build --release
 # Send USDC
 ./target/release/dina transfer --to <ADDRESS> --amount 1000000
 ```
+
+---
+
+## Wallet Model — Passkey Only
+
+Dina uses passkeys (WebAuthn) as the sole mechanism for user wallet authentication. This section explains why — and why we rejected seed phrases and MPC.
+
+### Seed Phrases
+
+- A 12-word mnemonic is a human-readable copy of your private key. Anyone who sees it can steal every cent in your wallet, instantly and irreversibly.
+- In practice, users screenshot them, paste them into WhatsApp, store them in Notes apps, or write them on paper they then lose.
+- Industry data consistently shows that the majority of crypto losses trace back to seed phrase mishandling — not exchange hacks, not smart contract bugs.
+- Dina does not expose seed phrases to users. They do not exist in the user-facing flow.
+
+### MPC (Multi-Party Computation) — Why We Didn't Build It
+
+- MPC splits a private key into cryptographic shares distributed between your device and one or more servers. No single party holds the full key.
+- It was a clever solution to a real 2021 problem: before passkeys existed, there was no good way to have biometric-secured, cloud-recoverable keys without exposing a seed phrase.
+- Downsides: every transaction requires the MPC provider's servers to participate in signing (liveness dependency — if their servers are down, your wallet doesn't work); the cryptographic infrastructure is genuinely complex to audit and operate; and it creates deep vendor lock-in.
+- As of 2022 (iOS 16) and broadly by 2024, passkeys solve the same problem passkeys solve better, with no server dependency for signing and no vendor lock-in beyond Apple/Google — who are ambient infrastructure for the entire internet anyway.
+
+### Passkeys — What Dina Uses
+
+- WebAuthn standard, built into every modern OS and browser: iOS 16+, Android 9+, macOS Ventura+, Windows 11, Chrome, Safari, Firefox.
+- When a user registers, the private key is generated inside the device's **Secure Enclave** — a dedicated hardware security chip that is physically separate from the main CPU and RAM.
+- The key **never leaves the chip** — not to your app's JavaScript, not to RAM, not to Dina's servers, not to anyone. The Secure Enclave signs data internally and returns only the signature.
+- Every signing operation requires the user's biometric (Face ID, Touch ID, fingerprint) or device PIN. An attacker who steals your phone physically cannot sign transactions without your biometrics.
+- The key automatically syncs to iCloud Keychain (iPhone/Mac) or Google Password Manager (Android) — encrypted end-to-end using keys that only your Apple/Google account can decrypt.
+- Recovery flow: lose your phone → get a new phone → sign into Apple ID or Google account → passkey is restored → wallet is restored. No seed phrase ceremony required.
+- No Dina-specific vendor dependency. Apple and Google going down simultaneously would break the internet at large, not just your wallet.
+
+### DRC-111 Social Recovery — The Edge Case Backup
+
+For the rare scenario where a user loses both their phone and access to their Apple/Google account, Dina supports on-chain social recovery via DRC-111 Smart Wallet:
+
+- The user designates one or more **guardian wallets** — a family member's wallet, an employer wallet, a trusted contact.
+- If recovery is needed, the guardian initiates an on-chain recovery transaction.
+- A **24-hour cooldown** begins before the recovery executes. This window allows the original owner to cancel if it was triggered fraudulently (e.g., a guardian acting maliciously).
+- The entire process is on-chain. No El Tesoro servers, no Dina servers, no support tickets. The smart contract is the recovery authority.
+
+### For Developers Building on Dina
+
+- **User wallets:** use `PasskeyWallet` from `dina-js`. It wraps the WebAuthn API — registration, authentication, and transaction signing all go through the Secure Enclave with no key material exposed to your code.
+- **Server/treasury wallets:** use `DinaWallet` with Ed25519 keys stored in a secrets manager (GCP Secret Manager, AWS Secrets Manager, HashiCorp Vault, etc.). These are for backend services, not human users.
+- **Smart contract multisig:** use DRC-21 Multisig — M-of-N authorization where each signer uses their own passkey wallet. Suitable for corporate treasury, DAO governance, and protocol admin keys.
+
+### Comparison Table
+
+|  | Seed Phrase | MPC (e.g. Circle) | Passkey (Dina) |
+|---|---|---|---|
+| Key exposure | Yes — user sees 12 words | No | No — never leaves Secure Enclave |
+| Recovery if phone lost | User restores from 12 words | MPC provider helps recover | iCloud/Google auto-restores |
+| Attacker with phone | Can steal if seed phrase found | Needs MPC server too | Can't sign without biometrics |
+| Vendor dependency | None | MPC provider must be online | Apple/Google (ambient) |
+| Implementation complexity | Simple | Very complex | Simple (browser API) |
+| Available since | Always | 2021 | 2022 (iOS 16) |
 
 ---
 
